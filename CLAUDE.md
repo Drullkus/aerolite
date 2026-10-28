@@ -142,6 +142,14 @@ Data generation writes:
 - Lang, loot tables, tags and recipes.
 - Blockstates and block models.
 
+## Dev tools
+
+- The dev tools mod is in the `devtools` source set, `src/devtools`. Its mod ID is `aerolitedevtools`.
+- The runs load it. The production jar does not hold it.
+- It holds the mixin that keeps the game window from taking the desktop focus.
+- `-Pmute` gives the client run its own game directory, `run-mute`.
+- `-Pmute` sets the master volume to zero, turns the early loading window off and keeps the window focus off.
+
 ## Prototypes
 
 The folder `prototypes/` at the repository root holds standalone prototypes, like the Relict project.

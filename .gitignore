@@ -39,3 +39,6 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+
+# Game directory of the muted client run
+run-mute/

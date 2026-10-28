@@ -1,0 +1,21 @@
+modLoader="lowcodefml"
+loaderVersion="[4,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="aerolitedevtools"
+version="1.0.0"
+displayName="Aerolite Dev Tools"
+description='''
+Tools for the development runs. The production jar does not hold this mod.
+'''
+
+[[mixins]]
+config="aerolitedevtools.mixins.json"
+
+[[dependencies.aerolitedevtools]]
+    modId="neoforge"
+    type="required"
+    versionRange="[21.1.0,)"
+    ordering="NONE"
+    side="CLIENT"
