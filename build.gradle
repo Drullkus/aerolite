@@ -1,9 +1,35 @@
+buildscript {
+    repositories {
+        maven {
+            name "Tama's Maven" // Beanification Gradle plugin
+            url 'https://maven.tamaized.com/releases/'
+            content {
+                includeGroup 'tamaized'
+            }
+        }
+        mavenCentral {
+            content {
+                includeGroup 'org.apache.groovy' // Beanification Gradle plugin dependency
+            }
+        }
+    }
+    dependencies {
+        classpath "tamaized:beanification:${beanification_version}:gradle"
+        // The plugin uses groovyjarjarasm, which Gradle 9 no longer exposes to plugins. Match Gradle's own Groovy version.
+        classpath "org.apache.groovy:groovy:${GroovySystem.version}"
+    }
+}
+
 plugins {
     id 'java-library'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.148'
     id 'idea'
+    id 'com.gradleup.shadow' version "${shadowjar_version}"
 }
+
+// Injects BeanContext.injectInto(this) into the constructors of @Configurable classes at compile time
+apply plugin: 'tamaized.beanification'
 
 tasks.named('wrapper', Wrapper).configure {
     // Define wrapper values here so as to not have to always do so when updating gradlew.properties.
@@ -27,7 +53,23 @@ sourceSets.main.resources {
 }
 
 repositories {
-    // Add here additional repositories if required by some of the dependencies below.
+    maven {
+        name "Tama's Maven" // Beanification
+        url 'https://maven.tamaized.com/releases/'
+        content {
+            includeGroup 'tamaized'
+        }
+    }
+
+    maven {
+        name 'BlameJared Maven' // Veil
+        url 'https://maven.blamejared.com'
+        content {
+            includeGroup 'foundry.veil'
+            includeGroup 'gg.moonflower' // Veil dependency
+            includeGroup 'io.github.ocelot' // Veil dependency
+        }
+    }
 }
 
 base {
@@ -105,6 +147,50 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+
+    // Runs JUnit tests with the game and the mod on the classpath
+    unitTest {
+        enable()
+        testedMod = mods."${mod_id}"
+    }
+}
+
+// The plain jar stays unshaded; shadowJar is the production jar
+tasks.named('jar', Jar) {
+    archiveClassifier = 'slim'
+}
+
+tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    archiveClassifier = ''
+    configurations = [project.configurations.shade]
+    relocate 'tamaized.beanification', 'us.drullk.aerolite.beanification'
+    from tasks.named('jarJar')
+}
+
+tasks.named('assemble') {
+    dependsOn 'shadowJar'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
+// -Pmute: the client run starts with the master volume at zero
+def muteClient = tasks.register('muteClient') {
+    def optionsFile = neoForge.runs.client.gameDirectory.file('options.txt').get().asFile
+    outputs.upToDateWhen { false }
+    doLast {
+        def lines = optionsFile.exists() ? optionsFile.readLines() : []
+        lines.removeIf { it.startsWith('soundCategory_master:') }
+        lines.add('soundCategory_master:0.0')
+        optionsFile.parentFile.mkdirs()
+        optionsFile.text = lines.join('\n') + '\n'
+    }
+}
+if (project.hasProperty('mute')) {
+    tasks.named('runClient') {
+        dependsOn muteClient
+    }
 }
 
 // Sets up a dependency configuration called 'localRuntime'.
@@ -113,6 +199,8 @@ neoForge {
 // "optional", meaning it will not be pulled by dependents of this mod.
 configurations {
     runtimeClasspath.extendsFrom localRuntime
+    // Libraries that shadowJar bundles and relocates into the production jar
+    shade
 }
 
 dependencies {
@@ -137,6 +225,18 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+    def beanification = "tamaized:beanification:${beanification_version}"
+    implementation beanification
+    shade beanification
+    testImplementation "${beanification}:tests"
+    testCompileOnly "${beanification}:test-sources"
+
+    testImplementation "org.junit.jupiter:junit-jupiter:${junit_version}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation "org.mockito:mockito-junit-jupiter:${mockito_version}"
+
+    implementation "foundry.veil:veil-neoforge-${minecraft_version}:${veil_version}"
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
@@ -151,6 +251,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_name               : mod_name,
             mod_license            : mod_license,
             mod_version            : mod_version,
+            veil_version           : veil_version,
     ]
     inputs.properties replaceProperties
     expand replaceProperties

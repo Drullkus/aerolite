@@ -1,6 +1,7 @@
 package com.example.examplemod;
 
 import org.slf4j.Logger;
+import tamaized.beanification.BeanContext;
 
 import com.mojang.logging.LogUtils;
 
@@ -65,6 +66,10 @@ public class ExampleMod {
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
     // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
+    static {
+        BeanContext.init(MODID);
+    }
+
     public ExampleMod(IEventBus modEventBus, ModContainer modContainer) {
         // Register the commonSetup method for modloading
         modEventBus.addListener(this::commonSetup);

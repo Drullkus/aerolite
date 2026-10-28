@@ -47,8 +47,6 @@ The source still contains the MDK template (`com.example.examplemod`, mod ID `ex
 
 ## Dependencies
 
-Neither dependency is installed yet.
-
 - Beanification: dependency injection. See [Dependency injection](#dependency-injection).
 - Veil: the ImGui panel and custom block and entity rendering. See [Veil](#veil).
 
@@ -69,7 +67,7 @@ Build setup:
 
 Rules:
 
-- Call `BeanContext.init()` in a static block of the `@Mod` class.
+- Call `BeanContext.init(MODID)` in a static block of the `@Mod` class.
 - Declare each compat feature as an interface.
 - Give each interface a `@Bean` static method that checks `ModList` and returns one implementation.
 - Return a no-op implementation when the mod is absent.
