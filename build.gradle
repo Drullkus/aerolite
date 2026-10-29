@@ -50,8 +50,11 @@ sourceSets {
 
         // Exclude common development only resources from finalized outputs
         exclude("**/*.bbmodel") // BlockBench project files
-        exclude("src/generated/**/.cache") // datagen cache files
+        exclude(".cache/**") // datagen cache files
     }
+
+    // Data generation. Only the data run fires its event. The production jar does not hold it.
+    datagen
 
     // The dev tools mod. The runs load it. The production jar does not hold it.
     devtools
@@ -121,6 +124,7 @@ neoForge {
 
         data {
             data()
+            sourceSet = sourceSets.datagen
             // example of overriding the workingDirectory set in configureEach above, uncomment if you want to use it
             // gameDirectory = project.file('run-data')
 
@@ -130,6 +134,9 @@ neoForge {
 
         // applies to all the run configs above
         configureEach {
+            // Every run loads the dev tools mod. The IDE builds only the run module.
+            taskBefore tasks.named('devtoolsClasses')
+
             // Recommended logging data for a userdev environment
             // The markers can be added/remove as needed separated by commas.
             // "SCAN": For mods scan.
@@ -150,6 +157,7 @@ neoForge {
         // multi mod projects should define one per mod
         "${mod_id}" {
             sourceSet(sourceSets.main)
+            sourceSet(sourceSets.datagen)
         }
         aerolitedevtools {
             sourceSet(sourceSets.devtools)
@@ -165,6 +173,7 @@ neoForge {
 
 // Give the dev tools source set the NeoForge and Minecraft classpath
 neoForge.addModdingDependenciesTo(sourceSets.devtools)
+neoForge.addModdingDependenciesTo(sourceSets.datagen)
 
 // The plain jar stays unshaded; shadowJar is the production jar
 tasks.named('jar', Jar) {
@@ -228,6 +237,10 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
     // Libraries that shadowJar bundles and relocates into the production jar
     shade
+    // Data generation sees the mod and every library of the mod
+    datagenImplementation.extendsFrom implementation
+    datagenRuntimeOnly.extendsFrom runtimeOnly
+    datagenRuntimeClasspath.extendsFrom localRuntime
 }
 
 dependencies {
@@ -264,6 +277,8 @@ dependencies {
     testImplementation "org.mockito:mockito-junit-jupiter:${mockito_version}"
 
     implementation "foundry.veil:veil-neoforge-${minecraft_version}:${veil_version}"
+
+    datagenImplementation sourceSets.main.output
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
