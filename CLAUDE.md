@@ -13,11 +13,23 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Shaft | A straight tube of blocks, 13x13 across, that runs along one axis. |
 | Horizontal shaft | A shaft that runs along X or Z. It is infinite. |
 | Column | A shaft that runs along Y. It spans the build height and is sheared at both ends. Columns bind horizontal shafts. |
-| Junction | The piece where a column crosses a horizontal shaft. |
+| Junction | The 15x15x15 box where a column crosses a horizontal shaft. |
 | Interior | The 11x11 solid core of a shaft. |
 | Outer layer | The one-block skin around the interior. It holds the maze. |
-| Maze wall | A cell of the maze that keeps its outer layer block. |
-| Maze path | A cell of the maze with no outer layer block. The block under it is the maze path block. |
+| Maze grid | The outer layer blocks of a shaft, seen as a 2D grid that wraps around the four faces. |
+| Node | A maze grid block at an odd position along the shaft and an odd position around the shaft. Every node is a maze path. |
+| Edge | A maze grid block between two neighbor nodes. An edge in the tree is a maze path. An edge outside the tree is a maze wall. |
+| Maze wall | A maze grid block that keeps its outer layer block. |
+| Maze path | A maze grid block with no outer layer block. The block under it is the maze path block. |
+| Origin Shift | The spanning tree sampler. At each step the root moves to a random neighbor, and the old root points at it. |
+| Segment | One chunk length of a horizontal shaft. Tree segments and connector segments alternate along the shaft. |
+| Tree segment | A segment whose nodes form one spanning tree. It has no crossing of its own. |
+| Connector segment | A segment whose nodes and two virtual nodes form one spanning tree. |
+| Virtual node | A stand-in for one neighbor tree during sampling. It touches every node of that tree on the facing ring. |
+| Crossing | A tree edge at a virtual node. It is the maze path between the two sampled parts. |
+| Stub | The part of a horizontal shaft on one side of a junction. A junction cuts the shaft tree, so a stub is a forest. |
+| Piece | The part of a column between two junctions, or between a junction and a build limit. Each piece is one spanning tree. |
+| Patch | One of the two exposed faces of a junction. Each patch holds one spanning tree. |
 | Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. |
 | Shear | Noise that removes blocks from a column near a build limit. |
 | Slot | One 16-block band of the build height. Each slot belongs to X shafts or to Z shafts. |
@@ -157,7 +169,7 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 - A terrain shape is a signed distance function in `prototypes/<name>.frag`.
 - Each `.frag` file has a port in `prototypes/shadertoy/<name>.shadertoy.glsl`. The port pastes into one Shadertoy "Image" tab with no channels.
 - `prototypes/tools/` holds the GLSL validator.
-- The Markov maze is a standalone program in `prototypes/maze/`. Prototype it there before you write any maze code in the mod.
+- The maze is a standalone program in `prototypes/maze/`. Prototype a maze change there before you write any maze code in the mod. `prototypes/maze/README.md` lists the commands.
 - Before you design or change an island shape, point the user at Earth photographs. See the global rule.
 
 ## Dimension
@@ -220,13 +232,27 @@ The three shaft blocks are placeholders. The producer swaps them later.
 
 ### Maze
 
-- The maze comes from Markov rewrite rules, as in <https://youtu.be/zbXKcDVV4G0>.
-- The rules run on a 2D grid that wraps around the four faces of a shaft.
-- A maze wall cell keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.
-- A maze path cell has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
+- The maze is one spanning tree of the maze grid along the whole shaft. It has no loops.
+- Nodes sit on odd blocks. Edges sit on even blocks between two nodes. Every other maze grid block is a maze wall.
+- Origin Shift samples each tree, as in <https://youtu.be/zbXKcDVV4G0>. The process is the tree chain of Anantharam and Tsoucas (1988). It converges to the uniform spanning tree.
+- Origin Shift starts from the breadth-first tree of a seeded root. The step count comes from the stats mode of `prototypes/maze/originshift.py`.
+- A horizontal shaft is cut into segments, aligned to chunks. Segments with an even index are tree segments. Segments with an odd index are connector segments.
+- Each segment is a pure function of the world seed, the shaft and the segment index. The chunk generation sequence does not change the result.
+- A connector segment samples its tree on its own nodes plus two virtual nodes. A tree edge at a virtual node becomes a crossing to that neighbor tree segment.
+- The union of all segments is one tree. A chunk boundary gets several crossings, so no wall ring marks it.
+- A chunk needs at most two segments: its own, and the connector segment before it along the axis.
+- A column is cut into pieces by its junctions. Each piece is one spanning tree of its own nodes. A piece is a pure function of the world seed, the column and the piece index.
+- A junction cuts the maze grid of both shafts. The one-block rim around each shaft attachment sits on even positions, so it is wall.
+- A junction exposes two patches, the faces that no shaft covers. The seed picks one patch for the horizontal shaft. The other patch serves the column.
+- The horizontal shaft patch samples its tree with one virtual node per component of each stub. The components come from the three segments nearest the junction, because the path between two nodes of a segment never leaves its neighbor segments.
+- The column patch samples its tree with one virtual node per neighbor piece.
+- A crossing onto a patch steps up one block, from the shaft outer layer onto the junction face.
+- Each shaft is one tree over its full length. No tree touches another shaft. The maze has no loops.
+- A maze wall keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.
+- A maze path has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
 - Decay is one fractal Brownian simplex noise over the shaft. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
 - A maze wall or maze path block that decay removes becomes air. A removed path exposes the interior block.
-- The rule set is not fixed. The prototype in `prototypes/maze/` tries rule sets, and the user picks one from its output images.
+- The prototype renders the one-root, forest and connector layouts. The user picked the connector layout from its images.
 
 ## Walker Trees
 
@@ -342,7 +368,7 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 ## Tests
 
 - Write NeoForge GameTests for world generation results. Run them with `./gradlew runGameTestServer`.
-- Write JUnit tests for pure logic: the Voronoi, the signed distance functions, the maze rules and the walker.
+- Write JUnit tests for pure logic: the Voronoi, the signed distance functions, the maze segments and the walker.
 - Put all tests in `src/test`.
 
 ## AI attribution procedure

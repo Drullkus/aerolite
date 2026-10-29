@@ -42,3 +42,6 @@ repo/
 
 # Game directory of the muted client run
 run-mute/
+
+# Python bytecode of the prototypes
+__pycache__/

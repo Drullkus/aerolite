@@ -12,7 +12,7 @@ tree per segment. Three layouts join the segments:
   touches both neighbors through two virtual nodes.
 
 Written by Claude Code; conversation transcript:
-llm/transcripts/transcript_2026-10-28_22-52_44feb929-a98e-4826-8aa2-5d56973d077a.md
+llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
 """
 
 import argparse
