@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -73,12 +72,6 @@ class ColumnMazeTest {
         for (ShaftMaze.Segment segment : segments(column(6, -64, 320, List.of(new ColumnJunction(-40, 1, true), new ColumnJunction(200, 1, false))))) {
             assertTrue(segment.lastChunk() - segment.firstChunk() <= 2);
         }
-    }
-
-    @Test
-    void oneRulingFitsBetweenJunctions() {
-        assertTrue(ColumnJunction.fits(List.of(new ColumnJunction(23, 1, true), new ColumnJunction(40, 1, false))));
-        assertFalse(ColumnJunction.fits(List.of(new ColumnJunction(23, 1, true), new ColumnJunction(38, 1, false))));
     }
 
     @Test

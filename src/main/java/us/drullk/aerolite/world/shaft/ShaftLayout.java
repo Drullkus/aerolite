@@ -1,8 +1,6 @@
 package us.drullk.aerolite.world.shaft;
 
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.levelgen.PositionalRandomFactory;
-import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
@@ -43,8 +41,9 @@ public final class ShaftLayout {
      *
      * @param cell     the cell index of the shaft on the cross axis
      * @param position the cross axis coordinate of the shaft center
+     * @param slot     the index of the slot that holds the shaft, counted from the bottom build limit
      */
-    public record Shaft(Axis axis, int cell, int position, int centerY) {
+    public record Shaft(Axis axis, int cell, int position, int slot, int centerY) {
     }
 
     /**
@@ -70,10 +69,10 @@ public final class ShaftLayout {
     private final int maxY;
     private final int[] slotsX;
     private final int[] slotsZ;
-    private final PositionalRandomFactory shaftRandom;
-    private final PositionalRandomFactory columnRandom;
-    private final PositionalRandomFactory shaftMazeRandom;
-    private final PositionalRandomFactory columnMazeRandom;
+    private final MixedRandomFactory shaftRandom;
+    private final MixedRandomFactory columnRandom;
+    private final MixedRandomFactory shaftMazeRandom;
+    private final MixedRandomFactory columnMazeRandom;
     private final FractalNoise decayNoise;
     private final FractalNoise shearNoise;
 
@@ -85,11 +84,11 @@ public final class ShaftLayout {
         this.settings = settings;
         this.minY = minY;
         this.maxY = maxY;
-        PositionalRandomFactory root = new XoroshiroRandomSource(seed).forkPositional().fromHashOf("aerolite:shafts/" + salt).forkPositional();
-        this.shaftRandom = root.fromHashOf("shaft").forkPositional();
-        this.columnRandom = root.fromHashOf("column").forkPositional();
-        this.shaftMazeRandom = root.fromHashOf("shaft_maze").forkPositional();
-        this.columnMazeRandom = root.fromHashOf("column_maze").forkPositional();
+        MixedRandomFactory root = new MixedRandomFactory(seed).fork("aerolite:shafts/" + salt);
+        this.shaftRandom = root.fork("shaft");
+        this.columnRandom = root.fork("column");
+        this.shaftMazeRandom = root.fork("shaft_maze");
+        this.columnMazeRandom = root.fork("column_maze");
         this.decayNoise = new FractalNoise(root.fromHashOf("decay"), DECAY_OCTAVES, settings.decayScale());
         this.shearNoise = new FractalNoise(root.fromHashOf("shear"), SHEAR_OCTAVES, SHEAR_SCALE);
 
@@ -148,7 +147,7 @@ public final class ShaftLayout {
         int position = cell * spacing + margin + random.nextInt(Math.max(1, spacing - 2 * margin + 1));
         int slot = slots[random.nextInt(slots.length)];
         int offset = 1 + random.nextInt(2);
-        return Optional.of(new Shaft(axis, cell, position, this.minY + SLOT * slot + offset + RADIUS));
+        return Optional.of(new Shaft(axis, cell, position, slot, this.minY + SLOT * slot + offset + RADIUS));
     }
 
     /** The shafts of the axis whose centers lie in a range of the cross axis. */
@@ -168,6 +167,10 @@ public final class ShaftLayout {
         if (zShaft.isEmpty() || xShaft.isEmpty()) {
             return Optional.empty();
         }
+        // One empty slot between the two shafts keeps the junction boxes apart.
+        if (Math.abs(xShaft.get().slot() - zShaft.get().slot()) < 2) {
+            return Optional.empty();
+        }
         RandomSource random = this.columnRandom.at(xCell, zCell, 0);
         if (random.nextFloat() >= this.settings.columnChance()) {
             return Optional.empty();
@@ -179,9 +182,6 @@ public final class ShaftLayout {
                 new ColumnJunction(zShaft.get().centerY(), -zShaftSign, false)
         ));
         junctions.sort(Comparator.comparingInt(ColumnJunction::center));
-        if (!ColumnJunction.fits(junctions)) {
-            return Optional.empty();
-        }
         int lowestBox = junctions.getFirst().center() - Ring.BOX;
         int highestBox = junctions.getLast().center() + Ring.BOX;
         int bottomShear = Math.min(MIN_SHEAR + random.nextInt(MAX_SHEAR - MIN_SHEAR + 1), Math.max(0, lowestBox - this.minY - SHEAR_MARGIN));
@@ -209,7 +209,7 @@ public final class ShaftLayout {
                         ? new ShaftMaze.Box(column.x(), column.xShaftSign())
                         : new ShaftMaze.Box(column.z(), column.zShaftSign()))
                 .toList();
-        return new ShaftMaze(boxes, this.shaftMazeRandom.at(shaft.axis().ordinal(), shaft.cell(), 0).forkPositional());
+        return new ShaftMaze(boxes, this.shaftMazeRandom.fork(shaft.axis().ordinal(), shaft.cell(), 0));
     }
 
     /** The maze of one column. Its chunks are the chunk sections from the bottom build limit to the top build limit. */
@@ -218,7 +218,7 @@ public final class ShaftLayout {
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();
         return new ShaftMaze(
                 lookup,
-                this.columnMazeRandom.at(column.zShaft().cell(), column.xShaft().cell(), 0).forkPositional(),
+                this.columnMazeRandom.fork(column.zShaft().cell(), column.xShaft().cell(), 0),
                 Math.floorDiv(this.minY, ShaftMaze.CHUNK),
                 Math.floorDiv(this.maxY - 1, ShaftMaze.CHUNK)
         );

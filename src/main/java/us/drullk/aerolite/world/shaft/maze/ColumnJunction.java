@@ -1,7 +1,5 @@
 package us.drullk.aerolite.world.shaft.maze;
 
-import java.util.List;
-
 /**
  * A junction on a column.
  *
@@ -16,20 +14,6 @@ public record ColumnJunction(int center, int sign, boolean alongX) {
     /** The box of this junction in the column maze. */
     public ShaftMaze.Box box() {
         return new ShaftMaze.Box(this.center, this.sign, this.alongX ? ShaftMaze.Patching.COLUMN_ALONG_X : ShaftMaze.Patching.COLUMN_ALONG_Z);
-    }
-
-    /**
-     * True when at least one ruling fits between each two neighbor junctions.
-     *
-     * @param junctions the junctions in ascending sequence of Y
-     */
-    public static boolean fits(List<ColumnJunction> junctions) {
-        for (int k = 1; k < junctions.size(); k++) {
-            if (junctions.get(k - 1).box().firstRulingAfter() > junctions.get(k).box().lastRulingBefore()) {
-                return false;
-            }
-        }
-        return true;
     }
 
 }

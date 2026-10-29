@@ -17,7 +17,6 @@ import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteSettings;
 
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.function.IntConsumer;
 import java.util.function.IntFunction;
@@ -58,7 +57,7 @@ public class AerolitePresetScreen extends Screen {
         LinearLayout contents = this.layout.addToContents(LinearLayout.vertical().spacing(8));
 
         contents.addChild(new StepSlider(FRACTION_STEPS, Math.round(this.settings.columnChance() * FRACTION_STEPS),
-                step -> Component.translatable("createWorld.customize.aerolite.column_chance", fraction(step)),
+                step -> Component.translatable("createWorld.customize.aerolite.column_chance", percent(step)),
                 step -> this.settings = this.settings.withColumnChance(step / (float) FRACTION_STEPS)));
 
         StepSlider[] spacing = new StepSlider[2];
@@ -83,7 +82,7 @@ public class AerolitePresetScreen extends Screen {
                 step -> Component.translatable("createWorld.customize.aerolite.decay_scale", 1 << (MIN_SCALE_EXPONENT + step)),
                 step -> this.settings = this.settings.withDecayScale(1 << (MIN_SCALE_EXPONENT + step))));
         contents.addChild(new StepSlider(FRACTION_STEPS, Math.round(this.settings.decayThreshold() * FRACTION_STEPS),
-                step -> Component.translatable("createWorld.customize.aerolite.decay_threshold", fraction(step)),
+                step -> Component.translatable("createWorld.customize.aerolite.decay_threshold", percent(step)),
                 step -> this.settings = this.settings.withDecayThreshold(step / (float) FRACTION_STEPS)));
 
         LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
@@ -97,8 +96,8 @@ public class AerolitePresetScreen extends Screen {
         this.repositionElements();
     }
 
-    private static String fraction(int step) {
-        return String.format(Locale.ROOT, "%.2f", step / (float) FRACTION_STEPS);
+    private static String percent(int step) {
+        return Math.round(100F * step / FRACTION_STEPS) + "%";
     }
 
     private static int spacing(int step) {

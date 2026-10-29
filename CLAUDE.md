@@ -216,11 +216,11 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The maze decay scale is the size of one decay region along a shaft.
 - The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
 - The screen has five sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale and the maze decay threshold.
-- The column chance slider runs from 0 to 1 in steps of 0.05.
+- The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.
 - The decay scale slider steps through the powers of two from 32 to 1024.
-- The decay threshold slider runs from 0 to 1 in steps of 0.05.
+- The decay threshold slider runs from 0% to 100% in steps of 5%. 100% is a threshold of 1.
 - The other settings have no slider yet. They live in the generator settings with their defaults.
 
 ## Shafts
@@ -232,6 +232,8 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A horizontal shaft keeps one height for its full length.
 - Shafts have no elbows. A shaft never turns and never steps.
 - An X shaft and a Z shaft never intersect.
+- Every seeded choice of the shafts uses a random that mixes each coordinate into the seed.
+- The vanilla Xoroshiro positional random puts the coordinate hash into the seed unmixed. Its first values correlate between neighbor coordinates.
 - Each axis is a jittered grid. The cell size is the mean of the minimum and the maximum spacing. Each cell holds one shaft at a seeded place.
 - A margin of half the minimum spacing in each cell keeps each neighbor distance between the minimum and the maximum.
 - The smallest minimum spacing of 32 keeps at least 16 blocks between two shafts on the same axis.
@@ -239,7 +241,7 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The seed shuffles which of the other slots belong to X shafts and which to Z shafts.
 - A horizontal shaft picks one slot of its axis. Inside the slot it picks an offset of 1 or 2, so at least one block of air separates it from a shaft in the next slot.
 - A column can stand where an X shaft and a Z shaft cross in plan view. The column chance setting decides which crossings get one.
-- A crossing gets no column when no ruling fits between its two junction boxes.
+- A crossing gets no column unless at least one slot lies between the slots of its two shafts.
 - Columns span the full build height.
 - Shear thins each column near the top and bottom build limits. No column ends in a flat cut.
 - Near a build limit, a noise threshold removes blocks from the column. The threshold rises toward the limit, so fewer blocks remain the closer they are to it.

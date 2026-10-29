@@ -80,7 +80,9 @@ class ShaftLayoutTest {
                 if (column.isPresent()) {
                     found++;
                     List<ColumnJunction> junctions = column.get().junctions();
-                    assertTrue(ColumnJunction.fits(junctions));
+                    assertTrue(Math.abs(column.get().xShaft().slot() - column.get().zShaft().slot()) >= 2);
+                    int gap = junctions.getLast().center() - junctions.getFirst().center() - (2 * Ring.BOX + 1);
+                    assertTrue(gap >= 16, "gap " + gap);
                     assertTrue(column.get().bottomShear() <= ShaftLayout.MAX_SHEAR && column.get().topShear() <= ShaftLayout.MAX_SHEAR);
                     int belowBox = junctions.getFirst().center() - Ring.BOX - MIN_Y - column.get().bottomShear();
                     int aboveBox = MAX_Y - 1 - column.get().topShear() - (junctions.getLast().center() + Ring.BOX);
@@ -89,6 +91,29 @@ class ShaftLayoutTest {
             }
         }
         assertTrue(found > 0);
+    }
+
+    /** The share of eligible crossings that get a column stays near the column chance on each single shaft. */
+    @Test
+    void columnShareMatchesTheChanceOnEachShaft() {
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withShaftSpacing(32, 80).withColumnChance(0.9F);
+        ShaftLayout layout = new ShaftLayout(-777248163424996722L, "minecraft:overworld", MIN_Y, MAX_Y, settings);
+        List<ShaftLayout.Shaft> crossings = layout.shafts(ShaftLayout.Axis.X, -6000, 6000);
+        for (ShaftLayout.Shaft shaft : layout.shafts(ShaftLayout.Axis.Z, -1500, 1500)) {
+            int eligible = 0;
+            int columns = 0;
+            for (ShaftLayout.Shaft crossing : crossings) {
+                if (Math.abs(shaft.slot() - crossing.slot()) < 2) {
+                    continue;
+                }
+                eligible++;
+                if (layout.column(shaft.cell(), crossing.cell()).isPresent()) {
+                    columns++;
+                }
+            }
+            double share = columns / (double) eligible;
+            assertTrue(share > 0.8 && share < 0.97, "share " + share + " on " + shaft);
+        }
     }
 
     @Test
