@@ -63,6 +63,7 @@ The source still contains the MDK template (`com.example.examplemod`, mod ID `ex
 
 - Beanification: dependency injection. See [Dependency injection](#dependency-injection).
 - Veil: the ImGui panel and custom block and entity rendering. See [Veil](#veil).
+- WorldEdit: an editor for the dev runs. See [WorldEdit](#worldedit).
 
 ### Dependency injection
 
@@ -91,6 +92,16 @@ Rules:
 - Use constructor injection when a constructor needs a bean.
 - In JUnit tests, extend with `MockitoFixer` and `MockitoRunner` from `tamaized.beanification.junit`. Use Mockito `@Mock` fields.
 - Do not use `BeanContextJunitExtension` or `@MockBean`. JUnit runs in the game's module layer, and that extension is in a split package.
+
+### WorldEdit
+
+- The dev runs load WorldEdit. The code does not reference it. The production jar does not hold it.
+- Get WorldEdit from the EngineHub maven. The version is in `gradle.properties`.
+- EngineHub publishes one NeoForge artifact for all 1.21 patches, `worldedit-neoforge-mc1.21`.
+- The WorldEdit mod jar does not hold the WorldEdit core.
+- Put the mod jar in `localRuntime` with `transitive = false`.
+- Put `worldedit-core` in `additionalRuntimeClasspath`. Then the game layer loads the core as a library.
+- Exclude Guava, Gson, fastutil and Log4j from the core. Minecraft pins their versions, and the WorldEdit versions fail to resolve.
 
 ### Veil
 

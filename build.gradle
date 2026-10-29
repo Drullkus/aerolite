@@ -78,6 +78,17 @@ repositories {
             includeGroup 'io.github.ocelot' // Veil dependency
         }
     }
+
+    maven {
+        name 'EngineHub Maven' // WorldEdit
+        url 'https://maven.enginehub.org/repo/'
+        content {
+            includeGroup 'com.sk89q.worldedit'
+            includeGroup 'com.sk89q.worldedit.worldedit-libs' // WorldEdit dependency
+            includeGroup 'com.sk89q' // WorldEdit dependency
+            includeGroup 'com.sk89q.lib' // WorldEdit dependency
+        }
+    }
 }
 
 base {
@@ -280,6 +291,19 @@ dependencies {
     testImplementation "org.mockito:mockito-junit-jupiter:${mockito_version}"
 
     implementation "foundry.veil:veil-neoforge-${minecraft_version}:${veil_version}"
+
+    // The dev runs load WorldEdit. The code does not reference it.
+    localRuntime("com.sk89q.worldedit:worldedit-neoforge-mc${worldedit_minecraft_version}:${worldedit_version}") {
+        transitive = false
+    }
+    // The WorldEdit mod jar does not hold its core. The game layer loads the core as a library.
+    additionalRuntimeClasspath("com.sk89q.worldedit:worldedit-core:${worldedit_version}") {
+        // Minecraft provides these libraries and pins their versions
+        exclude group: 'com.google.guava'
+        exclude group: 'com.google.code.gson'
+        exclude group: 'it.unimi.dsi'
+        exclude group: 'org.apache.logging.log4j'
+    }
 
     datagenImplementation sourceSets.main.output
 }
