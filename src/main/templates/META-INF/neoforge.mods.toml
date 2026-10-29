@@ -1,8 +1,6 @@
 modLoader="javafml"
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
-displayURL="https://www.curseforge.com/minecraft/mc-mods/aerolite
-authors="Drullkus"
 
 [[mods]]
 modId="${mod_id}"
@@ -10,6 +8,8 @@ version="${mod_version}"
 displayName="${mod_name}"
 description='''
 '''
+displayURL="https://www.curseforge.com/minecraft/mc-mods/aerolite"
+authors="Drullkus"
 
 [[mixins]]
 config="${mod_id}.mixins.json"
