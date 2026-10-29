@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "us.drullk.aerolite.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ChunkPyramidMixin",
+    "ChunkStatusMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

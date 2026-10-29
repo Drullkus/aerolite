@@ -181,6 +181,11 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 - Each dimension keeps its vanilla dimension type. The Overworld has its sun, moon, day cycle and weather. The Overworld spans -64 to 320.
 - Each dimension uses its own vanilla biome list. Overworld biomes in the Overworld, Nether biomes in the Nether, End biomes in the End.
 - Each dimension has the same structure: shafts, islands, bridges and center structures.
+- Each dimension uses the Aerolite generator, a subclass of the vanilla noise-based chunk generator. It carries the settings.
+- The noise settings of each dimension make only air. The islands replace the void later.
+- The void Overworld has a sea level of -64. A higher sea level makes the noise step fill the bottom with lava.
+- The shafts are the chunk status `aerolite:shafts`, between the carvers and the features. Two mixins add the status and its step, because no API adds a chunk status.
+- The features step waits for the shafts of its neighbor chunks. Features decorate the shafts.
 
 ## World creation menu
 
@@ -196,6 +201,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 | Shaft spacing | 256 blocks |
 | Column chance | 0.25 |
 | Maze decay scale | 256 blocks |
+| Maze decay threshold | 0.5 |
 | Shaft interior block | Stone |
 | Maze wall block | Stone bricks |
 | Maze path block | Cobblestone |
@@ -208,6 +214,11 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The island height band is the Y range of the island centers in the generating layer.
 - The shaft spacing is the mean distance between horizontal shafts along one axis.
 - The maze decay scale is the size of one decay region along a shaft.
+- The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
+- The screen has two sliders: the maze decay scale and the maze decay threshold.
+- The decay scale slider steps through the powers of two from 32 to 1024.
+- The decay threshold slider runs from 0 to 1 in steps of 0.05.
+- The other settings have no slider yet. They live in the generator settings with their defaults.
 
 ## Shafts
 
@@ -218,12 +229,17 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A horizontal shaft keeps one height for its full length.
 - Shafts have no elbows. A shaft never turns and never steps.
 - An X shaft and a Z shaft never intersect.
+- Each axis is a jittered grid. Each cell of the shaft spacing holds one shaft at a seeded place.
+- A margin in each cell keeps at least 16 blocks between two shafts on the same axis.
 - The build height is cut into slots of 16 blocks. The seed shuffles which slots belong to X shafts and which to Z shafts.
 - A horizontal shaft picks one slot of its axis. Inside the slot it picks an offset of 1 or 2, so at least one block of air separates it from a shaft in the next slot.
 - A column can stand where an X shaft and a Z shaft cross in plan view. The column chance setting decides which crossings get one.
+- A crossing gets no column when no ruling fits between its two junction boxes.
 - Columns span the full build height.
 - Shear thins each column near the top and bottom build limits. No column ends in a flat cut.
 - Near a build limit, a noise threshold removes blocks from the column. The threshold rises toward the limit, so fewer blocks remain the closer they are to it.
+- Each column end picks its shear band height at random, from 8 to 64 blocks.
+- Shear does not touch a junction box.
 - Where a column crosses a horizontal shaft, a junction joins them. The junction is a 15x15x15 box of the shaft interior block, centered on the crossing.
 - Shafts pierce islands. Where a shaft and an island overlap, the shaft replaces the terrain.
 
@@ -250,13 +266,17 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A junction exposes two patches, the faces that no shaft covers. The seed picks one patch for the horizontal shaft. The other patch serves the column.
 - A junction segment replaces the chunks that hold the nearest surviving ruling on each side of the box. Its graph is those rulings minus the box rulings, plus the shaft patch nodes, plus a crossing from each interior patch border node onto the nearest ruling. One tree spans all of it, so no part strands.
 - The junction segment keeps the chunk alternation. An end chunk with an odd index gives it a virtual node on that side.
+- When the junction segments of two boxes share a chunk, one junction segment spans both boxes. It holds one shaft patch per box.
 - The column patch samples its tree with one virtual node per neighbor piece.
 - A crossing onto a patch steps up one block, from the shaft outer layer onto the junction face.
 - Each shaft is one tree over its full length. No tree touches another shaft. The maze has no loops.
 - A maze wall keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.
 - A maze path has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
 - Decay is one fractal Brownian simplex noise over the shaft. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
+- The decay threshold t sets the regimes. Noise below -t keeps only maze walls. Noise above t keeps only maze paths.
 - A maze wall or maze path block that decay removes becomes air. A removed path exposes the interior block.
+- Decay acts on the 13x13 inside of each patch. On a patch, the box block that decay exposes becomes the maze path block.
+- The rim of a patch face stays wall. Decay does not touch it.
 - The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
 
 ## Walker Trees
@@ -375,6 +395,8 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - Write NeoForge GameTests for world generation results. Run them with `./gradlew runGameTestServer`.
 - Write JUnit tests for pure logic: the Voronoi, the signed distance functions, the maze segments and the walker.
 - Put all tests in `src/test`.
+- The GameTest server run loads the test source set as part of the mod.
+- GameTests use the template `aerolite:empty`, a 1x1x1 structure in the test resources.
 
 ## AI attribution procedure
 

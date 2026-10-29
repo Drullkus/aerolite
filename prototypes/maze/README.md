@@ -32,6 +32,7 @@ This folder holds the standalone maze prototype for the shaft surface. It needs 
 - The junction segment keeps the chunk alternation. An end chunk with an odd index gives it a virtual node on that side.
 - The column pieces below and above the box are trees. The column patch samples one tree over its nodes plus one virtual node per piece.
 - A crossing onto a patch fills the blocks along the ruling up to the patch border. The patch sits one block out from the shaft surface.
+- Two boxes can sit so close on one shaft that their junction segments share a chunk. Then one junction segment spans both, with one patch per box. `--cluster-stats` checks that the shaft stays one tree.
 - The cut model is the earlier design. It samples plain segments through the box, cuts them, and rejoins the stub components through the patch. `--cut-stats` prints how many components stay stranded.
 
 ## Commands
@@ -60,6 +61,12 @@ Render one junction from both sides and confirm that the shaft is one tree:
 
 ```bash
 python3 prototypes/maze/junction.py --seed 1 --cx 203 --cy 70
+```
+
+Check that close boxes in one junction segment keep the shaft one tree:
+
+```bash
+python3 prototypes/maze/junction.py --cluster-stats --count 600
 ```
 
 Measure the stranded components of the cut model:

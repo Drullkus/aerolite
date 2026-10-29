@@ -119,6 +119,8 @@ neoForge {
         // The gametest system is also enabled by default for other run configs under the /test command.
         gameTestServer {
             type = "gameTestServer"
+            // The GameTests are in the test source set
+            sourceSet = sourceSets.test
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
@@ -158,6 +160,7 @@ neoForge {
         "${mod_id}" {
             sourceSet(sourceSets.main)
             sourceSet(sourceSets.datagen)
+            sourceSet(sourceSets.test)
         }
         aerolitedevtools {
             sourceSet(sourceSets.devtools)

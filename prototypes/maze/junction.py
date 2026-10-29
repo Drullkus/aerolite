@@ -23,6 +23,8 @@ Its stats show how many components stay stranded.
 
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
+Written by Claude Code; conversation transcript:
+llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md
 """
 
 import argparse
@@ -422,6 +424,108 @@ def cut_stats(seed, count, sampler, spn):
     print(f"three-segment window agrees: {totals['window3']} of {rows}")
 
 
+# --- cluster model ---------------------------------------------------------------
+
+
+def junction_chunks(c):
+    """First and last chunk of the junction segment of one box centered at c."""
+    return odd_below(c - HALF - 1) // CHUNK, odd_above(c + HALF + 1) // CHUNK
+
+
+class ClusterScene:
+    """Boxes on one shaft whose junction segments share a chunk. One junction segment spans them all."""
+
+    def __init__(self, seed, centers, sampler, steps_per_node, chunks_each_side=3):
+        self.centers = sorted(centers)
+        rng = random.Random(f"{seed}:cluster:{self.centers}")
+        self.signs = [rng.choice((1, -1)) for _ in self.centers]
+        self.k = min(junction_chunks(c)[0] for c in self.centers)
+        self.k_end = max(junction_chunks(c)[1] for c in self.centers)
+        self.c_lo = (self.k - chunks_each_side) // 2 * 2
+        self.c_hi = (self.k_end + chunks_each_side + 1) // 2 * 2
+        self.segments = {}
+        for c in range(self.c_lo, self.c_hi + 1):
+            if self.k <= c <= self.k_end:
+                continue
+            self.segments[c] = build_segment(segment_kind("connector", c), NODES_PER_CHUNK, seg_rng(seed, "connector", c), sampler, steps_per_node)
+        self.shaft_edges = Scene._plain_shaft_edges(self)
+        self.shaft_edges += self._junction_segment(seg_rng(seed, "junction", self.k), sampler, steps_per_node)
+
+    def rulings(self):
+        start = CHUNK * self.k + 1
+        end = CHUNK * (self.k_end + 1)
+        return [x for x in range(start, end, 2) if all(abs(x - c) > HALF for c in self.centers)]
+
+    def _junction_segment(self, rng, sampler, steps_per_node):
+        g = Graph()
+        names = {}
+        index = {}
+        rulings = self.rulings()
+        for x in rulings:
+            for v in range(RING):
+                n = g.add_node()
+                index[(x, v)] = n
+                names[n] = (x, v)
+        for x in rulings:
+            for v in range(RING):
+                g.add_edge(index[(x, v)], index[(x, (v + 1) % RING)])
+                if (x + 2, v) in index and not is_corner(v):
+                    g.add_edge(index[(x, v)], index[(x + 2, v)])
+        for b, (c, sign) in enumerate(zip(self.centers, self.signs)):
+            patch = patch_grid(g)
+            for (i, j), n in patch.items():
+                names[n] = ("patch", b, i, j)
+            x_last, x_first = odd_below(c - HALF - 1), odd_above(c + HALF + 1)
+            for j in range(-2, 3):
+                v = face_node(sign, j)
+                g.add_edge(patch[(-3, j)], index[(x_last, v)])
+                g.add_edge(patch[(3, j)], index[(x_first, v)])
+        x_start, x_end = rulings[0], rulings[-1]
+        if self.k % 2 == 1:
+            left = g.add_node()
+            names[left] = (x_start - 2, None)
+            for v in range(RING):
+                if not is_corner(v):
+                    g.add_edge(left, index[(x_start, v)])
+        if self.k_end % 2 == 1:
+            right = g.add_node()
+            names[right] = (x_end + 2, None)
+            for v in range(RING):
+                if not is_corner(v):
+                    g.add_edge(right, index[(x_end, v)])
+        parent = sample(g, rng, sampler, steps_per_node)
+        edges = []
+        for a, b in tree_edges(g, parent, names):
+            if a[1] is None:
+                a = (a[0], b[1])
+            if b[1] is None:
+                b = (b[0], a[1])
+            edges.append((a, b))
+        return prune_corner_leaves(edges, lambda n: n[0] != "patch" and is_corner(n[1]))
+
+
+def cluster_stats(seed, count, sampler, spn):
+    """Place two boxes at a random distance of 31 to 60 blocks and check that the shaft stays one tree."""
+    merged = 0
+    trees = 0
+    for k in range(count):
+        rng = random.Random(f"{seed}:cluster-place:{k}")
+        c1 = rng.randrange(100, 400)
+        c2 = c1 + rng.randrange(31, 61)
+        if junction_chunks(c1)[1] >= junction_chunks(c2)[0]:
+            merged += 1
+            scene = ClusterScene(seed, [c1, c2], sampler, spn)
+        else:
+            scene = ClusterScene(seed, [c1], sampler, spn)
+        result = check_tree(scene)
+        if result.endswith(" 1 component(s)"):
+            trees += 1
+        else:
+            print(f"{k:>4} {c1:>4} {c2:>4}  {result}")
+    print(f"merged clusters: {merged} of {count}")
+    print(f"scenes that are one tree: {trees} of {count}")
+
+
 # --- checks and rendering -------------------------------------------------------
 
 
@@ -533,10 +637,14 @@ def main():
     ap.add_argument("--scale", type=int, default=9, help="pixels per block edge")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "images"))
     ap.add_argument("--cut-stats", action="store_true", help="measure the stranded components of the cut model and exit")
+    ap.add_argument("--cluster-stats", action="store_true", help="check that two close boxes in one junction segment keep the shaft one tree and exit")
     ap.add_argument("--count", type=int, default=40)
     args = ap.parse_args()
     if args.cut_stats:
         cut_stats(args.seed, args.count, args.sampler, args.steps_per_node)
+        return
+    if args.cluster_stats:
+        cluster_stats(args.seed, args.count, args.sampler, args.steps_per_node)
         return
     os.makedirs(args.out, exist_ok=True)
     scene = Scene(args.seed, args.cx, args.cy, args.sampler, args.steps_per_node)
