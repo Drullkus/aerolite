@@ -526,6 +526,151 @@ def cluster_stats(seed, count, sampler, spn):
     print(f"scenes that are one tree: {trees} of {count}")
 
 
+# --- segmented column -----------------------------------------------------------
+
+
+class ColumnScene:
+    """One full-height column cut into 16-block sections, like a horizontal shaft.
+
+    Tree sections and connector sections alternate. A virtual node only faces a
+    section inside the build height. The column junction segment holds the column
+    patch, with crossings from the patch border onto the nearest rulings.
+    """
+
+    def __init__(self, seed, centers, signs, y_min, y_max, sampler, steps_per_node):
+        self.centers, self.signs = centers, signs
+        self.y_min, self.y_max = y_min, y_max
+        self.s_lo, self.s_hi = y_min // CHUNK, (y_max - 1) // CHUNK
+        self.sampler, self.spn = sampler, steps_per_node
+        ranges = sorted(junction_chunks(c) for c in centers)
+        clusters = []
+        for lo, hi in ranges:
+            if clusters and lo <= clusters[-1][1]:
+                clusters[-1][1] = max(clusters[-1][1], hi)
+            else:
+                clusters.append([lo, hi])
+        self.edges = []
+        self.rulings = []
+        covered = set()
+        for lo, hi in clusters:
+            lo, hi = max(lo, self.s_lo), min(hi, self.s_hi)
+            covered.update(range(lo, hi + 1))
+            boxes = [(c, g) for c, g in zip(centers, signs) if lo <= junction_chunks(c)[0] <= hi or lo <= junction_chunks(c)[1] <= hi]
+            self._segment(lo, hi, boxes, seg_rng(seed, "column-junction", lo))
+        for c in range(self.s_lo, self.s_hi + 1):
+            if c not in covered:
+                self._segment(c, c, [], seg_rng(seed, "column", c))
+
+    def _segment(self, lo, hi, boxes, rng):
+        g = Graph()
+        names = {}
+        index = {}
+        rulings = [y for y in range(CHUNK * lo + 1, CHUNK * (hi + 1), 2) if all(abs(y - c) > HALF for c, _ in boxes)]
+        self.rulings += rulings
+        for y in rulings:
+            for v in range(RING):
+                n = g.add_node()
+                index[(y, v)] = n
+                names[n] = (y, v)
+        for y in rulings:
+            for v in range(RING):
+                g.add_edge(index[(y, v)], index[(y, (v + 1) % RING)])
+                if (y + 2, v) in index and not is_corner(v):
+                    g.add_edge(index[(y, v)], index[(y + 2, v)])
+        for c, sign in boxes:
+            patch = patch_grid(g)
+            for (i, j), n in patch.items():
+                names[n] = ("patch", c, i, j)
+            for i in range(-2, 3):
+                v = face_node(sign, i)
+                if (odd_below(c - HALF - 1), v) in index:
+                    g.add_edge(patch[(i, -3)], index[(odd_below(c - HALF - 1), v)])
+                if (odd_above(c + HALF + 1), v) in index:
+                    g.add_edge(patch[(i, 3)], index[(odd_above(c + HALF + 1), v)])
+        if lo % 2 == 1 and lo - 1 >= self.s_lo:
+            left = g.add_node()
+            names[left] = (rulings[0] - 2, None)
+            for v in range(RING):
+                if not is_corner(v):
+                    g.add_edge(left, index[(rulings[0], v)])
+        if hi % 2 == 1 and hi + 1 <= self.s_hi:
+            right = g.add_node()
+            names[right] = (rulings[-1] + 2, None)
+            for v in range(RING):
+                if not is_corner(v):
+                    g.add_edge(right, index[(rulings[-1], v)])
+        parent = sample(g, rng, self.sampler, self.spn)
+        edges = []
+        for a, b in tree_edges(g, parent, names):
+            if a[1] is None:
+                a = (a[0], b[1])
+            if b[1] is None:
+                b = (b[0], a[1])
+            edges.append((a, b))
+        self.edges += prune_corner_leaves(edges, lambda n: n[0] != "patch" and is_corner(n[1]))
+
+    def band(self):
+        """Path grid of the column surface, indexed [ring block][y - y_min]. Box rows are None."""
+        height = self.y_max - self.y_min
+        grid = [[False] * height for _ in range(BLOCKS_AROUND)]
+        present = {n for e in self.edges for n in e}
+        for y in self.rulings:
+            for v in range(RING):
+                if not is_corner(v) or (y, v) in present:
+                    grid[2 * v][y - self.y_min] = True
+        for a, b in self.edges:
+            if a[0] == "patch" or b[0] == "patch":
+                continue
+            (y1, v1), (y2, v2) = a, b
+            if y1 == y2:
+                grid[ring_block_between(v1, v2)][y1 - self.y_min] = True
+            else:
+                grid[2 * v1][min(y1, y2) + 1 - self.y_min] = True
+        for c, _ in zip(self.centers, self.signs):
+            for y in range(c - HALF, c + HALF + 1):
+                for b in range(BLOCKS_AROUND):
+                    grid[b][y - self.y_min] = None
+        return grid
+
+
+def render_column_band(scene, path, scale):
+    """The unwrapped column surface, bottom row at the bottom. Junction boxes have a blue tint."""
+    grid = scene.band()
+    rows = []
+    for y in range(len(grid[0]) - 1, -1, -1):
+        row = []
+        for b in range(BLOCKS_AROUND):
+            cell = grid[b][y]
+            corner = b % (BLOCKS_AROUND // 4) == 0
+            if cell is None:
+                c = (120, 126, 150)
+            elif cell:
+                c = (84, 84, 94) if corner else (58, 58, 66)
+            else:
+                c = (176, 176, 176) if corner else (150, 150, 150)
+            row.extend(c * scale)
+        for _ in range(scale):
+            rows.append(row)
+    write_png(path, BLOCKS_AROUND * scale, len(rows), rows)
+
+
+def column_stats(seed, count, sampler, spn):
+    """Place two junctions on a full-height column and check that the column stays one tree."""
+    trees = 0
+    for k in range(count):
+        rng = random.Random(f"{seed}:column-place:{k}")
+        low = rng.randrange(-64 + 24, 300 - 40)
+        high = low + rng.randrange(17, 120)
+        high = min(high, 320 - 24)
+        scene = ColumnScene(seed + k, [low, high], [rng.choice((1, -1)), rng.choice((1, -1))], -64, 320, sampler, spn)
+        result = check_tree(scene)
+        if result.endswith(" 1 component(s)"):
+            trees += 1
+        else:
+            print(f"{k:>4} {low:>4} {high:>4}  {result}")
+    print(f"columns that are one tree: {trees} of {count}")
+
+
 # --- checks and rendering -------------------------------------------------------
 
 
@@ -533,14 +678,14 @@ def check_tree(scene):
     """Confirm the shaft edges form one tree over the scene and report counts."""
     uf = UnionFind()
     nodes = set()
-    for a, b in scene.shaft_edges:
+    for a, b in getattr(scene, "shaft_edges", None) or scene.edges:
         nodes.add(a)
         nodes.add(b)
         if uf.find(a) == uf.find(b):
             return "loop found"
         uf.union(a, b)
     roots = {uf.find(n) for n in nodes}
-    return f"{len(nodes)} nodes, {len(scene.shaft_edges)} edges, {len(roots)} component(s)"
+    return f"{len(nodes)} nodes, {len(getattr(scene, 'shaft_edges', None) or scene.edges)} edges, {len(roots)} component(s)"
 
 
 AIR, STONE, BRICK, COBBLE, BOX = 0, 1, 2, 3, 4
@@ -638,6 +783,8 @@ def main():
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "images"))
     ap.add_argument("--cut-stats", action="store_true", help="measure the stranded components of the cut model and exit")
     ap.add_argument("--cluster-stats", action="store_true", help="check that two close boxes in one junction segment keep the shaft one tree and exit")
+    ap.add_argument("--column-stats", action="store_true", help="check that a segmented column with two junctions is one tree and exit")
+    ap.add_argument("--column-band", action="store_true", help="render the unwrapped surface of one segmented column and exit")
     ap.add_argument("--count", type=int, default=40)
     args = ap.parse_args()
     if args.cut_stats:
@@ -645,6 +792,16 @@ def main():
         return
     if args.cluster_stats:
         cluster_stats(args.seed, args.count, args.sampler, args.steps_per_node)
+        return
+    if args.column_stats:
+        column_stats(args.seed, args.count, args.sampler, args.steps_per_node)
+        return
+    if args.column_band:
+        os.makedirs(args.out, exist_ok=True)
+        scene = ColumnScene(args.seed, [-56, 56], [1, 1], -64, 320, args.sampler, args.steps_per_node)
+        print("column tree:", check_tree(scene))
+        render_column_band(scene, os.path.join(args.out, "column_band.png"), 4)
+        print("wrote column_band.png")
         return
     os.makedirs(args.out, exist_ok=True)
     scene = Scene(args.seed, args.cx, args.cy, args.sampler, args.steps_per_node)

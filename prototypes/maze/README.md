@@ -30,7 +30,8 @@ This folder holds the standalone maze prototype for the shaft surface. It needs 
 - A junction segment replaces the chunks that hold the nearest surviving rulings on both sides of the box. That is two chunks, or three when the box sits at a chunk end.
 - The junction segment graph is the rulings of those chunks minus the box rulings, plus the 7x7 patch nodes, plus a crossing from each interior patch border node onto the nearest ruling. One tree spans all of it.
 - The junction segment keeps the chunk alternation. An end chunk with an odd index gives it a virtual node on that side.
-- The column pieces below and above the box are trees. The column patch samples one tree over its nodes plus one virtual node per piece.
+- The junction scene shows the earlier column model: the pieces below and above the box are trees, and the column patch samples one tree with one virtual node per piece.
+- The column scene is the current column model. The column is cut into 16-block sections like a horizontal shaft. The column patch is part of a column junction segment. At a build limit, a segment gets no virtual node on the outer side. `--column-stats` checks that the column is one tree.
 - A crossing onto a patch fills the blocks along the ruling up to the patch border. The patch sits one block out from the shaft surface.
 - Two boxes can sit so close on one shaft that their junction segments share a chunk. Then one junction segment spans both, with one patch per box. `--cluster-stats` checks that the shaft stays one tree.
 - The cut model is the earlier design. It samples plain segments through the box, cuts them, and rejoins the stub components through the patch. `--cut-stats` prints how many components stay stranded.
@@ -69,6 +70,18 @@ Check that close boxes in one junction segment keep the shaft one tree:
 python3 prototypes/maze/junction.py --cluster-stats --count 600
 ```
 
+Check that a segmented column with two junctions is one tree:
+
+```bash
+python3 prototypes/maze/junction.py --column-stats --count 200
+```
+
+Render the unwrapped surface of one segmented column:
+
+```bash
+python3 prototypes/maze/junction.py --column-band
+```
+
 Measure the stranded components of the cut model:
 
 ```bash
@@ -82,4 +95,5 @@ The images are in `images/`.
 - `band_<layout>_<sampler>.png` is the unwrapped surface. One block is 4 pixels. The top strip alternates color per chunk. The lighter rows are the four corners of the shaft.
 - `closeup/` holds six chunks at 10 pixels per block.
 - `graph_view.svg` shows three segments of the `oneroot` and `connector` layouts as node graphs, plus the contracted view of one connector. Big dots are corner nodes.
+- `column_band.png` is the unwrapped surface of one segmented column from the bottom build limit to the top build limit. The junction boxes have a blue tint.
 - `junction_front_<role>_patch.png` and `junction_back_<role>_patch.png` are isometric views of one junction. The role names the patch that faces the viewer. Raised blocks are maze walls. Recessed blocks are maze paths. The junction box has a blue tint.

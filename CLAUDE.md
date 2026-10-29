@@ -24,14 +24,13 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Maze wall | A maze grid block that keeps its outer layer block. |
 | Maze path | A maze grid block with no outer layer block. The block under it is the maze path block. |
 | Origin Shift | The spanning tree sampler. At each step the root moves to a random neighbor, and the old root points at it. |
-| Segment | One chunk length of a horizontal shaft. Tree segments and connector segments alternate along the shaft. |
+| Segment | One chunk length of a shaft. On a column it is one chunk section. Tree segments and connector segments alternate along the shaft. |
 | Tree segment | A segment whose nodes form one spanning tree. It has no crossing of its own. |
 | Connector segment | A segment whose nodes and two virtual nodes form one spanning tree. |
 | Virtual node | A stand-in for one neighbor tree during sampling. It touches every interior node of that tree on the facing ruling. |
 | Crossing | A tree edge at a virtual node. It is the maze path between the two sampled parts. |
 | Junction segment | The segment that holds a junction. It spans the chunks with the nearest surviving ruling on each side of the box, two or three chunks. Its graph drops the box rulings and adds the shaft patch. |
-| Piece | The part of a column between two junctions, or between a junction and a build limit. Each piece is one spanning tree. |
-| Patch | One of the two exposed faces of a junction, a 7x7 node grid. The shaft patch is part of the junction segment. The column patch holds its own spanning tree. |
+| Patch | One of the two exposed faces of a junction, a 7x7 node grid. The shaft patch is part of the junction segment of the horizontal shaft. The column patch is part of the junction segment of the column. |
 | Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. |
 | Shear | Noise that removes blocks from a column near a build limit. |
 | Slot | One 16-block band of the build height. Each slot belongs to X shafts or to Z shafts. |
@@ -198,7 +197,8 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 | Island fill fraction, upper bound | 0.9 |
 | Island height band | Y 0 to 128 |
 | Island type weights (landmass, biosphere, lake bowl, donut) | 8, 1, 1, 1 |
-| Shaft spacing | 256 blocks |
+| Minimum shaft spacing | 128 blocks |
+| Maximum shaft spacing | 384 blocks |
 | Column chance | 0.25 |
 | Maze decay scale | 256 blocks |
 | Maze decay threshold | 0.5 |
@@ -212,10 +212,13 @@ The three shaft blocks are placeholders. The producer swaps them later.
 
 - Each island picks its fill fraction at random between the two bounds.
 - The island height band is the Y range of the island centers in the generating layer.
-- The shaft spacing is the mean distance between horizontal shafts along one axis.
+- The shaft spacing is the center distance of two neighbor horizontal shafts on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a shaft.
 - The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
-- The screen has two sliders: the maze decay scale and the maze decay threshold.
+- The screen has five sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale and the maze decay threshold.
+- The column chance slider runs from 0 to 1 in steps of 0.05.
+- The spacing sliders run from 32 to 1024 blocks in steps of 16.
+- A spacing slider that passes the other spacing slider pushes it along.
 - The decay scale slider steps through the powers of two from 32 to 1024.
 - The decay threshold slider runs from 0 to 1 in steps of 0.05.
 - The other settings have no slider yet. They live in the generator settings with their defaults.
@@ -229,9 +232,11 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A horizontal shaft keeps one height for its full length.
 - Shafts have no elbows. A shaft never turns and never steps.
 - An X shaft and a Z shaft never intersect.
-- Each axis is a jittered grid. Each cell of the shaft spacing holds one shaft at a seeded place.
-- A margin in each cell keeps at least 16 blocks between two shafts on the same axis.
-- The build height is cut into slots of 16 blocks. The seed shuffles which slots belong to X shafts and which to Z shafts.
+- Each axis is a jittered grid. The cell size is the mean of the minimum and the maximum spacing. Each cell holds one shaft at a seeded place.
+- A margin of half the minimum spacing in each cell keeps each neighbor distance between the minimum and the maximum.
+- The smallest minimum spacing of 32 keeps at least 16 blocks between two shafts on the same axis.
+- The build height is cut into slots of 16 blocks. The bottom slot and the top slot hold no horizontal shaft.
+- The seed shuffles which of the other slots belong to X shafts and which to Z shafts.
 - A horizontal shaft picks one slot of its axis. Inside the slot it picks an offset of 1 or 2, so at least one block of air separates it from a shaft in the next slot.
 - A column can stand where an X shaft and a Z shaft cross in plan view. The column chance setting decides which crossings get one.
 - A crossing gets no column when no ruling fits between its two junction boxes.
@@ -239,6 +244,7 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - Shear thins each column near the top and bottom build limits. No column ends in a flat cut.
 - Near a build limit, a noise threshold removes blocks from the column. The threshold rises toward the limit, so fewer blocks remain the closer they are to it.
 - Each column end picks its shear band height at random, from 8 to 64 blocks.
+- The shear band shrinks so at least 8 blocks of full column stay between the band and the outermost junction box.
 - Shear does not touch a junction box.
 - Where a column crosses a horizontal shaft, a junction joins them. The junction is a 15x15x15 box of the shaft interior block, centered on the crossing.
 - Shafts pierce islands. Where a shaft and an island overlap, the shaft replaces the terrain.
@@ -261,13 +267,15 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A connector segment samples its tree on its own nodes plus two virtual nodes. A tree edge at a virtual node becomes a crossing to that neighbor tree segment.
 - The union of all segments is one tree. A chunk boundary gets several crossings, so no wall ring marks it.
 - A chunk needs at most two segments: its own, which can be a junction segment, and the connector segment before it along the axis.
-- A column is cut into pieces by its junctions. Each piece is one spanning tree of its own nodes. A piece is a pure function of the world seed, the column and the piece index.
+- A column is cut into segments of one chunk section, like a horizontal shaft. A column segment is a pure function of the world seed, the column and the section index.
+- One Origin Shift run over a long tree leaves parts of its start tree unmixed. Short segments mix fully.
+- At a build limit, a segment gets no virtual node on the outer side.
 - A junction cuts the maze grid of both shafts. The one-block rim around each shaft attachment sits on even positions, so it is wall.
 - A junction exposes two patches, the faces that no shaft covers. The seed picks one patch for the horizontal shaft. The other patch serves the column.
 - A junction segment replaces the chunks that hold the nearest surviving ruling on each side of the box. Its graph is those rulings minus the box rulings, plus the shaft patch nodes, plus a crossing from each interior patch border node onto the nearest ruling. One tree spans all of it, so no part strands.
 - The junction segment keeps the chunk alternation. An end chunk with an odd index gives it a virtual node on that side.
 - When the junction segments of two boxes share a chunk, one junction segment spans both boxes. It holds one shaft patch per box.
-- The column patch samples its tree with one virtual node per neighbor piece.
+- The column patch is part of a column junction segment. Crossings run from its interior border nodes onto the nearest ruling above and below.
 - A crossing onto a patch steps up one block, from the shaft outer layer onto the junction face.
 - Each shaft is one tree over its full length. No tree touches another shaft. The maze has no loops.
 - A maze wall keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.

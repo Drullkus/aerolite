@@ -8,9 +8,10 @@ import java.util.List;
 import java.util.stream.IntStream;
 
 /**
- * The maze of one horizontal shaft, cut into chunk segments.
+ * The maze of one shaft, cut into segments of one chunk length.
  * Tree segments sit on even chunks and connector segments on odd chunks.
  * A junction segment replaces the chunks around one or more junction boxes.
+ * A column uses chunk sections as its chunks, bounded by the build limits.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  */
@@ -24,14 +25,66 @@ public final class ShaftMaze {
 
     private final BoxLookup boxes;
     private final PositionalRandomFactory random;
+    private final int minChunk;
+    private final int maxChunk;
 
+    /** An infinite shaft. */
     public ShaftMaze(BoxLookup boxes, PositionalRandomFactory random) {
-        this.boxes = boxes;
-        this.random = random;
+        this(boxes, random, Integer.MIN_VALUE / CHUNK, Integer.MAX_VALUE / CHUNK - 1);
     }
 
-    /** A junction box on the shaft. The shaft patch is on the face at {@code 7 * sign} along the second offset. */
-    public record Box(int center, int sign) {
+    /** A shaft from the chunk {@code minChunk} to the chunk {@code maxChunk}, both included. */
+    public ShaftMaze(BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk) {
+        this.boxes = boxes;
+        this.random = random;
+        this.minChunk = minChunk;
+        this.maxChunk = maxChunk;
+    }
+
+    public int minChunk() {
+        return this.minChunk;
+    }
+
+    public int maxChunk() {
+        return this.maxChunk;
+    }
+
+    /** How the 7x7 patch of a box sits on the shaft. */
+    public enum Patching {
+        /** A horizontal shaft. Patch index i runs along the shaft. */
+        SHAFT,
+        /** A column at a junction with an X shaft. Patch index j runs along the column. */
+        COLUMN_ALONG_X,
+        /** A column at a junction with a Z shaft. Patch index j runs along the column. */
+        COLUMN_ALONG_Z
+    }
+
+    /**
+     * A junction box on the shaft.
+     *
+     * @param sign the face sign of the patch, along the second offset of the horizontal shaft at the box
+     */
+    public record Box(int center, int sign, Patching patching) {
+
+        public Box(int center, int sign) {
+            this(center, sign, Patching.SHAFT);
+        }
+
+        /** The ring node under the patch border node at cross index {@code k}. */
+        public int crossingNode(int k) {
+            return switch (this.patching) {
+                case SHAFT -> Ring.faceNode(this.sign, k);
+                case COLUMN_ALONG_X -> Ring.block(2 * k, Ring.OUTER * this.sign) / 2;
+                case COLUMN_ALONG_Z -> Ring.block(Ring.OUTER * this.sign, 2 * k) / 2;
+            };
+        }
+
+        /** The graph node of the patch node at an index along the shaft and an index across it. */
+        int patchNode(int firstPatchNode, int along, int across) {
+            return this.patching == Patching.SHAFT
+                    ? RulingGraph.patchNode(firstPatchNode, along, across)
+                    : RulingGraph.patchNode(firstPatchNode, across, along);
+        }
 
         public int lastRulingBefore() {
             return Ring.oddBelow(this.center - Ring.BOX - 1);
@@ -105,6 +158,10 @@ public final class ShaftMaze {
         return found;
     }
 
+    private boolean inRange(int chunk) {
+        return chunk >= this.minChunk && chunk <= this.maxChunk;
+    }
+
     private Segment plain(int chunk) {
         int base = CHUNK * chunk;
         int[] rulings = new int[RULINGS_PER_CHUNK];
@@ -114,8 +171,10 @@ public final class ShaftMaze {
         RulingGraph graph = new RulingGraph(rulings);
         int left = -1;
         int right = -1;
-        if ((chunk & 1) != 0) {
+        if ((chunk & 1) != 0 && this.inRange(chunk - 1)) {
             left = graph.addVirtual(rulings[0]);
+        }
+        if ((chunk & 1) != 0 && this.inRange(chunk + 1)) {
             right = graph.addVirtual(rulings[rulings.length - 1]);
         }
         int[] parent = graph.graph.sampleTree(this.random.at(PLAIN, chunk, 0));
@@ -124,21 +183,27 @@ public final class ShaftMaze {
         return new Segment(chunk, chunk, List.of(), rulings, MazeEdge.pruneCornerLeaves(edges));
     }
 
-    private Segment junction(int lo, int hi, List<Box> members) {
+    private Segment junction(int clusterLo, int clusterHi, List<Box> members) {
+        int lo = Math.max(clusterLo, this.minChunk);
+        int hi = Math.min(clusterHi, this.maxChunk);
         int[] rulings = IntStream.iterate(CHUNK * lo + 1, along -> along < CHUNK * (hi + 1), along -> along + 2)
                 .filter(along -> members.stream().noneMatch(box -> box.covers(along)))
                 .toArray();
         RulingGraph graph = new RulingGraph(rulings);
         for (Box box : members) {
             int patch = graph.addPatch(box.center());
-            for (int j = -2; j <= 2; j++) {
-                int v = Ring.faceNode(box.sign(), j);
-                graph.graph.addEdge(RulingGraph.patchNode(patch, -3, j), graph.node(box.lastRulingBefore(), v));
-                graph.graph.addEdge(RulingGraph.patchNode(patch, 3, j), graph.node(box.firstRulingAfter(), v));
+            for (int k = -2; k <= 2; k++) {
+                int v = box.crossingNode(k);
+                if (graph.has(box.lastRulingBefore())) {
+                    graph.graph.addEdge(box.patchNode(patch, -3, k), graph.node(box.lastRulingBefore(), v));
+                }
+                if (graph.has(box.firstRulingAfter())) {
+                    graph.graph.addEdge(box.patchNode(patch, 3, k), graph.node(box.firstRulingAfter(), v));
+                }
             }
         }
-        int left = (lo & 1) != 0 ? graph.addVirtual(rulings[0]) : -1;
-        if ((hi & 1) != 0) {
+        int left = (lo & 1) != 0 && this.inRange(lo - 1) ? graph.addVirtual(rulings[0]) : -1;
+        if ((hi & 1) != 0 && this.inRange(hi + 1)) {
             graph.addVirtual(rulings[rulings.length - 1]);
         }
         int[] parent = graph.graph.sampleTree(this.random.at(JUNCTION, lo, 0));

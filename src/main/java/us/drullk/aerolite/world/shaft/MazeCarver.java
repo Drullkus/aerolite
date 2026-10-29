@@ -2,7 +2,6 @@ package us.drullk.aerolite.world.shaft;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import us.drullk.aerolite.world.shaft.maze.ColumnMaze;
 import us.drullk.aerolite.world.shaft.maze.MazeEdge;
 import us.drullk.aerolite.world.shaft.maze.MazeNode;
 import us.drullk.aerolite.world.shaft.maze.Ring;
@@ -89,8 +88,16 @@ final class MazeCarver {
 
     /** Carves the edges and patch nodes of one horizontal shaft segment. */
     static void shaftSegment(ShaftFrame frame, ShaftMaze.Segment segment, Consumer<Carve> out) {
-        Map<Integer, PatchFace> faces = segment.boxes().stream()
-                .collect(Collectors.toMap(ShaftMaze.Box::center, box -> new PatchFace(frame, box.sign(), box.center())));
+        segment(frame, segment, box -> new PatchFace(frame, box.sign(), box.center()), out);
+    }
+
+    /** Carves the edges and column patch nodes of one column segment. */
+    static void columnSegment(ShaftLayout.Column column, ShaftMaze.Segment segment, Consumer<Carve> out) {
+        segment(ShaftFrame.of(column), segment, box -> columnPatchFace(column, box), out);
+    }
+
+    private static void segment(ShaftFrame frame, ShaftMaze.Segment segment, Function<ShaftMaze.Box, PatchFace> faceOf, Consumer<Carve> out) {
+        Map<Integer, PatchFace> faces = segment.boxes().stream().collect(Collectors.toMap(ShaftMaze.Box::center, faceOf));
         for (PatchFace face : faces.values()) {
             patchNodes(face, out);
         }
@@ -98,32 +105,11 @@ final class MazeCarver {
         edges(frame, segment.edges(), faces::get, out);
     }
 
-    /** Carves the pieces and the column patches of one column. */
-    static void column(ShaftLayout.Column column, ColumnMaze maze, Consumer<Carve> out) {
-        ShaftFrame frame = ShaftFrame.of(column);
-        for (ColumnMaze.Piece piece : maze.pieces()) {
-            if (piece.isEmpty()) {
-                continue;
-            }
-            int[] rulings = new int[(piece.last() - piece.first()) / 2 + 1];
-            for (int u = 0; u < rulings.length; u++) {
-                rulings[u] = piece.first() + 2 * u;
-            }
-            rulings(frame, rulings, piece.edges(), out);
-            edges(frame, piece.edges(), owner -> null, out);
-        }
-        for (ColumnMaze.PatchTree patch : maze.patches()) {
-            PatchFace face = columnPatchFace(column, patch.junction());
-            patchNodes(face, out);
-            edges(frame, patch.edges(), owner -> face, out);
-        }
-    }
-
-    /** The column patch face of a junction, in the frame of its horizontal shaft. */
-    static PatchFace columnPatchFace(ShaftLayout.Column column, ColumnMaze.Junction junction) {
-        return junction.alongX()
-                ? new PatchFace(new ShaftFrame(ShaftFrame.Kind.ALONG_X, junction.center(), column.z()), junction.sign(), column.x())
-                : new PatchFace(new ShaftFrame(ShaftFrame.Kind.ALONG_Z, junction.center(), column.x()), junction.sign(), column.z());
+    /** The column patch face of a junction box, in the frame of its horizontal shaft. */
+    static PatchFace columnPatchFace(ShaftLayout.Column column, ShaftMaze.Box box) {
+        return box.patching() == ShaftMaze.Patching.COLUMN_ALONG_X
+                ? new PatchFace(new ShaftFrame(ShaftFrame.Kind.ALONG_X, box.center(), column.z()), box.sign(), column.x())
+                : new PatchFace(new ShaftFrame(ShaftFrame.Kind.ALONG_Z, box.center(), column.x()), box.sign(), column.z());
     }
 
     private static void patchNodes(PatchFace face, Consumer<Carve> out) {

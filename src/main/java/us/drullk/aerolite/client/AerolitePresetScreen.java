@@ -19,6 +19,8 @@ import us.drullk.aerolite.world.AeroliteSettings;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.IntConsumer;
+import java.util.function.IntFunction;
 
 /**
  * The customize screen of the preset in the world creation menu. It edits the settings of every Aerolite dimension.
@@ -30,7 +32,10 @@ public class AerolitePresetScreen extends Screen {
     private static final int SLIDER_WIDTH = 210;
     private static final int MIN_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MIN_DECAY_SCALE);
     private static final int MAX_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MAX_DECAY_SCALE);
-    private static final int THRESHOLD_STEPS = 20;
+    private static final int SPACING_STEP = 16;
+    private static final int SPACING_STEPS = (AeroliteSettings.MAX_SHAFT_SPACING - AeroliteSettings.MIN_SHAFT_SPACING) / SPACING_STEP;
+    /** Steps of 0.05 from 0 to 1. */
+    private static final int FRACTION_STEPS = 20;
 
     private final CreateWorldScreen parent;
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
@@ -51,8 +56,36 @@ public class AerolitePresetScreen extends Screen {
     protected void init() {
         this.layout.addTitleHeader(this.title, this.font);
         LinearLayout contents = this.layout.addToContents(LinearLayout.vertical().spacing(8));
-        contents.addChild(new DecayScaleSlider());
-        contents.addChild(new DecayThresholdSlider());
+
+        contents.addChild(new StepSlider(FRACTION_STEPS, Math.round(this.settings.columnChance() * FRACTION_STEPS),
+                step -> Component.translatable("createWorld.customize.aerolite.column_chance", fraction(step)),
+                step -> this.settings = this.settings.withColumnChance(step / (float) FRACTION_STEPS)));
+
+        StepSlider[] spacing = new StepSlider[2];
+        spacing[0] = new StepSlider(SPACING_STEPS, spacingStep(this.settings.minShaftSpacing()),
+                step -> Component.translatable("createWorld.customize.aerolite.min_shaft_spacing", spacing(step)),
+                step -> {
+                    int max = Math.max(spacing(step), this.settings.maxShaftSpacing());
+                    this.settings = this.settings.withShaftSpacing(spacing(step), max);
+                    spacing[1].setStep(spacingStep(max));
+                });
+        spacing[1] = new StepSlider(SPACING_STEPS, spacingStep(this.settings.maxShaftSpacing()),
+                step -> Component.translatable("createWorld.customize.aerolite.max_shaft_spacing", spacing(step)),
+                step -> {
+                    int min = Math.min(spacing(step), this.settings.minShaftSpacing());
+                    this.settings = this.settings.withShaftSpacing(min, spacing(step));
+                    spacing[0].setStep(spacingStep(min));
+                });
+        contents.addChild(spacing[0]);
+        contents.addChild(spacing[1]);
+
+        contents.addChild(new StepSlider(MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT, Mth.log2(this.settings.decayScale()) - MIN_SCALE_EXPONENT,
+                step -> Component.translatable("createWorld.customize.aerolite.decay_scale", 1 << (MIN_SCALE_EXPONENT + step)),
+                step -> this.settings = this.settings.withDecayScale(1 << (MIN_SCALE_EXPONENT + step))));
+        contents.addChild(new StepSlider(FRACTION_STEPS, Math.round(this.settings.decayThreshold() * FRACTION_STEPS),
+                step -> Component.translatable("createWorld.customize.aerolite.decay_threshold", fraction(step)),
+                step -> this.settings = this.settings.withDecayThreshold(step / (float) FRACTION_STEPS)));
+
         LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
         footer.addChild(Button.builder(CommonComponents.GUI_DONE, button -> {
             AeroliteSettings chosen = this.settings;
@@ -62,6 +95,18 @@ public class AerolitePresetScreen extends Screen {
         footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).build());
         this.layout.visitWidgets(this::addRenderableWidget);
         this.repositionElements();
+    }
+
+    private static String fraction(int step) {
+        return String.format(Locale.ROOT, "%.2f", step / (float) FRACTION_STEPS);
+    }
+
+    private static int spacing(int step) {
+        return AeroliteSettings.MIN_SHAFT_SPACING + SPACING_STEP * step;
+    }
+
+    private static int spacingStep(int spacing) {
+        return Math.round((spacing - AeroliteSettings.MIN_SHAFT_SPACING) / (float) SPACING_STEP);
     }
 
     @Override
@@ -82,55 +127,40 @@ public class AerolitePresetScreen extends Screen {
         return new WorldDimensions(stems);
     }
 
-    /** Picks a power of two from the smallest to the largest decay scale. */
-    private class DecayScaleSlider extends AbstractSliderButton {
+    /** A slider over a fixed count of steps. Each step maps to one setting value. */
+    private static final class StepSlider extends AbstractSliderButton {
 
-        DecayScaleSlider() {
-            super(0, 0, SLIDER_WIDTH, 20, CommonComponents.EMPTY, toValue(AerolitePresetScreen.this.settings.decayScale()));
+        private final int steps;
+        private final IntFunction<Component> message;
+        private final IntConsumer onStep;
+
+        StepSlider(int steps, int step, IntFunction<Component> message, IntConsumer onStep) {
+            super(0, 0, SLIDER_WIDTH, 20, CommonComponents.EMPTY, Mth.clamp(step / (double) steps, 0, 1));
+            this.steps = steps;
+            this.message = message;
+            this.onStep = onStep;
             this.updateMessage();
         }
 
-        private static double toValue(int scale) {
-            return (double) (Mth.log2(scale) - MIN_SCALE_EXPONENT) / (MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT);
+        private int step() {
+            return (int) Math.round(this.value * this.steps);
         }
 
-        private int scale() {
-            return 1 << (MIN_SCALE_EXPONENT + (int) Math.round(this.value * (MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT)));
+        /** Moves the slider without a change callback. */
+        void setStep(int step) {
+            this.value = Mth.clamp(step / (double) this.steps, 0, 1);
+            this.updateMessage();
         }
 
         @Override
         protected void updateMessage() {
-            this.setMessage(Component.translatable("createWorld.customize.aerolite.decay_scale", this.scale()));
+            this.setMessage(this.message.apply(this.step()));
         }
 
         @Override
         protected void applyValue() {
-            this.value = toValue(this.scale());
-            AerolitePresetScreen.this.settings = AerolitePresetScreen.this.settings.withDecayScale(this.scale());
-        }
-    }
-
-    /** Picks the decay threshold from 0 to 1 in steps of 0.05. */
-    private class DecayThresholdSlider extends AbstractSliderButton {
-
-        DecayThresholdSlider() {
-            super(0, 0, SLIDER_WIDTH, 20, CommonComponents.EMPTY, AerolitePresetScreen.this.settings.decayThreshold());
-            this.updateMessage();
-        }
-
-        private float threshold() {
-            return Math.round(this.value * THRESHOLD_STEPS) / (float) THRESHOLD_STEPS;
-        }
-
-        @Override
-        protected void updateMessage() {
-            this.setMessage(Component.translatable("createWorld.customize.aerolite.decay_threshold", String.format(Locale.ROOT, "%.2f", this.threshold())));
-        }
-
-        @Override
-        protected void applyValue() {
-            this.value = this.threshold();
-            AerolitePresetScreen.this.settings = AerolitePresetScreen.this.settings.withDecayThreshold(this.threshold());
+            this.value = this.step() / (double) this.steps;
+            this.onStep.accept(this.step());
         }
     }
 

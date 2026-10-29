@@ -12,13 +12,15 @@ import net.minecraft.world.level.block.state.BlockState;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  *
- * @param shaftSpacing   the mean distance between horizontal shafts along one axis
- * @param columnChance   the chance that a crossing of two shafts in plan view gets a column
- * @param decayScale     the size of one decay region along a shaft, a power of two
- * @param decayThreshold decay noise below the negative threshold keeps only maze walls, above it only maze paths
+ * @param minShaftSpacing the smallest center distance of two neighbor horizontal shafts on one axis
+ * @param maxShaftSpacing the largest center distance of two neighbor horizontal shafts on one axis
+ * @param columnChance    the chance that a crossing of two shafts in plan view gets a column
+ * @param decayScale      the size of one decay region along a shaft, a power of two
+ * @param decayThreshold  decay noise below the negative threshold keeps only maze walls, above it only maze paths
  */
 public record AeroliteSettings(
-        int shaftSpacing,
+        int minShaftSpacing,
+        int maxShaftSpacing,
         float columnChance,
         int decayScale,
         float decayThreshold,
@@ -28,12 +30,13 @@ public record AeroliteSettings(
 ) {
 
     public static final int MIN_SHAFT_SPACING = 32;
-    public static final int MAX_SHAFT_SPACING = 4096;
+    public static final int MAX_SHAFT_SPACING = 1024;
     public static final int MIN_DECAY_SCALE = 32;
     public static final int MAX_DECAY_SCALE = 1024;
 
     public static final AeroliteSettings DEFAULT = new AeroliteSettings(
-            256,
+            128,
+            384,
             0.25F,
             256,
             0.5F,
@@ -46,22 +49,40 @@ public record AeroliteSettings(
             ? DataResult.success(scale)
             : DataResult.error(() -> "Decay scale is not a power of two: " + scale));
 
-    public static final Codec<AeroliteSettings> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            Codec.intRange(MIN_SHAFT_SPACING, MAX_SHAFT_SPACING).optionalFieldOf("shaft_spacing", DEFAULT.shaftSpacing).forGetter(AeroliteSettings::shaftSpacing),
+    private static final Codec<Integer> SPACING_CODEC = Codec.intRange(MIN_SHAFT_SPACING, MAX_SHAFT_SPACING);
+
+    public static final Codec<AeroliteSettings> CODEC = RecordCodecBuilder.<AeroliteSettings>create(instance -> instance.group(
+            SPACING_CODEC.optionalFieldOf("min_shaft_spacing", DEFAULT.minShaftSpacing).forGetter(AeroliteSettings::minShaftSpacing),
+            SPACING_CODEC.optionalFieldOf("max_shaft_spacing", DEFAULT.maxShaftSpacing).forGetter(AeroliteSettings::maxShaftSpacing),
             Codec.floatRange(0, 1).optionalFieldOf("column_chance", DEFAULT.columnChance).forGetter(AeroliteSettings::columnChance),
             DECAY_SCALE_CODEC.optionalFieldOf("decay_scale", DEFAULT.decayScale).forGetter(AeroliteSettings::decayScale),
             Codec.floatRange(0, 1).optionalFieldOf("decay_threshold", DEFAULT.decayThreshold).forGetter(AeroliteSettings::decayThreshold),
             BlockState.CODEC.optionalFieldOf("interior_block", DEFAULT.interiorBlock).forGetter(AeroliteSettings::interiorBlock),
             BlockState.CODEC.optionalFieldOf("wall_block", DEFAULT.wallBlock).forGetter(AeroliteSettings::wallBlock),
             BlockState.CODEC.optionalFieldOf("path_block", DEFAULT.pathBlock).forGetter(AeroliteSettings::pathBlock)
-    ).apply(instance, AeroliteSettings::new));
+    ).apply(instance, AeroliteSettings::new)).validate(settings -> settings.minShaftSpacing <= settings.maxShaftSpacing
+            ? DataResult.success(settings)
+            : DataResult.error(() -> "Minimum shaft spacing exceeds maximum shaft spacing: " + settings.minShaftSpacing + " > " + settings.maxShaftSpacing));
+
+    /** The cell size of the jittered grid of shaft positions. */
+    public int meanShaftSpacing() {
+        return (this.minShaftSpacing + this.maxShaftSpacing) / 2;
+    }
+
+    public AeroliteSettings withShaftSpacing(int min, int max) {
+        return new AeroliteSettings(min, max, this.columnChance, this.decayScale, this.decayThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+    }
+
+    public AeroliteSettings withColumnChance(float chance) {
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, chance, this.decayScale, this.decayThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+    }
 
     public AeroliteSettings withDecayScale(int scale) {
-        return new AeroliteSettings(this.shaftSpacing, this.columnChance, scale, this.decayThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, scale, this.decayThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
     }
 
     public AeroliteSettings withDecayThreshold(float threshold) {
-        return new AeroliteSettings(this.shaftSpacing, this.columnChance, this.decayScale, threshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, threshold, this.interiorBlock, this.wallBlock, this.pathBlock);
     }
 
 }

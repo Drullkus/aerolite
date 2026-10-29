@@ -17,7 +17,7 @@ class AeroliteSettingsTest {
 
     @Test
     void settingsRoundTrip() {
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayScale(64).withDecayThreshold(0.35F);
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayScale(64).withDecayThreshold(0.35F).withColumnChance(0.6F).withShaftSpacing(64, 96);
         JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
         assertEquals(settings, AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
     }
@@ -31,6 +31,11 @@ class AeroliteSettingsTest {
     void decayScaleIsAPowerOfTwo() {
         assertTrue(AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"decay_scale\": 48}")).isError());
         assertTrue(AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"decay_scale\": 2048}")).isError());
+    }
+
+    @Test
+    void minimumSpacingDoesNotExceedMaximumSpacing() {
+        assertTrue(AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"min_shaft_spacing\": 512, \"max_shaft_spacing\": 256}")).isError());
     }
 
 }

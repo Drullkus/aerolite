@@ -20,6 +20,9 @@ public class AeroliteLanguageProvider extends LanguageProvider {
     protected void addTranslations() {
         this.add("generator.aerolite.aerolite", "Aerolite");
         this.add("createWorld.customize.aerolite.title", "Aerolite Settings");
+        this.add("createWorld.customize.aerolite.column_chance", "Column Chance: %s");
+        this.add("createWorld.customize.aerolite.min_shaft_spacing", "Minimum Shaft Spacing: %s");
+        this.add("createWorld.customize.aerolite.max_shaft_spacing", "Maximum Shaft Spacing: %s");
         this.add("createWorld.customize.aerolite.decay_scale", "Maze Decay Scale: %s");
         this.add("createWorld.customize.aerolite.decay_threshold", "Maze Decay Threshold: %s");
     }

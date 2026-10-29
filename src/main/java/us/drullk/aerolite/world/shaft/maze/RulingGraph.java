@@ -35,6 +35,10 @@ final class RulingGraph {
         }
     }
 
+    boolean has(int along) {
+        return this.firstNodeOfRuling.containsKey(along);
+    }
+
     int node(int along, int v) {
         return this.firstNodeOfRuling.get(along) + v;
     }

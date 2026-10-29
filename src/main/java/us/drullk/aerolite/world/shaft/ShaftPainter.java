@@ -11,7 +11,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import us.drullk.aerolite.world.AeroliteSettings;
-import us.drullk.aerolite.world.shaft.maze.ColumnMaze;
+import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 
@@ -84,7 +84,7 @@ public final class ShaftPainter {
             this.carveShaft(shaft);
         }
         for (ShaftLayout.Column column : columns) {
-            MazeCarver.column(column, this.layout.columnMaze(column), this::carve);
+            this.carveColumn(column);
         }
 
         this.decay();
@@ -128,7 +128,7 @@ public final class ShaftPainter {
     }
 
     private static boolean inBox(ShaftLayout.Column column, int y) {
-        for (ColumnMaze.Junction junction : column.junctions()) {
+        for (ColumnJunction junction : column.junctions()) {
             if (Math.abs(y - junction.center()) <= Ring.BOX) {
                 return true;
             }
@@ -154,7 +154,7 @@ public final class ShaftPainter {
     }
 
     private void fillBoxes(ShaftLayout.Column column) {
-        for (ColumnMaze.Junction junction : column.junctions()) {
+        for (ColumnJunction junction : column.junctions()) {
             for (int dx = -Ring.BOX; dx <= Ring.BOX; dx++) {
                 for (int dy = -Ring.BOX; dy <= Ring.BOX; dy++) {
                     for (int dz = -Ring.BOX; dz <= Ring.BOX; dz++) {
@@ -162,7 +162,7 @@ public final class ShaftPainter {
                     }
                 }
             }
-            MazeCarver.PatchFace columnFace = MazeCarver.columnPatchFace(column, junction);
+            MazeCarver.PatchFace columnFace = MazeCarver.columnPatchFace(column, junction.box());
             this.addPatchGrid(columnFace);
             this.addPatchGrid(new MazeCarver.PatchFace(columnFace.frame(), -columnFace.sign(), columnFace.center()));
         }
@@ -188,6 +188,17 @@ public final class ShaftPainter {
         MazeCarver.shaftSegment(frame, segment, this::carve);
         if (segment.firstChunk() == chunkAlong) {
             MazeCarver.shaftSegment(frame, maze.segmentAt(chunkAlong - 1), this::carve);
+        }
+    }
+
+    /** Carves every segment of the column, since the column spans the build height of the chunk. */
+    private void carveColumn(ShaftLayout.Column column) {
+        ShaftMaze maze = this.layout.columnMaze(column);
+        int chunk = maze.minChunk();
+        while (chunk <= maze.maxChunk()) {
+            ShaftMaze.Segment segment = maze.segmentAt(chunk);
+            MazeCarver.columnSegment(column, segment, this::carve);
+            chunk = segment.lastChunk() + 1;
         }
     }
 
