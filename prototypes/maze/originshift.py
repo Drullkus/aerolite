@@ -2,7 +2,13 @@
 """Origin Shift maze prototype for the Aerolite shaft surface.
 
 The shaft surface is a cylinder of 48 blocks around and infinite length.
-Nodes sit on odd blocks. Edges sit on even blocks. The rest is wall.
+A ruling is one ring of nodes at an odd block along the axis. A chunk holds
+8 rulings. Around the ring, nodes sit on even blocks, so the four corners
+are nodes. Each face has 7 nodes from corner to corner. A corner node has
+no edge along the axis. A corner node carves only when it passes a path
+from one face to the other. A corner leaf and its edge stay wall, so a
+two-block margin runs along every corner. Every other block is a maze wall.
+
 The program cuts the cylinder into segments and samples one spanning
 tree per segment. Three layouts join the segments:
 
@@ -11,6 +17,8 @@ tree per segment. Three layouts join the segments:
 - connector: tree segments and connector segments alternate. A connector
   touches both neighbors through two virtual nodes.
 
+Written by Claude Code; conversation transcript:
+llm/transcripts/transcript_2026-10-28_22-52_44feb929-a98e-4826-8aa2-5d56973d077a.md
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
 """
@@ -23,7 +31,24 @@ import zlib
 
 RING = 24
 BLOCKS_AROUND = 2 * RING
+FACE_NODES = 6
 NODES_PER_CHUNK = 8
+
+
+def is_corner(v):
+    return v % FACE_NODES == 0
+
+
+def ring_offset(block):
+    """Map a ring block index to a (first, second) offset on the 13x13 ring."""
+    block %= BLOCKS_AROUND
+    if block < 12:
+        return -6 + block, 6
+    if block < 24:
+        return 6, 6 - (block - 12)
+    if block < 36:
+        return 6 - (block - 24), -6
+    return -6, -6 + (block - 36)
 
 
 class Graph:
@@ -50,17 +75,19 @@ def segment_graph(length, with_left, with_right):
         for v in range(RING):
             node = u * RING + v
             g.add_edge(node, u * RING + (v + 1) % RING)
-            if u + 1 < length:
+            if u + 1 < length and not is_corner(v):
                 g.add_edge(node, (u + 1) * RING + v)
     left = right = -1
     if with_left:
         left = g.add_node()
         for v in range(RING):
-            g.add_edge(left, v)
+            if not is_corner(v):
+                g.add_edge(left, v)
     if with_right:
         right = g.add_node()
         for v in range(RING):
-            g.add_edge(right, (length - 1) * RING + v)
+            if not is_corner(v):
+                g.add_edge(right, (length - 1) * RING + v)
     return g, left, right
 
 
@@ -106,6 +133,22 @@ def wilson(g, rng):
     return parent
 
 
+def prune_corner_leaves(edges, is_corner_node):
+    """Drop every corner node of degree one together with its edge."""
+    degree = {}
+    for a, b in edges:
+        degree[a] = degree.get(a, 0) + 1
+        degree[b] = degree.get(b, 0) + 1
+    return [(a, b) for a, b in edges
+            if not (is_corner_node(a) and degree[a] == 1) and not (is_corner_node(b) and degree[b] == 1)]
+
+
+def sample(g, rng, sampler, steps_per_node):
+    if sampler == "wilson":
+        return wilson(g, rng)
+    return origin_shift(g, rng, steps_per_node * len(g.adj))
+
+
 class Segment:
     """Tree edges of one segment in local node coordinates."""
 
@@ -114,12 +157,6 @@ class Segment:
         self.edges = []
         self.left_cross = []
         self.right_cross = []
-
-
-def sample(g, rng, sampler, steps_per_node):
-    if sampler == "wilson":
-        return wilson(g, rng)
-    return origin_shift(g, rng, steps_per_node * len(g.adj))
 
 
 def build_segment(kind, length, rng, sampler, steps_per_node):
@@ -141,7 +178,8 @@ def build_segment(kind, length, rng, sampler, steps_per_node):
         elif b == right:
             seg.right_cross.append(a % RING)
     if kind == "oneroot":
-        seg.right_cross.append(rng.randrange(RING))
+        seg.right_cross.append(rng.choice([v for v in range(RING) if not is_corner(v)]))
+    seg.edges = prune_corner_leaves(seg.edges, lambda n: is_corner(n[1]))
     return seg
 
 
@@ -149,15 +187,17 @@ def seg_rng(seed, layout, index):
     return random.Random(f"{seed}:{layout}:{index}")
 
 
-def build_layout(layout, seed, segments, length, sampler, steps_per_node):
+def segment_kind(layout, index):
+    if layout == "connector":
+        return "tree" if index % 2 == 0 else "connector"
+    return layout
+
+
+def build_layout(layout, seed, segments, length, sampler, steps_per_node, first_index=0):
     out = []
-    for k in range(segments):
-        if layout == "connector":
-            kind = "tree" if k % 2 == 0 else "connector"
-        else:
-            kind = layout
+    for k in range(first_index, first_index + segments):
         rng = seg_rng(seed, layout, k)
-        out.append(build_segment(kind, length, rng, sampler, steps_per_node))
+        out.append(build_segment(segment_kind(layout, k), length, rng, sampler, steps_per_node))
     return out
 
 
@@ -168,22 +208,24 @@ def paint_band(segments):
     grid = [[False] * width for _ in range(BLOCKS_AROUND)]
     offset = 0
     for seg in segments:
+        present = {n for e in seg.edges for n in e}
         for u in range(seg.length):
             for v in range(RING):
-                grid[2 * v + 1][2 * (offset + u) + 1] = True
+                if not is_corner(v) or (u, v) in present:
+                    grid[2 * v][2 * (offset + u) + 1] = True
         for (u1, v1), (u2, v2) in seg.edges:
-            x = (offset + u1) + (offset + u2) + 1
             if u1 == u2:
-                y = (v1 + v2 + 1) if abs(v1 - v2) == 1 else 0
-                grid[y % BLOCKS_AROUND][x] = True
+                lo = min(v1, v2)
+                y = 2 * lo + 1 if abs(v1 - v2) == 1 else BLOCKS_AROUND - 1
+                grid[y][2 * (offset + u1) + 1] = True
             else:
-                grid[2 * v1 + 1][x] = True
+                grid[2 * v1][2 * (offset + min(u1, u2)) + 2] = True
         for v in seg.left_cross:
-            grid[2 * v + 1][2 * offset] = True
+            grid[2 * v][2 * offset] = True
         for v in seg.right_cross:
             x = 2 * (offset + seg.length)
             if x < width:
-                grid[2 * v + 1][x] = True
+                grid[2 * v][x] = True
         offset += seg.length
     return grid
 
@@ -244,26 +286,33 @@ def dead_end_fraction(seg):
         degree[(0, v)] = degree.get((0, v), 0) + 1
     for v in seg.right_cross:
         degree[(seg.length - 1, v)] = degree.get((seg.length - 1, v), 0) + 1
-    nodes = seg.length * RING
-    ends = sum(1 for u in range(seg.length) for v in range(RING) if degree.get((u, v), 0) == 1)
-    return ends / nodes
+    ends = sum(1 for d in degree.values() if d == 1)
+    return ends / len(degree)
+
+
+def corner_pass_fraction(seg):
+    """Share of corner nodes that carry a path across the corner."""
+    present = {n for e in seg.edges for n in e if is_corner(n[1])}
+    return len(present) / (seg.length * RING // FACE_NODES)
 
 
 def stats(seed, length, count):
-    print("layout      sampler      steps/node  dead ends  left cross  right cross")
+    print("layout      sampler      steps/node  dead ends  corner pass  left cross  right cross")
     runs = [("wilson", 0), ("originshift", 1), ("originshift", 4), ("originshift", 16), ("originshift", 64)]
     for kind in ("tree", "connector", "forest"):
         for sampler, spn in runs:
             ends = []
+            passes = []
             lefts = []
             rights = []
             for k in range(count):
                 rng = seg_rng(seed, f"stats-{kind}-{sampler}-{spn}", k)
                 seg = build_segment(kind, length, rng, sampler, spn)
                 ends.append(dead_end_fraction(seg))
+                passes.append(corner_pass_fraction(seg))
                 lefts.append(len(seg.left_cross))
                 rights.append(len(seg.right_cross))
-            print(f"{kind:<11} {sampler:<12} {spn:>10}  {sum(ends)/count:>9.3f}  {sum(lefts)/count:>10.2f}  {sum(rights)/count:>11.2f}")
+            print(f"{kind:<11} {sampler:<12} {spn:>10}  {sum(ends)/count:>9.3f}  {sum(passes)/count:>11.3f}  {sum(lefts)/count:>10.2f}  {sum(rights)/count:>11.2f}")
 
 
 def svg_graph_view(path, seed, length, sampler, steps_per_node):
@@ -309,7 +358,8 @@ def svg_graph_view(path, seed, length, sampler, steps_per_node):
             for u in range(seg.length):
                 for v in range(RING):
                     x, y = node_xy(k, u, v, oy)
-                    out.append(f'<circle cx="{x}" cy="{y}" r="2.5" fill="#333"/>')
+                    r = 4 if is_corner(v) else 2.5
+                    out.append(f'<circle cx="{x}" cy="{y}" r="{r}" fill="#333"/>')
         if contracted:
             cy = oy + pad + RING * cell / 2
             for cx, label in ((pad + seg_w - 2 * cell, "E(k)"), (pad + 2 * seg_w + 2 * cell, "E(k+1)")):
@@ -319,7 +369,7 @@ def svg_graph_view(path, seed, length, sampler, steps_per_node):
 
     oneroot = build_layout("oneroot", seed, 3, length, sampler, steps_per_node)
     connector = build_layout("connector", seed, 3, length, sampler, steps_per_node)
-    draw_panel("oneroot layout: tree, tree, tree. One crossing per boundary.", oneroot, 0, False)
+    draw_panel("oneroot layout: tree, tree, tree. One crossing per boundary. Big dots are corner nodes.", oneroot, 0, False)
     draw_panel("connector layout: tree E(0), connector O(1), tree E(2). Many crossings per boundary.", connector, panel_h, False)
     draw_panel("contracted view of O(1): each tree neighbor is one virtual node.", connector, 2 * panel_h, True)
     lx = panel_w + 10
@@ -335,7 +385,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--chunks", type=int, default=24, help="segments per band")
-    ap.add_argument("--length", type=int, default=NODES_PER_CHUNK, help="nodes per segment along the shaft")
+    ap.add_argument("--length", type=int, default=NODES_PER_CHUNK, help="rulings per segment")
     ap.add_argument("--sampler", choices=("originshift", "wilson"), default="originshift")
     ap.add_argument("--steps-per-node", type=int, default=16)
     ap.add_argument("--scale", type=int, default=4, help="pixels per block")

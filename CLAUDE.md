@@ -17,7 +17,9 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Interior | The 11x11 solid core of a shaft. |
 | Outer layer | The one-block skin around the interior. It holds the maze. |
 | Maze grid | The outer layer blocks of a shaft, seen as a 2D grid that wraps around the four faces. |
-| Node | A maze grid block at an odd position along the shaft and an odd position around the shaft. Every node is a maze path. |
+| Ruling | One ring of nodes at an odd block along the shaft. A chunk holds 8 rulings. |
+| Node | A maze grid block on a ruling at an even position around the shaft. Each face has 7 nodes from corner to corner, 5 of them interior. |
+| Corner node | A node on a shaft corner. It has edges around the ring only. It carves only when a path crosses it from one face to the other. |
 | Edge | A maze grid block between two neighbor nodes. An edge in the tree is a maze path. An edge outside the tree is a maze wall. |
 | Maze wall | A maze grid block that keeps its outer layer block. |
 | Maze path | A maze grid block with no outer layer block. The block under it is the maze path block. |
@@ -25,11 +27,11 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Segment | One chunk length of a horizontal shaft. Tree segments and connector segments alternate along the shaft. |
 | Tree segment | A segment whose nodes form one spanning tree. It has no crossing of its own. |
 | Connector segment | A segment whose nodes and two virtual nodes form one spanning tree. |
-| Virtual node | A stand-in for one neighbor tree during sampling. It touches every node of that tree on the facing ring. |
+| Virtual node | A stand-in for one neighbor tree during sampling. It touches every interior node of that tree on the facing ruling. |
 | Crossing | A tree edge at a virtual node. It is the maze path between the two sampled parts. |
-| Stub | The part of a horizontal shaft on one side of a junction. A junction cuts the shaft tree, so a stub is a forest. |
+| Junction segment | The segment that holds a junction. It spans the chunks with the nearest surviving ruling on each side of the box, two or three chunks. Its graph drops the box rulings and adds the shaft patch. |
 | Piece | The part of a column between two junctions, or between a junction and a build limit. Each piece is one spanning tree. |
-| Patch | One of the two exposed faces of a junction. Each patch holds one spanning tree. |
+| Patch | One of the two exposed faces of a junction, a 7x7 node grid. The shaft patch is part of the junction segment. The column patch holds its own spanning tree. |
 | Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. |
 | Shear | Noise that removes blocks from a column near a build limit. |
 | Slot | One 16-block band of the build height. Each slot belongs to X shafts or to Z shafts. |
@@ -233,18 +235,21 @@ The three shaft blocks are placeholders. The producer swaps them later.
 ### Maze
 
 - The maze is one spanning tree of the maze grid along the whole shaft. It has no loops.
-- Nodes sit on odd blocks. Edges sit on even blocks between two nodes. Every other maze grid block is a maze wall.
+- A ruling sits on every odd block along the shaft. On a ruling, nodes sit on even blocks around the shaft, so the four corners are nodes. Edges sit between neighbor nodes. Every other maze grid block is a maze wall.
+- A corner node has no edge along the axis, so no path runs along a corner.
+- After sampling, a corner node of degree one is dropped with its edge. So a two-block margin runs along every corner, with a notch where a path crosses the corner.
 - Origin Shift samples each tree, as in <https://youtu.be/zbXKcDVV4G0>. The process is the tree chain of Anantharam and Tsoucas (1988). It converges to the uniform spanning tree.
 - Origin Shift starts from the breadth-first tree of a seeded root. The step count comes from the stats mode of `prototypes/maze/originshift.py`.
 - A horizontal shaft is cut into segments, aligned to chunks. Segments with an even index are tree segments. Segments with an odd index are connector segments.
 - Each segment is a pure function of the world seed, the shaft and the segment index. The chunk generation sequence does not change the result.
 - A connector segment samples its tree on its own nodes plus two virtual nodes. A tree edge at a virtual node becomes a crossing to that neighbor tree segment.
 - The union of all segments is one tree. A chunk boundary gets several crossings, so no wall ring marks it.
-- A chunk needs at most two segments: its own, and the connector segment before it along the axis.
+- A chunk needs at most two segments: its own, which can be a junction segment, and the connector segment before it along the axis.
 - A column is cut into pieces by its junctions. Each piece is one spanning tree of its own nodes. A piece is a pure function of the world seed, the column and the piece index.
 - A junction cuts the maze grid of both shafts. The one-block rim around each shaft attachment sits on even positions, so it is wall.
 - A junction exposes two patches, the faces that no shaft covers. The seed picks one patch for the horizontal shaft. The other patch serves the column.
-- The horizontal shaft patch samples its tree with one virtual node per component of each stub. The components come from the three segments nearest the junction, because the path between two nodes of a segment never leaves its neighbor segments.
+- A junction segment replaces the chunks that hold the nearest surviving ruling on each side of the box. Its graph is those rulings minus the box rulings, plus the shaft patch nodes, plus a crossing from each interior patch border node onto the nearest ruling. One tree spans all of it, so no part strands.
+- The junction segment keeps the chunk alternation. An end chunk with an odd index gives it a virtual node on that side.
 - The column patch samples its tree with one virtual node per neighbor piece.
 - A crossing onto a patch steps up one block, from the shaft outer layer onto the junction face.
 - Each shaft is one tree over its full length. No tree touches another shaft. The maze has no loops.
@@ -252,7 +257,7 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A maze path has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
 - Decay is one fractal Brownian simplex noise over the shaft. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
 - A maze wall or maze path block that decay removes becomes air. A removed path exposes the interior block.
-- The prototype renders the one-root, forest and connector layouts. The user picked the connector layout from its images.
+- The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
 
 ## Walker Trees
 
