@@ -1,6 +1,8 @@
 modLoader="javafml"
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
+displayURL="https://www.curseforge.com/minecraft/mc-mods/aerolite
+authors="Drullkus"
 
 [[mods]]
 modId="${mod_id}"
