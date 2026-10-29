@@ -20,7 +20,7 @@ import java.util.List;
 
 /**
  * Writes the shafts, columns and junctions of one chunk.
- * Volumes come first, then maze paths, then decay, then shear.
+ * Volumes come first, then maze paths, then decay, then erosion, then shear.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  */
@@ -88,6 +88,7 @@ public final class ShaftPainter {
         }
 
         this.decay();
+        this.erode(shafts, columns);
         for (ShaftLayout.Column column : columns) {
             this.shear(column);
         }
@@ -122,7 +123,7 @@ public final class ShaftPainter {
 
     private void fillColumn(ShaftLayout.Column column) {
         ShaftFrame frame = ShaftFrame.of(column);
-        for (int y = this.layout.minY(); y < this.layout.maxY(); y++) {
+        for (int y = column.bottomEnd(); y < column.topEnd(); y++) {
             this.fillSection(frame, y, !inBox(column, y));
         }
     }
@@ -197,7 +198,11 @@ public final class ShaftPainter {
         int chunk = maze.minChunk();
         while (chunk <= maze.maxChunk()) {
             ShaftMaze.Segment segment = maze.segmentAt(chunk);
-            MazeCarver.columnSegment(column, segment, this::carve);
+            MazeCarver.columnSegment(column, segment, carve -> {
+                if (column.spans(carve.surface().getY())) {
+                    this.carve(carve);
+                }
+            });
             chunk = segment.lastChunk() + 1;
         }
     }
@@ -246,15 +251,92 @@ public final class ShaftPainter {
         }
     }
 
-    /** Near a build limit, a threshold that rises toward the limit removes column blocks. */
+    /**
+     * Decay noise beyond the erosion threshold removes blocks from the surface toward the 3x3 core.
+     * The noise, normalized from the erosion threshold to 1, sets how deep the erosion reaches.
+     */
+    private void erode(List<ShaftLayout.Shaft> shafts, List<ShaftLayout.Column> columns) {
+        for (ShaftLayout.Shaft shaft : shafts) {
+            ShaftFrame frame = ShaftFrame.of(shaft);
+            int alongMin = this.alongMin(shaft.axis());
+            List<ShaftMaze.Box> boxes = this.layout.shaftMaze(shaft).boxesNear(alongMin, alongMin + 15);
+            for (int along = alongMin; along < alongMin + 16; along++) {
+                int at = along;
+                if (boxes.stream().noneMatch(box -> box.covers(at))) {
+                    this.erodeSection(frame, along);
+                }
+            }
+        }
+        for (ShaftLayout.Column column : columns) {
+            ShaftFrame frame = ShaftFrame.of(column);
+            for (int y = column.bottomEnd(); y < column.topEnd(); y++) {
+                if (!inBox(column, y)) {
+                    this.erodeSection(frame, y);
+                }
+            }
+            for (ColumnJunction junction : column.junctions()) {
+                this.erodeBox(column, junction);
+            }
+        }
+    }
+
+    /** The share of the erodible layers that erosion removes at a block, from 0 to 1. */
+    private double erosionReach(BlockPos pos) {
+        double value = Math.abs(this.layout.decayNoise().sample(pos.getX(), pos.getY(), pos.getZ()));
+        double threshold = this.settings.erosionThreshold();
+        return value <= threshold ? 0 : (value - threshold) / (1 - threshold);
+    }
+
+    private void erodeSection(ShaftFrame frame, int along) {
+        for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
+            for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
+                BlockPos pos = frame.at(along, first, second);
+                if (this.inChunk(pos) && this.erosionReach(pos) > sectionResistance(first, second)) {
+                    this.chunk.setBlockState(pos, AIR, false);
+                }
+            }
+        }
+    }
+
+    private void erodeBox(ShaftLayout.Column column, ColumnJunction junction) {
+        for (int dx = -Ring.BOX; dx <= Ring.BOX; dx++) {
+            for (int dy = -Ring.BOX; dy <= Ring.BOX; dy++) {
+                for (int dz = -Ring.BOX; dz <= Ring.BOX; dz++) {
+                    BlockPos pos = new BlockPos(column.x() + dx, junction.center() + dy, column.z() + dz);
+                    if (this.inChunk(pos) && this.erosionReach(pos) > boxResistance(junction, dx, dy, dz)) {
+                        this.chunk.setBlockState(pos, AIR, false);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The erosion resistance of a box block, from 0 at a surface to 1 at a core.
+     * It is the largest of the box resistance and the resistance of each shaft through the block.
+     */
+    private static double boxResistance(ColumnJunction junction, int dx, int dy, int dz) {
+        double box = (double) (Ring.BOX - Math.max(Math.abs(dx), Math.max(Math.abs(dy), Math.abs(dz)))) / (Ring.BOX - 1);
+        double column = sectionResistance(dx, dz);
+        double horizontal = junction.alongX() ? sectionResistance(dy, dz) : sectionResistance(dy, dx);
+        return Math.max(box, Math.max(column, horizontal));
+    }
+
+    /** The erosion resistance in a shaft cross section, 0 outside the section and 1 at the 3x3 core. */
+    private static double sectionResistance(int first, int second) {
+        int offset = Math.max(Math.abs(first), Math.abs(second));
+        return offset > Ring.OUTER ? 0 : Math.min(1, (double) (Ring.OUTER - offset) / (Ring.OUTER - 1));
+    }
+
+    /** Near each column end, a threshold that rises toward the end removes column blocks. */
     private void shear(ShaftLayout.Column column) {
         FractalNoise noise = this.layout.shearNoise();
         ShaftFrame frame = ShaftFrame.of(column);
         for (int depth = 0; depth < column.bottomShear(); depth++) {
-            this.shearSection(frame, column, this.layout.minY() + depth, depth, column.bottomShear(), noise);
+            this.shearSection(frame, column, column.bottomEnd() + depth, depth, column.bottomShear(), noise);
         }
         for (int depth = 0; depth < column.topShear(); depth++) {
-            this.shearSection(frame, column, this.layout.maxY() - 1 - depth, depth, column.topShear(), noise);
+            this.shearSection(frame, column, column.topEnd() - 1 - depth, depth, column.topShear(), noise);
         }
     }
 

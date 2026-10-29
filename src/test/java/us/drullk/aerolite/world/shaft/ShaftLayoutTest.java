@@ -74,6 +74,7 @@ class ShaftLayoutTest {
     void columnsHaveRoomBetweenTheirJunctions() {
         ShaftLayout layout = layout(4, 64, 64);
         int found = 0;
+        int raisedEnds = 0;
         for (int xCell = -20; xCell < 20; xCell++) {
             for (int zCell = -20; zCell < 20; zCell++) {
                 Optional<ShaftLayout.Column> column = layout.column(xCell, zCell);
@@ -83,14 +84,21 @@ class ShaftLayoutTest {
                     assertTrue(Math.abs(column.get().xShaft().slot() - column.get().zShaft().slot()) >= 2);
                     int gap = junctions.getLast().center() - junctions.getFirst().center() - (2 * Ring.BOX + 1);
                     assertTrue(gap >= 16, "gap " + gap);
-                    assertTrue(column.get().bottomShear() <= ShaftLayout.MAX_SHEAR && column.get().topShear() <= ShaftLayout.MAX_SHEAR);
-                    int belowBox = junctions.getFirst().center() - Ring.BOX - MIN_Y - column.get().bottomShear();
-                    int aboveBox = MAX_Y - 1 - column.get().topShear() - (junctions.getLast().center() + Ring.BOX);
-                    assertTrue(belowBox >= ShaftLayout.SHEAR_MARGIN && aboveBox >= ShaftLayout.SHEAR_MARGIN);
+                    ShaftLayout.Column c = column.get();
+                    assertTrue(c.bottomShear() <= ShaftLayout.MAX_SHEAR && c.topShear() <= ShaftLayout.MAX_SHEAR);
+                    assertTrue(c.bottomShear() >= ShaftLayout.MIN_SHEAR && c.topShear() >= ShaftLayout.MIN_SHEAR);
+                    assertTrue(c.bottomEnd() >= MIN_Y && c.topEnd() <= MAX_Y);
+                    int belowBox = junctions.getFirst().center() - Ring.BOX - (c.bottomEnd() + c.bottomShear());
+                    int aboveBox = (c.topEnd() - c.topShear()) - (junctions.getLast().center() + Ring.BOX + 1);
+                    assertTrue(belowBox >= ShaftLayout.SHEAR_MARGIN && aboveBox >= ShaftLayout.SHEAR_MARGIN, belowBox + " " + aboveBox);
+                    if (c.bottomEnd() > MIN_Y) {
+                        raisedEnds++;
+                    }
                 }
             }
         }
         assertTrue(found > 0);
+        assertTrue(raisedEnds > found / 2, "most column bottoms stand above the build limit");
     }
 
     /** The share of eligible crossings that get a column stays near the column chance on each single shaft. */

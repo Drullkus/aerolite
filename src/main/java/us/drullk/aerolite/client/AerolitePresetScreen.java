@@ -81,9 +81,27 @@ public class AerolitePresetScreen extends Screen {
         contents.addChild(new StepSlider(MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT, Mth.log2(this.settings.decayScale()) - MIN_SCALE_EXPONENT,
                 step -> Component.translatable("createWorld.customize.aerolite.decay_scale", 1 << (MIN_SCALE_EXPONENT + step)),
                 step -> this.settings = this.settings.withDecayScale(1 << (MIN_SCALE_EXPONENT + step))));
-        contents.addChild(new StepSlider(FRACTION_STEPS, Math.round(this.settings.decayThreshold() * FRACTION_STEPS),
+        // The erosion threshold stays at least one step above the decay threshold.
+        StepSlider[] thresholds = new StepSlider[2];
+        thresholds[0] = new StepSlider(FRACTION_STEPS, Math.round(this.settings.decayThreshold() * FRACTION_STEPS),
                 step -> Component.translatable("createWorld.customize.aerolite.decay_threshold", percent(step)),
-                step -> this.settings = this.settings.withDecayThreshold(step / (float) FRACTION_STEPS)));
+                step -> {
+                    int decay = Math.min(step, FRACTION_STEPS - 1);
+                    int erosion = Math.max(decay + 1, Math.round(this.settings.erosionThreshold() * FRACTION_STEPS));
+                    this.settings = this.settings.withDecayThreshold(decay / (float) FRACTION_STEPS).withErosionThreshold(erosion / (float) FRACTION_STEPS);
+                    thresholds[0].setStep(decay);
+                    thresholds[1].setStep(erosion - 1);
+                });
+        thresholds[1] = new StepSlider(FRACTION_STEPS - 1, Math.round(this.settings.erosionThreshold() * FRACTION_STEPS) - 1,
+                step -> Component.translatable("createWorld.customize.aerolite.erosion_threshold", percent(step + 1)),
+                step -> {
+                    int erosion = step + 1;
+                    int decay = Math.min(erosion - 1, Math.round(this.settings.decayThreshold() * FRACTION_STEPS));
+                    this.settings = this.settings.withDecayThreshold(decay / (float) FRACTION_STEPS).withErosionThreshold(erosion / (float) FRACTION_STEPS);
+                    thresholds[0].setStep(decay);
+                });
+        contents.addChild(thresholds[0]);
+        contents.addChild(thresholds[1]);
 
         LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
         footer.addChild(Button.builder(CommonComponents.GUI_DONE, button -> {

@@ -32,7 +32,8 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Junction segment | The segment that holds a junction. It spans the chunks with the nearest surviving ruling on each side of the box, two or three chunks. Its graph drops the box rulings and adds the shaft patch. |
 | Patch | One of the two exposed faces of a junction, a 7x7 node grid. The shaft patch is part of the junction segment of the horizontal shaft. The column patch is part of the junction segment of the column. |
 | Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. |
-| Shear | Noise that removes blocks from a column near a build limit. |
+| Erosion | Removal of shaft and junction box blocks where decay noise passes the erosion threshold. It works from the surface toward the core. |
+| Shear | Noise that removes blocks from a column near one of its ends. |
 | Slot | One 16-block band of the build height. Each slot belongs to X shafts or to Z shafts. |
 | Seed | The block at the tip of a walk. It grows the tree. |
 | Tree | A random walker tree. It roots on a shaft and walks into the air. |
@@ -202,6 +203,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 | Column chance | 0.25 |
 | Maze decay scale | 256 blocks |
 | Maze decay threshold | 0.5 |
+| Shaft erosion threshold | 0.7 |
 | Shaft interior block | Stone |
 | Maze wall block | Stone bricks |
 | Maze path block | Cobblestone |
@@ -215,12 +217,15 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The shaft spacing is the center distance of two neighbor horizontal shafts on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a shaft.
 - The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
-- The screen has five sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale and the maze decay threshold.
+- The screen has six sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale, the maze decay threshold and the shaft erosion threshold.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.
 - The decay scale slider steps through the powers of two from 32 to 1024.
 - The decay threshold slider runs from 0% to 100% in steps of 5%. 100% is a threshold of 1.
+- The erosion threshold slider runs from 5% to 100% in steps of 5%.
+- The erosion threshold stays at least 5% above the decay threshold. A slider that passes the other pushes it along, so the decay threshold tops out at 95%.
+- A save with a decay threshold at or above its erosion threshold loads with the erosion threshold raised to the decay threshold plus 5%.
 - The other settings have no slider yet. They live in the generator settings with their defaults.
 
 ## Shafts
@@ -242,9 +247,11 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A horizontal shaft picks one slot of its axis. Inside the slot it picks an offset of 1 or 2, so at least one block of air separates it from a shaft in the next slot.
 - A column can stand where an X shaft and a Z shaft cross in plan view. The column chance setting decides which crossings get one.
 - A crossing gets no column unless at least one slot lies between the slots of its two shafts.
-- Columns span the full build height.
-- Shear thins each column near the top and bottom build limits. No column ends in a flat cut.
-- Near a build limit, a noise threshold removes blocks from the column. The threshold rises toward the limit, so fewer blocks remain the closer they are to it.
+- Each column has a top end and a bottom end.
+- The top end is uniform from 16 blocks above the highest junction box to the top build limit. The bottom end is uniform from the bottom build limit to 16 blocks below the lowest junction box.
+- Those 16 blocks hold the shortest shear band and the 8-block margin.
+- Shear thins each column toward its two ends. No column ends in a flat cut.
+- Near a column end, a noise threshold removes blocks from the column. The threshold rises toward the end, so fewer blocks remain the closer they are to it.
 - Each column end picks its shear band height at random, from 8 to 64 blocks.
 - The shear band shrinks so at least 8 blocks of full column stay between the band and the outermost junction box.
 - Shear does not touch a junction box.
@@ -286,6 +293,14 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The decay threshold t sets the regimes. Noise below -t keeps only maze walls. Noise above t keeps only maze paths.
 - A maze wall or maze path block that decay removes becomes air. A removed path exposes the interior block.
 - Decay acts on the 13x13 inside of each patch. On a patch, the box block that decay exposes becomes the maze path block.
+- Erosion starts where the absolute decay noise passes the erosion threshold, at either end of the noise.
+- The reach is the absolute noise, normalized from the erosion threshold to 1.
+- Each block has an erosion resistance from 0 to 1. Erosion removes a block when the reach exceeds its resistance.
+- In a shaft, the resistance rises over 5 layers from the outer layer inward. The 3x3 core has a resistance of 1, so it never vanishes.
+- In a junction box, the box resistance rises over 6 layers from the box face inward. The 3x3x3 core has a resistance of 1.
+- A box block takes the largest of the box resistance and the resistance of each shaft whose cross section holds it. So erosion never cuts a shaft at a junction.
+- Erosion samples the noise at each block, so one side of a shaft can erode deeper than the other.
+- Erosion runs after decay and before shear. An eroded block becomes air.
 - The rim of a patch face stays wall. Decay does not touch it.
 - The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
 

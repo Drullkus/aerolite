@@ -28,10 +28,13 @@ import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
+import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.status.AeroliteChunkStatuses;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * GameTests of the shafts chunk step and the blocks it writes.
@@ -60,7 +63,7 @@ public final class ShaftGameTests {
     @GameTest(template = "empty")
     public static void painterBuildsAShaftCrossSection(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(1);
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(1).withErosionThreshold(1);
         ShaftLayout layout = new ShaftLayout(42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
         int chunkZ = 0;
@@ -96,6 +99,87 @@ public final class ShaftGameTests {
         helper.assertTrue(paths > 0, "The shaft has no maze path");
         helper.assertTrue(chunk.getBlockState(new BlockPos(x, level.getMinBuildHeight(), pos.getMinBlockZ())).is(Blocks.AIR), "The void holds a block");
         helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void erosionKeepsTheCore(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
+        ShaftLayout layout = new ShaftLayout(42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
+        int eroded = 0;
+        for (int chunkZ = 0; chunkZ < 6; chunkZ++) {
+            if (!layout.columnsOn(shaft, 16 * chunkZ - 16, 16 * chunkZ + 32).isEmpty()) {
+                continue;
+            }
+            ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(shaft.position()), chunkZ);
+            ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+            ShaftPainter.paint(layout, chunk);
+            for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
+                for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
+                    for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
+                        int x = shaft.position() + second;
+                        if (SectionPos.blockToSectionCoord(x) != pos.x) {
+                            continue;
+                        }
+                        BlockState state = chunk.getBlockState(new BlockPos(x, shaft.centerY() + first, z));
+                        if (Math.max(Math.abs(first), Math.abs(second)) <= 1) {
+                            helper.assertTrue(state == settings.interiorBlock(), "Erosion removed a block of the 3x3 core");
+                        } else if (Math.max(Math.abs(first), Math.abs(second)) < Ring.OUTER && state.isAir()) {
+                            eroded++;
+                        }
+                    }
+                }
+            }
+        }
+        helper.assertTrue(eroded > 0, "Erosion removed no interior block");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void erosionKeepsTheShaftCoresThroughJunctionBoxes(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
+        ShaftLayout layout = new ShaftLayout(42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout.Column column = null;
+        for (int cell = 0; column == null; cell++) {
+            for (int other = 0; column == null && other < 40; other++) {
+                column = layout.column(cell, other).orElse(null);
+            }
+        }
+        Map<Long, ProtoChunk> chunks = new HashMap<>();
+        int boxAir = 0;
+        for (ColumnJunction junction : column.junctions()) {
+            for (int a = -Ring.BOX; a <= Ring.BOX; a++) {
+                for (int u = -1; u <= 1; u++) {
+                    for (int v = -1; v <= 1; v++) {
+                        BlockPos columnCore = new BlockPos(column.x() + u, junction.center() + a, column.z() + v);
+                        BlockPos shaftCore = junction.alongX()
+                                ? new BlockPos(column.x() + a, junction.center() + u, column.z() + v)
+                                : new BlockPos(column.x() + v, junction.center() + u, column.z() + a);
+                        helper.assertFalse(paintedAt(chunks, layout, level, columnCore).isAir(), "Erosion cut the column core in a junction box");
+                        helper.assertFalse(paintedAt(chunks, layout, level, shaftCore).isAir(), "Erosion cut the shaft core in a junction box");
+                    }
+                }
+            }
+            for (int d = -Ring.BOX; d <= Ring.BOX; d++) {
+                if (paintedAt(chunks, layout, level, new BlockPos(column.x() + Ring.BOX, junction.center() + d, column.z() + Ring.BOX)).isAir()) {
+                    boxAir++;
+                }
+            }
+        }
+        helper.assertTrue(boxAir > 0, "Erosion removed no box edge block");
+        helper.succeed();
+    }
+
+    private static BlockState paintedAt(Map<Long, ProtoChunk> chunks, ShaftLayout layout, ServerLevel level, BlockPos pos) {
+        ChunkPos chunkPos = new ChunkPos(pos);
+        ProtoChunk chunk = chunks.computeIfAbsent(chunkPos.toLong(), key -> {
+            ProtoChunk painted = new ProtoChunk(chunkPos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+            ShaftPainter.paint(layout, painted);
+            return painted;
+        });
+        return chunk.getBlockState(pos);
     }
 
     @GameTest(template = "empty")

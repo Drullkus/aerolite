@@ -2,6 +2,7 @@
   "createWorld.customize.aerolite.column_chance": "Column Chance: %s",
   "createWorld.customize.aerolite.decay_scale": "Maze Decay Scale: %s",
   "createWorld.customize.aerolite.decay_threshold": "Maze Decay Threshold: %s",
+  "createWorld.customize.aerolite.erosion_threshold": "Shaft Erosion Threshold: %s",
   "createWorld.customize.aerolite.max_shaft_spacing": "Maximum Shaft Spacing: %s",
   "createWorld.customize.aerolite.min_shaft_spacing": "Minimum Shaft Spacing: %s",
   "createWorld.customize.aerolite.title": "Aerolite Settings",

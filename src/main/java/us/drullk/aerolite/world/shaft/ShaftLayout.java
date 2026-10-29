@@ -52,8 +52,17 @@ public final class ShaftLayout {
      * @param xShaftSign the face sign of the shaft patch on the junction with the X shaft
      * @param zShaftSign the face sign of the shaft patch on the junction with the Z shaft
      * @param junctions  the two junctions in ascending sequence of Y
+     * @param bottomEnd  the lowest Y of the column
+     * @param topEnd     the Y above the highest block of the column
+     * @param bottomShear the height of the shear band above the bottom end
+     * @param topShear   the height of the shear band below the top end
      */
-    public record Column(Shaft xShaft, Shaft zShaft, int xShaftSign, int zShaftSign, List<ColumnJunction> junctions, int bottomShear, int topShear) {
+    public record Column(Shaft xShaft, Shaft zShaft, int xShaftSign, int zShaftSign, List<ColumnJunction> junctions,
+                         int bottomEnd, int topEnd, int bottomShear, int topShear) {
+
+        public boolean spans(int y) {
+            return y >= this.bottomEnd && y < this.topEnd;
+        }
 
         public int x() {
             return this.zShaft.position();
@@ -182,11 +191,18 @@ public final class ShaftLayout {
                 new ColumnJunction(zShaft.get().centerY(), -zShaftSign, false)
         ));
         junctions.sort(Comparator.comparingInt(ColumnJunction::center));
+        // Each end leaves room for the shortest shear band and the margin to the box.
         int lowestBox = junctions.getFirst().center() - Ring.BOX;
         int highestBox = junctions.getLast().center() + Ring.BOX;
-        int bottomShear = Math.min(MIN_SHEAR + random.nextInt(MAX_SHEAR - MIN_SHEAR + 1), Math.max(0, lowestBox - this.minY - SHEAR_MARGIN));
-        int topShear = Math.min(MIN_SHEAR + random.nextInt(MAX_SHEAR - MIN_SHEAR + 1), Math.max(0, this.maxY - 1 - highestBox - SHEAR_MARGIN));
-        return Optional.of(new Column(xShaft.get(), zShaft.get(), xShaftSign, zShaftSign, List.copyOf(junctions), bottomShear, topShear));
+        int bottomEnd = between(random, this.minY, Math.max(this.minY, lowestBox - SHEAR_MARGIN - MIN_SHEAR));
+        int topEnd = between(random, Math.min(this.maxY, highestBox + 1 + SHEAR_MARGIN + MIN_SHEAR), this.maxY);
+        int bottomShear = Math.min(between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, lowestBox - SHEAR_MARGIN - bottomEnd));
+        int topShear = Math.min(between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, topEnd - (highestBox + 1) - SHEAR_MARGIN));
+        return Optional.of(new Column(xShaft.get(), zShaft.get(), xShaftSign, zShaftSign, List.copyOf(junctions), bottomEnd, topEnd, bottomShear, topShear));
+    }
+
+    private static int between(RandomSource random, int min, int max) {
+        return min + random.nextInt(max - min + 1);
     }
 
     /** The columns on one horizontal shaft whose centers lie in a range along the shaft axis. */

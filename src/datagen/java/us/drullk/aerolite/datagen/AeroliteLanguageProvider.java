@@ -25,6 +25,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.max_shaft_spacing", "Maximum Shaft Spacing: %s");
         this.add("createWorld.customize.aerolite.decay_scale", "Maze Decay Scale: %s");
         this.add("createWorld.customize.aerolite.decay_threshold", "Maze Decay Threshold: %s");
+        this.add("createWorld.customize.aerolite.erosion_threshold", "Shaft Erosion Threshold: %s");
     }
 
 }
