@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 class AeroliteSettingsTest {
 
@@ -96,7 +97,14 @@ class AeroliteSettingsTest {
         assertEquals(List.of(ShaftVariation.NETHER), settings.variations(Level.NETHER));
         assertEquals(List.of(ShaftVariation.END), settings.variations(Level.END));
         assertSame(Blocks.OXIDIZED_COPPER, ShaftVariation.TRIAL_CHAMBER.path().getBlock());
-        assertFalse(settings.shaftsInUnlistedDimensions());
+    }
+
+    @Test
+    void defaultListOfAnotherDimensionIsStoneWithWeightOne() {
+        assertEquals(AeroliteSettings.DEFAULT.variations(Level.OVERWORLD), ShaftVariation.defaultList(Level.OVERWORLD));
+        assertEquals(AeroliteSettings.DEFAULT.variations(Level.NETHER), ShaftVariation.defaultList(Level.NETHER));
+        assertEquals(AeroliteSettings.DEFAULT.variations(Level.END), ShaftVariation.defaultList(Level.END));
+        assertEquals(List.of(ShaftVariation.STONE.withWeight(1)), ShaftVariation.defaultList(ELSEWHERE));
     }
 
     @Test
@@ -105,10 +113,9 @@ class AeroliteSettingsTest {
                 Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
         AeroliteSettings settings = AeroliteSettings.DEFAULT
                 .withAddedVariation(Level.NETHER, deepslate)
-                .withVariations(ELSEWHERE, List.of(deepslate.withWeight(0), ShaftVariation.END))
-                .withShaftsInUnlistedDimensions(true);
+                .withDimension(ELSEWHERE, List.of(deepslate.withWeight(0), ShaftVariation.END));
         JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
-        assertTrue(json.getAsJsonObject().get("shafts_in_unlisted_dimensions").getAsBoolean());
+        assertFalse(json.getAsJsonObject().has("shafts_in_unlisted_dimensions"));
         assertTrue(json.getAsJsonObject().getAsJsonObject("variations").has("aerolite:elsewhere"));
         AeroliteSettings parsed = AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow();
         assertEquals(settings, parsed);
@@ -141,14 +148,49 @@ class AeroliteSettingsTest {
     }
 
     @Test
-    void unlistedDimensionFallsBackToTheOverworldList() {
-        AeroliteSettings settings = AeroliteSettings.DEFAULT;
-        assertTrue(settings.variations(ELSEWHERE).isEmpty());
-        assertEquals(settings.variations(Level.OVERWORLD), settings.withShaftsInUnlistedDimensions(true).variations(ELSEWHERE));
-        assertEquals(List.of(ShaftVariation.NETHER), settings.withShaftsInUnlistedDimensions(true).variations(Level.NETHER));
+    void unlistedDimensionGetsAnEmptyList() {
+        assertTrue(AeroliteSettings.DEFAULT.variations(ELSEWHERE).isEmpty());
         AeroliteSettings endOnly = read("{\"variations\": {\"minecraft:the_end\": [{" + STONE_BLOCKS + "}]}}").getOrThrow();
         assertTrue(endOnly.variations(Level.OVERWORLD).isEmpty());
-        assertTrue(endOnly.withShaftsInUnlistedDimensions(true).variations(Level.NETHER).isEmpty());
+        assertTrue(endOnly.variations(Level.NETHER).isEmpty());
+        assertEquals(1, endOnly.variations(Level.END).size());
+    }
+
+    @Test
+    void oldUnlistedDimensionsFieldIsIgnored() {
+        AeroliteSettings settings = read("{\"shafts_in_unlisted_dimensions\": true, \"variations\": {\"minecraft:the_end\": [{" + STONE_BLOCKS + "}]}}").getOrThrow();
+        assertEquals(List.of(ELSEWHERE, Level.OVERWORLD, Level.NETHER).stream().map(settings::variations).toList(), List.of(List.of(), List.of(), List.of()));
+        assertEquals(AeroliteSettings.DEFAULT, read("{\"shafts_in_unlisted_dimensions\": false}").getOrThrow());
+        JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
+        assertFalse(json.getAsJsonObject().has("shafts_in_unlisted_dimensions"));
+    }
+
+    @Test
+    void withoutDimensionRemovesTheList() {
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withoutDimension(Level.NETHER);
+        assertFalse(settings.variations().containsKey(Level.NETHER));
+        assertTrue(settings.variations(Level.NETHER).isEmpty());
+        assertEquals(AeroliteSettings.DEFAULT.variations(Level.OVERWORLD), settings.variations(Level.OVERWORLD));
+        assertEquals(3, AeroliteSettings.DEFAULT.variations().size());
+        assertSame(settings, settings.withoutDimension(ELSEWHERE));
+    }
+
+    @Test
+    void withDimensionAddsOrReplacesTheList() {
+        AeroliteSettings added = AeroliteSettings.DEFAULT.withDimension(ELSEWHERE, List.of(ShaftVariation.END));
+        assertEquals(List.of(ShaftVariation.END), added.variations(ELSEWHERE));
+        assertEquals(4, added.variations().size());
+        AeroliteSettings replaced = added.withDimension(Level.OVERWORLD, List.of(ShaftVariation.NETHER));
+        assertEquals(List.of(ShaftVariation.NETHER), replaced.variations(Level.OVERWORLD));
+        assertEquals(4, replaced.variations().size());
+    }
+
+    @Test
+    void settingsWithoutDimensionsRoundTrip() {
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withoutDimension(Level.OVERWORLD).withoutDimension(Level.NETHER).withoutDimension(Level.END);
+        assertTrue(settings.variations().isEmpty());
+        JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
+        assertEquals(settings, AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
     }
 
     @Test

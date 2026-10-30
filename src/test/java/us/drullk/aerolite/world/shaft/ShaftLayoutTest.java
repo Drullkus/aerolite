@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 class ShaftLayoutTest {
 
@@ -153,7 +154,7 @@ class ShaftLayoutTest {
 
     private ShaftLayout pickLayout(long seed) {
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withShaftSpacing(32, 64).withColumnChance(1)
-                .withVariations(Level.OVERWORLD, List.of(NEVER, HEAVY, LIGHT));
+                .withDimension(Level.OVERWORLD, List.of(NEVER, HEAVY, LIGHT));
         return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
     }
 

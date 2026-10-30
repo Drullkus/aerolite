@@ -2,15 +2,20 @@ package us.drullk.aerolite.world;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+
+import java.util.List;
 
 /**
  * One set of shaft blocks and maze bias. Each shaft and each column picks one variation by weight.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  *
  * @param weight   the pick weight among the variations of one dimension
  * @param bias     the weight of axis edges in the maze sampler; ring edges get one minus this weight
@@ -44,6 +49,20 @@ public record ShaftVariation(int weight, float bias, BlockState interior, BlockS
             BlockState.CODEC.fieldOf("wall").forGetter(ShaftVariation::wall),
             BlockState.CODEC.fieldOf("path").forGetter(ShaftVariation::path)
     ).apply(instance, ShaftVariation::new));
+
+    /** The default variation list of a dimension. A dimension other than the three vanilla ones gets stone with weight 1. */
+    public static List<ShaftVariation> defaultList(ResourceKey<Level> dimension) {
+        if (Level.OVERWORLD.equals(dimension)) {
+            return List.of(STONE, TRIAL_CHAMBER);
+        }
+        if (Level.NETHER.equals(dimension)) {
+            return List.of(NETHER);
+        }
+        if (Level.END.equals(dimension)) {
+            return List.of(END);
+        }
+        return List.of(STONE.withWeight(1));
+    }
 
     public static float clampBias(float bias) {
         return Mth.clamp(bias, MIN_BIAS, MAX_BIAS);

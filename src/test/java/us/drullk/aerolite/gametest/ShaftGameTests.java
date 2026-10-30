@@ -39,6 +39,7 @@ import us.drullk.aerolite.world.status.AeroliteChunkStatuses;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * GameTests of the shafts chunk step and the blocks it writes.
@@ -46,6 +47,7 @@ import java.util.Map;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -225,7 +227,7 @@ public final class ShaftGameTests {
         ShaftVariation deepslate = new ShaftVariation(1, 0.8F,
                 Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
         return AeroliteSettings.DEFAULT.withDecayThreshold(1).withErosionThreshold(1)
-                .withVariations(Level.OVERWORLD, List.of(ShaftVariation.STONE.withWeight(1), deepslate));
+                .withDimension(Level.OVERWORLD, List.of(ShaftVariation.STONE.withWeight(1), deepslate));
     }
 
     @GameTest(template = "empty")
@@ -269,10 +271,8 @@ public final class ShaftGameTests {
         ServerLevel level = helper.getLevel();
         Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
         AeroliteChunkGenerator listed = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
-        AeroliteSettings netherOnly = new AeroliteSettings(
-                listed.aeroliteSettings().minShaftSpacing(), listed.aeroliteSettings().maxShaftSpacing(), listed.aeroliteSettings().columnChance(),
-                listed.aeroliteSettings().decayScale(), listed.aeroliteSettings().decayThreshold(), listed.aeroliteSettings().erosionThreshold(),
-                listed.aeroliteSettings().cloudHeight(), Map.of(Level.NETHER, List.of(ShaftVariation.NETHER)), true);
+        AeroliteSettings netherOnly = listed.aeroliteSettings().withoutDimension(Level.OVERWORLD).withoutDimension(Level.END);
+        helper.assertTrue(netherOnly.variations().keySet().equals(Set.of(Level.NETHER)), "The settings hold a dimension other than the Nether");
         AeroliteChunkGenerator generator = listed.withAeroliteSettings(netherOnly);
         ShaftLayout listedLayout = listed.layout(level);
         ShaftLayout.Shaft shaft = listedLayout.shaft(ShaftLayout.Axis.X, 0).orElseThrow();

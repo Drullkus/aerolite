@@ -3,13 +3,12 @@ package us.drullk.aerolite.client;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationContext;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -36,13 +35,15 @@ import java.util.function.UnaryOperator;
 
 /**
  * The customize screen of the preset in the world creation menu. It edits the settings of every Aerolite dimension.
- * An add or a remove of a variation rebuilds the list entries. A slider or a block field edits its value in place.
+ * An add or a remove of a variation or a dimension rebuilds the list entries. A slider or a block field edits its value in place.
+ * Each configured dimension has a header with a Remove button. The add row after the last dimension adds one more.
  * The Preview button shows only when ImGui loaded. The preview edits a copy of the settings.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_00-41_1fb7a266-bfdf-4ab5-8b4a-1652dc840cb2.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 public class AerolitePresetScreen extends Screen {
 
@@ -58,6 +59,11 @@ public class AerolitePresetScreen extends Screen {
     private final List<BlockField> blockFields = new ArrayList<>();
     /** True when an add or a remove waits for the list rebuild of the next tick. */
     private boolean rebuildPending;
+    @Nullable
+    private DimensionDropdown addDropdown;
+    /** The candidate that the add dropdown shows after a rebuild. */
+    @Nullable
+    private ResourceKey<Level> addChoice;
 
     public AerolitePresetScreen(CreateWorldScreen parent, WorldCreationContext context, PresetTools tools) {
         super(Component.translatable("createWorld.customize.aerolite.title"));
@@ -152,17 +158,20 @@ public class AerolitePresetScreen extends Screen {
                 step -> this.settings = this.settings.withCloudHeight(this.sliders.cloudHeight(step))));
 
         list.addHeader(Component.translatable("createWorld.customize.aerolite.shaft_variations"));
-        list.addRow(CycleButton.onOffBuilder(this.settings.shaftsInUnlistedDimensions()).create(0, 0, SettingsList.ROW_WIDTH, 20,
-                Component.translatable("createWorld.customize.aerolite.shafts_in_unlisted_dimensions"),
-                (button, value) -> this.settings = this.settings.withShaftsInUnlistedDimensions(value)));
-        for (ResourceKey<Level> dimension : PresetEdits.DIMENSIONS) {
+        for (ResourceKey<Level> dimension : this.edits.configuredDimensions(this.settings)) {
             this.addDimension(list, dimension);
         }
+        this.addDimensionRow(list);
     }
 
-    /** Adds the header, the variation rows and the Add button of one dimension. */
+    /** Adds the header with its Remove button, the variation rows and the Add button of one dimension. */
     private void addDimension(SettingsList list, ResourceKey<Level> dimension) {
-        list.addHeader(Component.translatable("createWorld.customize.aerolite.dimension." + dimension.location().getPath()));
+        Component name = this.edits.dimensionName(dimension);
+        list.addHeader(name, Button.builder(Component.literal("\u2212"), button -> {
+            this.settings = this.edits.withoutDimension(this.settings, dimension);
+            this.addChoice = dimension;
+            this.rebuildPending = true;
+        }).createNarration(message -> CommonComponents.joinForNarration(Component.translatable("createWorld.customize.aerolite.remove_dimension"), name)).build());
         List<ShaftVariation> variations = this.edits.variations(this.settings, dimension);
         for (int index = 0; index < variations.size(); index++) {
             this.addVariation(list, dimension, index, variations.get(index));
@@ -173,7 +182,26 @@ public class AerolitePresetScreen extends Screen {
         }).build());
     }
 
-    /** Adds the slider row, the block row and the Remove row of one variation. */
+    /** Adds the dropdown of the dimensions that the world holds without variations, and the Add button. */
+    private void addDimensionRow(SettingsList list) {
+        List<ResourceKey<Level>> candidates = this.edits.addableDimensions(this.settings,
+                this.context.selectedDimensions().dimensions().keySet().stream().map(Registries::levelStemToLevel).toList());
+        DimensionDropdown dropdown = new DimensionDropdown(candidates, this.addChoice, this.edits::dimensionName,
+                Component.translatable("createWorld.customize.aerolite.all_dimensions_configured"));
+        this.addDropdown = dropdown;
+        Button add = Button.builder(Component.translatable("createWorld.customize.aerolite.add_dimension"), button -> {
+            ResourceKey<Level> chosen = dropdown.chosen();
+            if (chosen != null) {
+                this.settings = this.edits.withAddedDimension(this.settings, chosen);
+                this.addChoice = null;
+                this.rebuildPending = true;
+            }
+        }).build();
+        add.active = dropdown.chosen() != null;
+        list.addRow(dropdown, add);
+    }
+
+    /** Adds the slider row, the label row, the block row and the Remove row of one variation. */
     private void addVariation(SettingsList list, ResourceKey<Level> dimension, int index, ShaftVariation variation) {
         StepSlider[] weight = new StepSlider[1];
         weight[0] = new StepSlider(ShaftVariation.MAX_WEIGHT, variation.weight(),
@@ -187,6 +215,11 @@ public class AerolitePresetScreen extends Screen {
                 step -> this.editVariation(dimension, index, current -> current.withBias(this.sliders.bias(step))));
         list.addRow(weight[0], bias);
 
+        list.addLabels(
+                Component.translatable("createWorld.customize.aerolite.interior_block"),
+                Component.translatable("createWorld.customize.aerolite.wall_block"),
+                Component.translatable("createWorld.customize.aerolite.path_block")
+        );
         list.addRow(
                 this.blockField(variation.interior(), "createWorld.customize.aerolite.interior_block",
                         state -> this.editVariation(dimension, index, current -> current.withInterior(state))),
@@ -207,13 +240,12 @@ public class AerolitePresetScreen extends Screen {
     private BlockField blockField(BlockState state, String key, Consumer<BlockState> onChange) {
         Component name = Component.translatable(key);
         BlockField field = new BlockField(this.font, this.tools.blocks(), state, name, onChange);
-        field.setTooltip(Tooltip.create(name));
         this.blockFields.add(field);
         return field;
     }
 
     private void editVariation(ResourceKey<Level> dimension, int index, UnaryOperator<ShaftVariation> edit) {
-        ShaftVariation current = this.settings.variations().get(dimension).get(index);
+        ShaftVariation current = this.settings.variations(dimension).get(index);
         this.settings = this.settings.withVariation(dimension, index, edit.apply(current));
     }
 
@@ -251,6 +283,24 @@ public class AerolitePresetScreen extends Screen {
         return null;
     }
 
+    /** The add dropdown when its list shows and the button lies inside the list area, or null. */
+    @Nullable
+    private DimensionDropdown openDimensionList() {
+        DimensionDropdown dropdown = this.addDropdown;
+        if (this.list == null || dropdown == null) {
+            return null;
+        }
+        if (!dropdown.listVisible()) {
+            dropdown.closeList();
+            return null;
+        }
+        if (dropdown.getY() >= this.list.getY() && dropdown.getBottom() <= this.list.getBottom()) {
+            return dropdown;
+        }
+        dropdown.closeList();
+        return null;
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -258,10 +308,20 @@ public class AerolitePresetScreen extends Screen {
         if (open != null) {
             open.renderDropdown(graphics, this.font, this.width, mouseX, mouseY);
         }
+        DimensionDropdown dimensions = this.openDimensionList();
+        if (dimensions != null) {
+            dimensions.renderList(graphics, this.font, this.height, mouseX, mouseY);
+        }
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        DimensionDropdown dimensions = this.openDimensionList();
+        if (dimensions != null) {
+            dimensions.listClicked(mouseX, mouseY, this.height);
+            dimensions.closeList();
+            return true;
+        }
         BlockField open = this.openDropdown();
         if (open != null && open.dropdownClicked(mouseX, mouseY, this.width)) {
             return true;
@@ -271,6 +331,11 @@ public class AerolitePresetScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        DimensionDropdown dimensions = this.openDimensionList();
+        if (dimensions != null && keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            dimensions.closeList();
+            return true;
+        }
         BlockField open = this.openDropdown();
         if (open != null && keyCode == GLFW.GLFW_KEY_ESCAPE) {
             open.closeDropdown();

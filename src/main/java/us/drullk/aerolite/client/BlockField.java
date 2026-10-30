@@ -20,6 +20,7 @@ import java.util.function.Consumer;
  * The parse and the search are in {@link BlockSearch}.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 public class BlockField extends EditBox {
 
@@ -158,6 +159,13 @@ public class BlockField extends EditBox {
             }
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    /** The visible part of the text follows the width, so no stale highlight shows. */
+    @Override
+    public void setWidth(int width) {
+        super.setWidth(width);
+        this.moveCursorToStart(false);
     }
 
     @Override

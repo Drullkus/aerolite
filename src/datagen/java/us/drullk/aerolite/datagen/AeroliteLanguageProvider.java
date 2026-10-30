@@ -11,6 +11,7 @@ import us.drullk.aerolite.Aerolite;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_00-41_1fb7a266-bfdf-4ab5-8b4a-1652dc840cb2.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -33,10 +34,12 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.clouds", "Clouds");
         this.add("createWorld.customize.aerolite.cloud_height", "Cloud Height: %s");
         this.add("createWorld.customize.aerolite.shaft_variations", "Shaft Variations");
-        this.add("createWorld.customize.aerolite.shafts_in_unlisted_dimensions", "Shafts in Unlisted Dimensions");
         this.add("createWorld.customize.aerolite.dimension.overworld", "Overworld");
         this.add("createWorld.customize.aerolite.dimension.the_nether", "The Nether");
         this.add("createWorld.customize.aerolite.dimension.the_end", "The End");
+        this.add("createWorld.customize.aerolite.remove_dimension", "Remove");
+        this.add("createWorld.customize.aerolite.add_dimension", "Add Dimension");
+        this.add("createWorld.customize.aerolite.all_dimensions_configured", "All dimensions configured");
         this.add("createWorld.customize.aerolite.weight", "Weight: %s");
         this.add("createWorld.customize.aerolite.maze_bias", "Maze Bias: %s");
         this.add("createWorld.customize.aerolite.maze_bias.ringwise", "%s (ringwise)");

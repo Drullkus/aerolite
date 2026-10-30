@@ -8,18 +8,30 @@ import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftVariation;
 
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
  * The edit rules of the preset settings. The vanilla screen and the preview panel share them.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetEdits {
 
-    /** The dimensions that the variation sections edit, in screen sequence. */
-    public static final List<ResourceKey<Level>> DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
+    /** The vanilla dimensions, in screen sequence. They come before every other dimension. */
+    private static final List<ResourceKey<Level>> VANILLA_DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
+
+    /**
+     * The three vanilla dimensions.
+     *
+     * @deprecated The preview still calls it. Use {@link #configuredDimensions} or {@link #addableDimensions}.
+     */
+    @Deprecated(forRemoval = true)
+    public static final List<ResourceKey<Level>> DIMENSIONS = VANILLA_DIMENSIONS;
 
     private final PresetSliders sliders;
 
@@ -62,7 +74,45 @@ public final class PresetEdits {
     }
 
     public List<ShaftVariation> variations(AeroliteSettings settings, ResourceKey<Level> dimension) {
-        return settings.variations().getOrDefault(dimension, List.of());
+        return settings.variations(dimension);
+    }
+
+    /** The dimensions of the variation map. The Overworld, the Nether and the End come first, then the rest by id. */
+    public List<ResourceKey<Level>> configuredDimensions(AeroliteSettings settings) {
+        return this.sorted(settings.variations().keySet());
+    }
+
+    /** The dimensions of {@code all} that the variation map does not hold, in the sequence of {@link #configuredDimensions}. */
+    public List<ResourceKey<Level>> addableDimensions(AeroliteSettings settings, Collection<ResourceKey<Level>> all) {
+        return this.sorted(all.stream().filter(dimension -> !settings.variations().containsKey(dimension)).toList());
+    }
+
+    /** The name of a dimension. A dimension other than the three vanilla ones shows its id path. */
+    public net.minecraft.network.chat.Component dimensionName(ResourceKey<Level> dimension) {
+        return VANILLA_DIMENSIONS.contains(dimension)
+                ? net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.dimension." + dimension.location().getPath())
+                : net.minecraft.network.chat.Component.literal(dimension.location().getPath());
+    }
+
+    /** Adds a dimension with its default variation list. A configured dimension stays as it is. */
+    public AeroliteSettings withAddedDimension(AeroliteSettings settings, ResourceKey<Level> dimension) {
+        return settings.variations().containsKey(dimension) ? settings : settings.withDimension(dimension, ShaftVariation.defaultList(dimension));
+    }
+
+    /** Removes a dimension and its variations. The dimension then gets no shafts. */
+    public AeroliteSettings withoutDimension(AeroliteSettings settings, ResourceKey<Level> dimension) {
+        return settings.withoutDimension(dimension);
+    }
+
+    private List<ResourceKey<Level>> sorted(Collection<ResourceKey<Level>> dimensions) {
+        LinkedHashSet<ResourceKey<Level>> sorted = new LinkedHashSet<>();
+        for (ResourceKey<Level> vanilla : VANILLA_DIMENSIONS) {
+            if (dimensions.contains(vanilla)) {
+                sorted.add(vanilla);
+            }
+        }
+        dimensions.stream().sorted(Comparator.comparing(ResourceKey::location)).forEach(sorted::add);
+        return List.copyOf(sorted);
     }
 
     /** A dimension keeps at least one variation with a positive weight. */
@@ -101,8 +151,7 @@ public final class PresetEdits {
     }
 
     private ShaftVariation defaultVariation(ResourceKey<Level> dimension) {
-        List<ShaftVariation> defaults = AeroliteSettings.DEFAULT.variations().get(dimension);
-        return defaults == null || defaults.isEmpty() ? ShaftVariation.STONE : defaults.getFirst();
+        return ShaftVariation.defaultList(dimension).getFirst();
     }
 
 }
