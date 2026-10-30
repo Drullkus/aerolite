@@ -21,9 +21,9 @@ The cut model is kept for comparison. It samples plain segments through
 the box, cuts them, and rejoins the stub components through the patch.
 Its stats show how many components stay stranded.
 
-Every scene takes the bias P of originshift.py. A patch crossing and a
-patch edge along the shaft axis are axis edges. A patch edge across the
-shaft axis is a ring edge. On a column the axis is Y.
+Every scene takes the bias P and the rule of originshift.py. A patch
+crossing and a patch edge along the shaft axis are axis edges. A patch edge
+across the shaft axis is a ring edge. On a column the axis is Y.
 
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
@@ -40,16 +40,22 @@ import random
 from originshift import (
     AXIS,
     BLOCKS_AROUND,
+    CLASS_RULE,
     DEFAULT_BIAS,
+    DEFAULT_RULE,
+    DEGREE_RULE,
     NODES_PER_CHUNK,
     RING,
     RING_EDGE,
+    Bias,
     Graph,
     bias_suffix,
     bias_value,
+    check_weighted_wilson,
     build_layout,
     build_segment,
     is_corner,
+    label_rows,
     prune_corner_leaves,
     ring_offset,
     sample,
@@ -647,8 +653,8 @@ class ColumnScene:
         return grid
 
 
-def render_column_band(scene, path, scale):
-    """The unwrapped column surface, bottom row at the bottom. Junction boxes have a blue tint."""
+def column_band_rows(scene, scale):
+    """Pixel rows of the unwrapped column surface, bottom row at the bottom. Junction boxes have a blue tint."""
     grid = scene.band()
     rows = []
     for y in range(len(grid[0]) - 1, -1, -1):
@@ -665,7 +671,35 @@ def render_column_band(scene, path, scale):
             row.extend(c * scale)
         for _ in range(scale):
             rows.append(row)
+    return rows
+
+
+def render_column_band(scene, path, scale):
+    rows = column_band_rows(scene, scale)
     write_png(path, BLOCKS_AROUND * scale, len(rows), rows)
+
+
+COLUMN_GAP = 16
+GAP_COLOR = (255, 255, 255)
+
+
+def column_scene(seed, sampler, steps_per_node, bias):
+    """The column of the column band: two junctions on the full Overworld height."""
+    return ColumnScene(seed, [-56, 56], [1, 1], -64, 320, sampler, steps_per_node, bias)
+
+
+def render_column_compare(path, seed, steps_per_node, p, scale):
+    """Put the column band of the class rule and the degree rule side by side, each under its label strip."""
+    panels = []
+    for label, rule in ((f"class {p:g}", CLASS_RULE), (f"degree {p:g}", DEGREE_RULE)):
+        scene = column_scene(seed, "originshift", steps_per_node, Bias(p, rule))
+        print(f"{rule} column tree:", check_tree(scene))
+        band = column_band_rows(scene, scale)
+        panels.append(label_rows(label, len(band[0]) // 3) + band)
+    gap = bytes(GAP_COLOR * COLUMN_GAP)
+    rows = [bytes(panels[0][y]) + gap + bytes(panels[1][y]) for y in range(len(panels[0]))]
+    write_png(path, len(rows[0]) // 3, len(rows), rows)
+
 
 
 def column_stats(seed, count, sampler, spn, bias):
@@ -792,7 +826,8 @@ def main():
     ap.add_argument("--cy", type=int, default=70)
     ap.add_argument("--sampler", choices=("originshift", "wilson"), default="originshift")
     ap.add_argument("--steps-per-node", type=int, default=16)
-    ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="chance of the axis class at each Origin Shift step")
+    ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="axis chance of the class rule or axis edge weight of the degree rule")
+    ap.add_argument("--rule", choices=(CLASS_RULE, DEGREE_RULE), default=DEFAULT_RULE, help="the bias rule of the walker step")
     ap.add_argument("--reach", type=int, default=22, help="blocks of shaft and column on each side of the junction")
     ap.add_argument("--scale", type=int, default=9, help="pixels per block edge")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "images"))
@@ -801,27 +836,38 @@ def main():
     ap.add_argument("--column-stats", action="store_true", help="check that a segmented column with two junctions is one tree and exit")
     ap.add_argument("--column-band", action="store_true", help="render the unwrapped surface of one segmented column and exit")
     ap.add_argument("--count", type=int, default=40)
+    ap.add_argument("--compare", action="store_true", help="render the column band of the class rule and the degree rule side by side and exit")
     args = ap.parse_args()
+    bias = Bias(args.bias, args.rule)
+    check_weighted_wilson(ap, args.rule == DEGREE_RULE and args.sampler == "wilson", args.bias)
     if args.cut_stats:
-        cut_stats(args.seed, args.count, args.sampler, args.steps_per_node, args.bias)
+
+        cut_stats(args.seed, args.count, args.sampler, args.steps_per_node, bias)
         return
     if args.cluster_stats:
-        cluster_stats(args.seed, args.count, args.sampler, args.steps_per_node, args.bias)
+        cluster_stats(args.seed, args.count, args.sampler, args.steps_per_node, bias)
         return
     if args.column_stats:
-        column_stats(args.seed, args.count, args.sampler, args.steps_per_node, args.bias)
+        column_stats(args.seed, args.count, args.sampler, args.steps_per_node, bias)
         return
-    suffix = bias_suffix(args.sampler, args.bias)
+    if args.compare:
+        os.makedirs(args.out, exist_ok=True)
+        name = f"compare_column_bias{args.bias:g}.png"
+        render_column_compare(os.path.join(args.out, name), args.seed, args.steps_per_node, args.bias, 4)
+        print("wrote", name)
+        return
+    suffix = bias_suffix(args.sampler, bias)
     if args.column_band:
         os.makedirs(args.out, exist_ok=True)
-        scene = ColumnScene(args.seed, [-56, 56], [1, 1], -64, 320, args.sampler, args.steps_per_node, args.bias)
+        scene = column_scene(args.seed, args.sampler, args.steps_per_node, bias)
         print("column tree:", check_tree(scene))
         name = f"column_band{suffix}.png"
         render_column_band(scene, os.path.join(args.out, name), 4)
         print("wrote", name)
         return
     os.makedirs(args.out, exist_ok=True)
-    scene = Scene(args.seed, args.cx, args.cy, args.sampler, args.steps_per_node, args.bias)
+    scene = Scene(args.seed, args.cx, args.cy, args.sampler, args.steps_per_node, bias)
+
     print("shaft tree:", check_tree(scene))
     blocks = build_voxels(scene, args.reach)
     front = "shaft" if scene.shaft_sign == 1 else "column"

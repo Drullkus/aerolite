@@ -17,9 +17,17 @@ tree per segment. Three layouts join the segments:
 - connector: tree segments and connector segments alternate. A connector
   touches both neighbors through two virtual nodes.
 
-The bias P sets the Origin Shift step. The walker picks the axis class with
-chance P and the ring class with chance 1 - P. Then it picks a uniform
-neighbor in that class. An empty class falls back to the other class.
+The bias P and the rule set the Origin Shift step. Two rules exist:
+
+- class: the walker picks the axis class with chance P and the ring class
+  with chance 1 - P. Then it picks a uniform neighbor in that class. An
+  empty class falls back to the other class.
+- degree: every axis edge has weight P and every ring edge has weight
+  1 - P. The walker picks one edge in proportion to its weight. When every
+  edge at the node has weight 0, the pick is uniform.
+
+Wilson's algorithm takes the weighted steps of the degree rule. It ignores
+the bias of the class rule.
 
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_44feb929-a98e-4826-8aa2-5d56973d077a.md
@@ -34,6 +42,7 @@ import os
 import random
 import struct
 import zlib
+from collections import namedtuple
 
 RING = 24
 BLOCKS_AROUND = 2 * RING
@@ -47,6 +56,13 @@ CLOSEUP_SCALE = 10
 AXIS = "axis"
 # A ring edge joins two neighbor nodes of one ruling.
 RING_EDGE = "ring"
+
+CLASS_RULE = "class"
+DEGREE_RULE = "degree"
+DEFAULT_RULE = CLASS_RULE
+
+# p is the axis chance of the class rule or the axis edge weight of the degree rule.
+Bias = namedtuple("Bias", ("p", "rule"))
 
 
 def is_corner(v):
@@ -128,10 +144,27 @@ def bfs_tree(g, root):
     return parent
 
 
-def biased_step(g, rng, node, bias):
-    """Pick the axis class with chance bias, else the ring class, then a uniform neighbor."""
-    first, other = (g.axis, g.ring) if rng.random() < bias else (g.ring, g.axis)
+def class_step(g, rng, node, p):
+    """Pick the axis class with chance p, else the ring class, then a uniform neighbor."""
+    first, other = (g.axis, g.ring) if rng.random() < p else (g.ring, g.axis)
     return rng.choice(first[node] or other[node])
+
+
+def degree_step(g, rng, node, p):
+    """Pick one edge in proportion to its weight: p per axis edge, 1 - p per ring edge."""
+    axis_weight = len(g.axis[node]) * p
+    total = axis_weight + len(g.ring[node]) * (1.0 - p)
+    if total <= 0.0:
+        return rng.choice(g.adj[node])
+    if rng.random() * total < axis_weight:
+        return rng.choice(g.axis[node])
+    return rng.choice(g.ring[node])
+
+
+def biased_step(g, rng, node, bias):
+    if bias.rule == DEGREE_RULE:
+        return degree_step(g, rng, node, bias.p)
+    return class_step(g, rng, node, bias.p)
 
 
 def origin_shift(g, rng, steps, bias):
@@ -145,15 +178,20 @@ def origin_shift(g, rng, steps, bias):
     return parent
 
 
-def wilson(g, rng):
+def wilson(g, rng, bias):
+    """The degree rule gives weighted steps. The class rule gives uniform steps."""
     n = len(g.adj)
     parent = [-1] * n
     in_tree = [False] * n
     in_tree[rng.randrange(n)] = True
+    weighted = bias.rule == DEGREE_RULE
     for start in range(n):
         node = start
         while not in_tree[node]:
-            parent[node] = rng.choice(g.adj[node])
+            if weighted:
+                parent[node] = degree_step(g, rng, node, bias.p)
+            else:
+                parent[node] = rng.choice(g.adj[node])
             node = parent[node]
         # Overwriting parents erases the loops of the walk.
         node = start
@@ -174,13 +212,19 @@ def prune_corner_leaves(edges, is_corner_node):
 
 
 def sample(g, rng, sampler, steps_per_node, bias):
-    """Wilson's algorithm ignores the bias. It stays the unbiased reference."""
+    """Wilson's algorithm ignores the bias of the class rule. The class rule has no edge weights."""
     if sampler == "wilson":
-        return wilson(g, rng)
+        return wilson(g, rng, bias)
     return origin_shift(g, rng, steps_per_node * len(g.adj), bias)
 
 
+def steps_value(text):
+    """Parse a comma-separated list of steps per node."""
+    return tuple(int(t) for t in text.split(","))
+
+
 def bias_value(text):
+
     """Parse a bias from 0 to 1 on the command line."""
     p = float(text)
     if not 0.0 <= p <= 1.0:
@@ -188,11 +232,20 @@ def bias_value(text):
     return p
 
 
+def check_weighted_wilson(ap, uses_weighted_wilson, p):
+    """At p = 0 or 1 the weighted walk cannot reach every node, so the loop-erased walk never ends."""
+    if uses_weighted_wilson and not 0.0 < p < 1.0:
+        ap.error("Wilson's algorithm with the degree rule needs a bias strictly between 0 and 1")
+
+
 def bias_suffix(sampler, bias):
-    """File name suffix. The default bias and Wilson's algorithm get none."""
-    if sampler == "wilson" or bias == DEFAULT_BIAS:
-        return ""
-    return f"_bias{bias:g}"
+    """File name suffix. The class rule gets none at the default bias or with Wilson's algorithm."""
+    if bias.rule == CLASS_RULE:
+        if sampler == "wilson" or bias.p == DEFAULT_BIAS:
+            return ""
+        return f"_bias{bias.p:g}"
+    base = "" if bias.p == DEFAULT_BIAS else f"_bias{bias.p:g}"
+    return base + "_" + DEGREE_RULE
 
 
 class Segment:
@@ -299,7 +352,8 @@ def write_png(path, width, height, rows):
         f.write(chunk(b"IEND", b""))
 
 
-def render_band(grid, path, scale):
+def band_rows(grid, scale):
+    """Pixel rows of one band: the chunk strip, then the surface."""
     width = len(grid[0])
     mark_h = 2
     rows = []
@@ -320,7 +374,95 @@ def render_band(grid, path, scale):
             row.extend(c * scale)
         for _ in range(scale):
             rows.append(row)
-    write_png(path, width * scale, len(rows), rows)
+    return rows
+
+
+def render_band(grid, path, scale):
+    rows = band_rows(grid, scale)
+    write_png(path, len(rows[0]) // 3, len(rows), rows)
+
+
+# A 5x8 bitmap font. Row 6 is the baseline. Row 7 holds the descender.
+GLYPHS = """
+a .....|.....|.###.|....#|.####|#...#|.####|.....
+c .....|.....|.####|#....|#....|#....|.####|.....
+d ....#|....#|.####|#...#|#...#|#...#|.####|.....
+e .....|.....|.###.|#...#|#####|#....|.###.|.....
+f ..##.|.#...|####.|.#...|.#...|.#...|.#...|.....
+g .....|.....|.####|#...#|#...#|.####|....#|.###.
+i ..#..|.....|.##..|..#..|..#..|..#..|.###.|.....
+l .##..|..#..|..#..|..#..|..#..|..#..|.###.|.....
+m .....|.....|##.#.|#.#.#|#.#.#|#.#.#|#.#.#|.....
+n .....|.....|#.##.|##..#|#...#|#...#|#...#|.....
+o .....|.....|.###.|#...#|#...#|#...#|.###.|.....
+r .....|.....|#.##.|##..#|#....|#....|#....|.....
+s .....|.....|.####|#....|.###.|....#|####.|.....
+u .....|.....|#...#|#...#|#...#|#..##|.##.#|.....
+w .....|.....|#...#|#...#|#.#.#|#.#.#|.#.#.|.....
+0 .###.|#...#|#..##|#.#.#|##..#|#...#|.###.|.....
+1 ..#..|.##..|..#..|..#..|..#..|..#..|.###.|.....
+2 .###.|#...#|....#|...#.|..#..|.#...|#####|.....
+3 ####.|....#|....#|.###.|....#|....#|####.|.....
+4 ...#.|..##.|.#.#.|#..#.|#####|...#.|...#.|.....
+5 #####|#....|####.|....#|....#|#...#|.###.|.....
+6 ..##.|.#...|#....|####.|#...#|#...#|.###.|.....
+7 #####|....#|...#.|..#..|.#...|.#...|.#...|.....
+8 .###.|#...#|#...#|.###.|#...#|#...#|.###.|.....
+9 .###.|#...#|#...#|.####|....#|...#.|.##..|.....
+. .....|.....|.....|.....|.....|.##..|.##..|.....
+"""
+FONT = {" ": ["....."] * 8}
+for _line in GLYPHS.strip().splitlines():
+    FONT[_line[0]] = _line[2:].split("|")
+GLYPH_W = 5
+GLYPH_H = 8
+LABEL_BG = (236, 236, 236)
+LABEL_INK = (24, 24, 28)
+LABEL_PAD = 6
+
+
+def label_rows(text, width, max_scale=3):
+    """Pixel rows of a label strip of the given width, with the text at the left."""
+    advance = GLYPH_W + 1
+    text_w = len(text) * advance - 1
+    scale = max(1, min(max_scale, (width - 2 * LABEL_PAD) // text_w))
+    height = GLYPH_H * scale + 2 * LABEL_PAD
+    rows = [bytearray(LABEL_BG * width) for _ in range(height)]
+    for k, ch in enumerate(text):
+        glyph = FONT[ch]
+        for gy in range(GLYPH_H):
+            for gx in range(GLYPH_W):
+                if glyph[gy][gx] != "#":
+                    continue
+                x0 = LABEL_PAD + (k * advance + gx) * scale
+                for yy in range(LABEL_PAD + gy * scale, LABEL_PAD + (gy + 1) * scale):
+                    for xx in range(x0, min(width, x0 + scale)):
+                        rows[yy][3 * xx:3 * xx + 3] = bytes(LABEL_INK)
+    return rows
+
+
+def compare_panels(p):
+    """Label and connector band of each of the four samplers at one bias."""
+    class_bias = Bias(p, CLASS_RULE)
+    degree_bias = Bias(p, DEGREE_RULE)
+    return (
+        (f"class {p:g}", "originshift", class_bias),
+        (f"degree {p:g}", "originshift", degree_bias),
+        (f"wilson degree {p:g}", "wilson", degree_bias),
+        ("wilson uniform", "wilson", class_bias),
+    )
+
+
+def render_compare(path, seed, chunks, length, steps_per_node, p, scale):
+    """Stack the connector band of each sampler, each under its label strip."""
+    rows = []
+    for label, sampler, bias in compare_panels(p):
+
+        segs = build_layout("connector", seed, chunks, length, sampler, steps_per_node, bias)
+        band = band_rows(paint_band(segs), scale)
+        rows += label_rows(label, len(band[0]) // 3)
+        rows += band
+    write_png(path, len(rows[0]) // 3, len(rows), rows)
 
 
 def dead_end_fraction(seg):
@@ -342,10 +484,13 @@ def corner_pass_fraction(seg):
     return len(present) / (seg.length * RING // FACE_NODES)
 
 
-def stats(seed, length, count, bias):
-    print(f"bias {bias:g}. Wilson's algorithm ignores the bias.")
+def stats(seed, length, count, bias, steps_list):
+    if bias.rule == DEGREE_RULE:
+        print(f"bias {bias.p:g}, rule degree. Wilson's algorithm takes the same weighted steps.")
+    else:
+        print(f"bias {bias.p:g}, rule class. Wilson's algorithm ignores the bias.")
     print("layout      sampler      steps/node  dead ends  corner pass  left cross  right cross")
-    runs = [("wilson", 0), ("originshift", 1), ("originshift", 4), ("originshift", 16), ("originshift", 64)]
+    runs = [("wilson", 0)] + [("originshift", spn) for spn in steps_list]
     for kind in ("tree", "connector", "forest"):
         for sampler, spn in runs:
             ends = []
@@ -435,26 +580,39 @@ def main():
     ap.add_argument("--length", type=int, default=NODES_PER_CHUNK, help="rulings per segment")
     ap.add_argument("--sampler", choices=("originshift", "wilson"), default="originshift")
     ap.add_argument("--steps-per-node", type=int, default=16)
-    ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="chance of the axis class at each Origin Shift step")
+    ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="axis chance of the class rule or axis edge weight of the degree rule")
+    ap.add_argument("--rule", choices=(CLASS_RULE, DEGREE_RULE), default=DEFAULT_RULE, help="the bias rule of the walker step")
     ap.add_argument("--scale", type=int, default=4, help="pixels per block")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "images"))
     ap.add_argument("--stats", action="store_true", help="print sampler statistics and exit")
+    ap.add_argument("--stats-steps", type=steps_value, default=(1, 4, 16, 64), help="comma-separated Origin Shift steps per node for --stats")
+    ap.add_argument("--stats-count", type=int, default=200, help="segments per row for --stats")
+    ap.add_argument("--compare", action="store_true", help="render the connector band of the four samplers at one bias and exit")
     args = ap.parse_args()
+    bias = Bias(args.bias, args.rule)
+    check_weighted_wilson(ap, args.compare or (args.rule == DEGREE_RULE and (args.stats or args.sampler == "wilson")), args.bias)
     if args.stats:
-        stats(args.seed, args.length, 200, args.bias)
+
+        stats(args.seed, args.length, args.stats_count, bias, args.stats_steps)
         return
-    suffix = bias_suffix(args.sampler, args.bias)
+    if args.compare:
+        os.makedirs(args.out, exist_ok=True)
+        name = f"compare_bias{args.bias:g}.png"
+        render_compare(os.path.join(args.out, name), args.seed, args.chunks, args.length, args.steps_per_node, args.bias, args.scale)
+        print("wrote", name)
+        return
+    suffix = bias_suffix(args.sampler, bias)
     closeup = os.path.join(args.out, "closeup")
     os.makedirs(closeup, exist_ok=True)
     for layout in ("oneroot", "forest", "connector"):
-        segs = build_layout(layout, args.seed, args.chunks, args.length, args.sampler, args.steps_per_node, args.bias)
+        segs = build_layout(layout, args.seed, args.chunks, args.length, args.sampler, args.steps_per_node, bias)
         name = f"band_{layout}_{args.sampler}{suffix}.png"
         render_band(paint_band(segs), os.path.join(args.out, name), args.scale)
         print("wrote", name)
         render_band(paint_band(segs[:CLOSEUP_CHUNKS]), os.path.join(closeup, name), CLOSEUP_SCALE)
         print("wrote", os.path.join("closeup", name))
     name = f"graph_view{suffix}.svg"
-    svg_graph_view(os.path.join(args.out, name), args.seed, args.length, args.sampler, args.steps_per_node, args.bias)
+    svg_graph_view(os.path.join(args.out, name), args.seed, args.length, args.sampler, args.steps_per_node, bias)
     print("wrote", name)
 
 
