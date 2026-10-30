@@ -12,6 +12,7 @@ import us.drullk.aerolite.Aerolite;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_00-41_1fb7a266-bfdf-4ab5-8b4a-1652dc840cb2.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_85da4419-5789-4ddd-8712-bcdaaca5bcce.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -53,7 +54,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.preview", "Preview");
         this.add("createWorld.customize.aerolite.preview.title", "Aerolite Preview");
         this.add("createWorld.customize.aerolite.preview.section", "Preview");
-        this.add("createWorld.customize.aerolite.preview.seed", "Seed: %s");
+        this.add("createWorld.customize.aerolite.preview.seed", "Seed");
         this.add("createWorld.customize.aerolite.preview.reseed", "Reseed");
         this.add("createWorld.customize.aerolite.preview.radius", "Radius: %s chunks");
         this.add("createWorld.customize.aerolite.preview.dimension", "Dimension");

@@ -44,6 +44,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_00-41_1fb7a266-bfdf-4ab5-8b4a-1652dc840cb2.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_85da4419-5789-4ddd-8712-bcdaaca5bcce.md}.
  */
 public class AerolitePresetScreen extends Screen {
 
@@ -101,10 +102,11 @@ public class AerolitePresetScreen extends Screen {
         this.repositionElements();
     }
 
-    /** Opens the preview with a copy of the settings. Done in the preview sends the settings back. */
+    /** Opens the preview with a copy of the settings. Done in the preview sends the settings and the seed text back. */
     private void openPreview() {
-        new PreviewScreen(this, this.context, this.tools, this.settings, this.parent.getUiState().getSeed(), chosen -> {
+        new PreviewScreen(this, this.context, this.tools, this.settings, this.parent.getUiState().getSeed(), (chosen, seedText) -> {
             this.settings = chosen;
+            this.parent.getUiState().setSeed(seedText);
             this.rebuildPending = true;
         }).open();
     }

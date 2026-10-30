@@ -12,6 +12,7 @@ import imgui.flag.ImGuiMouseCursor;
 import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiTreeNodeFlags;
 import imgui.flag.ImGuiWindowFlags;
+import imgui.type.ImString;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
@@ -44,12 +45,14 @@ import java.util.function.Function;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_85da4419-5789-4ddd-8712-bcdaaca5bcce.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
     private static final String KEY = "createWorld.customize.aerolite.";
     private static final List<String> BLOCK_LABELS = List.of("interior_block", "wall_block", "path_block");
     private static final float SPLITTER_WIDTH = 6;
+    private static final int SEED_CAPACITY = 256;
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoTitleBar
             | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse
             | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoDocking;
@@ -61,6 +64,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     private final int[] framebufferHeight = new int[1];
     private final int[] slider = new int[1];
     private final ImGuiViewGizmo gizmo = new ImGuiViewGizmo();
+    private final ImString seedField = new ImString(SEED_CAPACITY);
+    /** The seed text that the seed field last took from the screen or gave to it. */
+    @Nullable
+    private String seedShown;
     /** The dimension that the add combo shows. */
     @Nullable
     private ResourceKey<Level> addChoice;
@@ -428,10 +435,21 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             }
         }
 
+        String reseed = text("preview.reseed");
+        if (!screen.seedText().equals(this.seedShown)) {
+            this.seedField.set(screen.seedText());
+            this.seedShown = screen.seedText();
+        }
         ImGui.alignTextToFramePadding();
-        ImGui.text(text("preview.seed", screen.seed()));
+        ImGui.text(text("preview.seed"));
         ImGui.sameLine();
-        if (ImGui.button(text("preview.reseed"))) {
+        ImGui.setNextItemWidth(-(ImGui.calcTextSizeX(reseed) + 2 * ImGui.getStyle().getFramePaddingX() + ImGui.getStyle().getItemSpacingX()));
+        if (ImGui.inputText("##seed", this.seedField)) {
+            this.seedShown = this.seedField.get();
+            screen.setSeedText(this.seedShown);
+        }
+        ImGui.sameLine();
+        if (ImGui.button(reseed)) {
             screen.reseed();
         }
 

@@ -334,8 +334,12 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The dimension gives the build height, the biome source, the variations and the sky of the preview.
 - A previewed dimension without a variations list shows the empty region: the sky, the grid and the outline.
 - A removed dimension stays in the preview and shows the empty region.
-- The seed is the seed text of the world creation screen. An empty text gives a random seed.
-- The panel shows the seed. The Reseed button picks a new random seed.
+- The Preview section of the panel has a seed field. The field starts with the seed text of the world creation screen.
+- An empty seed text of the world creation screen gives a random seed. The field shows its decimal number.
+- The seed field parses like the seed field of the world creation screen. A number is the seed. Other text hashes.
+- A change of the seed field text starts a rebuild. An empty field keeps the last seed.
+- The Reseed button picks a new random seed. The field shows its decimal number.
+- Done in the preview writes the seed text to the seed field of the world creation screen. Cancel drops it.
 - The radius slider runs from 2 to 32 chunks in steps of 1.
 - The radius starts at the render distance option of the client.
 - Every change starts a rebuild on a worker thread after 300 ms. A progress bar shows the baked sections.

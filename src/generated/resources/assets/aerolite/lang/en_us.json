@@ -29,7 +29,7 @@
   "createWorld.customize.aerolite.preview.radius": "Radius: %s chunks",
   "createWorld.customize.aerolite.preview.reseed": "Reseed",
   "createWorld.customize.aerolite.preview.section": "Preview",
-  "createWorld.customize.aerolite.preview.seed": "Seed: %s",
+  "createWorld.customize.aerolite.preview.seed": "Seed",
   "createWorld.customize.aerolite.preview.show_dimension": "Preview this dimension",
   "createWorld.customize.aerolite.preview.title": "Aerolite Preview",
   "createWorld.customize.aerolite.preview.waiting": "Waiting",
