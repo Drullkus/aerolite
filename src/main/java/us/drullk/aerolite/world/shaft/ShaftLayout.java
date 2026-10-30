@@ -1,7 +1,10 @@
 package us.drullk.aerolite.world.shaft;
 
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.Level;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
@@ -18,6 +21,7 @@ import java.util.Optional;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 public final class ShaftLayout {
 
@@ -77,6 +81,8 @@ public final class ShaftLayout {
 
     private final ShaftMazes mazes;
     private final AeroliteSettings settings;
+    private final List<ShaftVariation> variations;
+    private final int totalWeight;
     private final int minY;
     private final int maxY;
     private final int[] slotsX;
@@ -85,23 +91,29 @@ public final class ShaftLayout {
     private final MixedRandomFactory columnRandom;
     private final MixedRandomFactory shaftMazeRandom;
     private final MixedRandomFactory columnMazeRandom;
+    private final MixedRandomFactory shaftVariationRandom;
+    private final MixedRandomFactory columnVariationRandom;
     private final FractalNoise decayNoise;
     private final FractalNoise shearNoise;
 
     /**
-     * @param salt  a name that makes the layout of each dimension differ
-     * @param maxY  the top build limit, exclusive
+     * @param dimension the dimension; its name makes the layout of each dimension differ
+     * @param maxY      the top build limit, exclusive
      */
-    public ShaftLayout(ShaftMazes mazes, long seed, String salt, int minY, int maxY, AeroliteSettings settings) {
+    public ShaftLayout(ShaftMazes mazes, long seed, ResourceKey<Level> dimension, int minY, int maxY, AeroliteSettings settings) {
         this.mazes = mazes;
         this.settings = settings;
+        this.variations = settings.variations(dimension);
+        this.totalWeight = this.variations.stream().mapToInt(ShaftVariation::weight).sum();
         this.minY = minY;
         this.maxY = maxY;
-        MixedRandomFactory root = new MixedRandomFactory(seed).fork("aerolite:shafts/" + salt);
+        MixedRandomFactory root = new MixedRandomFactory(seed).fork("aerolite:shafts/" + dimension.location());
         this.shaftRandom = root.fork("shaft");
         this.columnRandom = root.fork("column");
         this.shaftMazeRandom = root.fork("shaft_maze");
         this.columnMazeRandom = root.fork("column_maze");
+        this.shaftVariationRandom = root.fork("shaft_variation");
+        this.columnVariationRandom = root.fork("column_variation");
         this.decayNoise = new FractalNoise(root.fromHashOf("decay"), DECAY_OCTAVES, settings.decayScale());
         this.shearNoise = new FractalNoise(root.fromHashOf("shear"), SHEAR_OCTAVES, SHEAR_SCALE);
 
@@ -124,6 +136,36 @@ public final class ShaftLayout {
 
     public AeroliteSettings settings() {
         return this.settings;
+    }
+
+    /** True when the dimension has at least one variation with a positive weight. */
+    public boolean hasShafts() {
+        return this.totalWeight > 0;
+    }
+
+    /** The variation of one horizontal shaft. */
+    public ShaftVariation variation(Shaft shaft) {
+        return this.pick(this.shaftVariationRandom.at(shaft.axis().ordinal(), shaft.cell(), 0));
+    }
+
+    /** The variation of one column. */
+    public ShaftVariation variation(Column column) {
+        return this.pick(this.columnVariationRandom.at(column.zShaft().cell(), column.xShaft().cell(), 0));
+    }
+
+    /** Picks a variation in proportion to its weight. A weight of 0 never picks. */
+    private ShaftVariation pick(RandomSource random) {
+        if (this.totalWeight <= 0) {
+            throw new IllegalStateException("The dimension has no shaft variation with a positive weight");
+        }
+        int value = random.nextInt(this.totalWeight);
+        for (ShaftVariation variation : this.variations) {
+            value -= variation.weight();
+            if (value < 0) {
+                return variation;
+            }
+        }
+        throw new IllegalStateException("The weights do not sum to the total weight");
     }
 
     public FractalNoise decayNoise() {
@@ -229,7 +271,7 @@ public final class ShaftLayout {
                         ? new ShaftMaze.Box(column.x(), column.xShaftSign())
                         : new ShaftMaze.Box(column.z(), column.zShaftSign()))
                 .toList();
-        return this.mazes.shaft(boxes, this.shaftMazeRandom.fork(shaft.axis().ordinal(), shaft.cell(), 0));
+        return this.mazes.shaft(boxes, this.shaftMazeRandom.fork(shaft.axis().ordinal(), shaft.cell(), 0), ShaftVariation.clampBias(this.variation(shaft).bias()));
     }
 
     /** The maze of one column. Its chunks are the chunk sections from the bottom build limit to the top build limit. */
@@ -240,7 +282,8 @@ public final class ShaftLayout {
                 lookup,
                 this.columnMazeRandom.fork(column.zShaft().cell(), column.xShaft().cell(), 0),
                 Math.floorDiv(this.minY, ShaftMaze.CHUNK),
-                Math.floorDiv(this.maxY - 1, ShaftMaze.CHUNK)
+                Math.floorDiv(this.maxY - 1, ShaftMaze.CHUNK),
+                ShaftVariation.clampBias(this.variation(column).bias())
         );
     }
 

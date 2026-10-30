@@ -32,6 +32,21 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.erosion_threshold", "Erosion Threshold: %s");
         this.add("createWorld.customize.aerolite.clouds", "Clouds");
         this.add("createWorld.customize.aerolite.cloud_height", "Cloud Height: %s");
+        this.add("createWorld.customize.aerolite.shaft_variations", "Shaft Variations");
+        this.add("createWorld.customize.aerolite.shafts_in_unlisted_dimensions", "Shafts in Unlisted Dimensions");
+        this.add("createWorld.customize.aerolite.dimension.overworld", "Overworld");
+        this.add("createWorld.customize.aerolite.dimension.the_nether", "The Nether");
+        this.add("createWorld.customize.aerolite.dimension.the_end", "The End");
+        this.add("createWorld.customize.aerolite.weight", "Weight: %s");
+        this.add("createWorld.customize.aerolite.maze_bias", "Maze Bias: %s");
+        this.add("createWorld.customize.aerolite.maze_bias.ringwise", "%s (ringwise)");
+        this.add("createWorld.customize.aerolite.maze_bias.uniform", "%s (uniform)");
+        this.add("createWorld.customize.aerolite.maze_bias.lengthwise", "%s (lengthwise)");
+        this.add("createWorld.customize.aerolite.interior_block", "Interior Block");
+        this.add("createWorld.customize.aerolite.wall_block", "Maze Wall Block");
+        this.add("createWorld.customize.aerolite.path_block", "Maze Path Block");
+        this.add("createWorld.customize.aerolite.add_variation", "Add Variation");
+        this.add("createWorld.customize.aerolite.remove_variation", "Remove Variation");
     }
 
 }

@@ -23,7 +23,11 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Edge | A maze grid block between two neighbor nodes. An edge in the tree is a maze path. An edge outside the tree is a maze wall. |
 | Maze wall | A maze grid block that keeps its outer layer block. |
 | Maze path | A maze grid block with no outer layer block. The block under it is the maze path block. |
-| Origin Shift | The spanning tree sampler. At each step the root moves to a random neighbor, and the old root points at it. |
+| Wilson's algorithm | The spanning tree sampler. A loop-erased random walk steps by edge weight until it hits the tree. |
+| Axis edge | An edge along the shaft axis. On a column the axis is Y. |
+| Ring edge | An edge around the shaft. |
+| Variation | One set of weight, maze bias, interior block, maze wall block and maze path block. Each shaft and column picks one. |
+| Maze bias | The weight of axis edges in the maze sampler, 5% to 95%. Ring edges take the rest. 50% is uniform. |
 | Segment | One chunk length of a shaft. On a column it is one chunk section. Tree segments and connector segments alternate along the shaft. |
 | Tree segment | A segment whose nodes form one spanning tree. It has no crossing of its own. |
 | Connector segment | A segment whose nodes and two virtual nodes form one spanning tree. |
@@ -235,21 +239,23 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 | Maze decay scale | 256 blocks |
 | Maze decay threshold | 0.5 |
 | Shaft erosion threshold | 0.7 |
-| Shaft interior block | Stone |
-| Maze wall block | Stone bricks |
-| Maze path block | Cobblestone |
+| Overworld variations | Stone (stone, stone bricks, cobblestone), weight 7, maze bias 50%. Trial chamber (tuff, tuff bricks, oxidized copper), weight 1, maze bias 50%. |
+| Nether variations | Netherrack, nether bricks, red nether bricks. Weight 1, maze bias 50%. |
+| End variations | End stone, end stone bricks, purpur block. Weight 1, maze bias 50%. |
+| Shafts in unlisted dimensions | Off |
 | Bridge chance | 0.5 |
 | Allowed biome list | The vanilla biome list of the dimension |
 | Cloud height | Y -32 |
-
-The three shaft blocks are placeholders. The producer swaps them later.
 
 - Each island picks its fill fraction at random between the two bounds.
 - The island height band is the Y range of the island centers in the generating layer.
 - The shaft spacing is the center distance of two neighbor horizontal shafts on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a shaft.
+- The variations are a map from dimension to a list of variations. Every list holds at least one variation with a positive weight.
+- A variation lists its blocks in the sequence interior block, maze wall block, maze path block.
 - The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
 - The screen has seven sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale, the maze decay threshold, the shaft erosion threshold and the cloud height.
+- Each variation adds two sliders: the weight and the maze bias.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.
@@ -260,6 +266,21 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A save with a decay threshold at or above its erosion threshold loads with the erosion threshold raised to the decay threshold plus 5%.
 - The cloud height slider is in the section Clouds, after the section Shaft Surface.
 - The cloud height slider runs from Y -64 to Y 320 in steps of 8.
+- The section Shaft Variations comes after the section Clouds.
+- Its first row is a cycle button for the setting "Shafts in Unlisted Dimensions".
+- Then each dimension has a header: Overworld, The Nether and The End.
+- Each variation has a row with a weight slider and a maze bias slider.
+- The weight slider runs from 0 to 16. The last positive weight of a dimension does not go below 1.
+- The maze bias slider runs from 5% to 95% in steps of 5%.
+- The maze bias label says "ringwise" below 50%, "uniform" at 50% and "lengthwise" above 50%.
+- Each variation has a row with three block fields: the interior block, the maze wall block and the maze path block.
+- A block field reads a block id or a block state string, such as `oxidized_copper` or `oak_log[axis=x]`.
+- Bad text gives the block field a red border. The field keeps its last good block.
+- While a block field has focus and text, a dropdown lists up to 8 blocks whose id or name holds the text. A click or Enter picks one.
+- The dropdown shows the item icon and the name of each block. It lists no air block.
+- Each variation has a Remove button. A dimension with one variation has its Remove button off.
+- An Add button after the rows of each dimension appends a copy of the first variation.
+- An add or a remove rebuilds the list and keeps the scroll position.
 - The other settings have no slider yet. They live in the generator settings with their defaults.
 
 ## Shafts
@@ -290,6 +311,11 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The shear band shrinks so at least 8 blocks of full column stay between the band and the outermost junction box.
 - Shear does not touch a junction box.
 - Where a column crosses a horizontal shaft, a junction joins them. The junction is a 15x15x15 box of the shaft interior block, centered on the crossing.
+- Every horizontal shaft and every column picks one variation by weight. A weight of 0 never picks.
+- A horizontal shaft picks with a random at its axis and cell. A column picks with a random at the cells of its two shafts.
+- A junction box takes the variation of its horizontal shaft. So do its two patches and the maze path blocks on them.
+- A dimension that is not in the variation map uses the Overworld list when "Shafts in Unlisted Dimensions" is on.
+- When that setting is off, such a dimension gets no shafts. The noise settings of the dimension still make its terrain.
 - Shafts pierce islands. Where a shaft and an island overlap, the shaft replaces the terrain.
 
 ### Cross section
@@ -303,15 +329,21 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - A ruling sits on every odd block along the shaft. On a ruling, nodes sit on even blocks around the shaft, so the four corners are nodes. Edges sit between neighbor nodes. Every other maze grid block is a maze wall.
 - A corner node has no edge along the axis, so no path runs along a corner.
 - After sampling, a corner node of degree one is dropped with its edge. So a two-block margin runs along every corner, with a notch where a path crosses the corner.
-- Origin Shift samples each tree, as in <https://youtu.be/zbXKcDVV4G0>. The process is the tree chain of Anantharam and Tsoucas (1988). It converges to the uniform spanning tree.
-- Origin Shift starts from the breadth-first tree of a seeded root. The step count comes from the stats mode of `prototypes/maze/originshift.py`.
+- Wilson's algorithm samples each tree from a seeded root. It samples the weighted spanning tree distribution exactly.
+- In that distribution, the chance of a tree is proportional to the product of its edge weights.
+- Every axis edge has the weight of the maze bias. Every ring edge has the weight of 1 minus the maze bias.
+- At each step, the walk takes one edge of its node in proportion to the edge weight.
+- An edge between two rulings is an axis edge. An edge between two nodes of one ruling is a ring edge.
+- An edge to a virtual node is an axis edge. A crossing onto a patch is an axis edge.
+- A patch edge along the shaft axis is an axis edge. A patch edge across the shaft axis is a ring edge.
+- A maze bias above 50% favors maze paths along the shaft. A maze bias below 50% favors maze paths around the shaft.
+- Each horizontal shaft and each column samples with the maze bias of its variation. A junction segment uses the maze bias of its own shaft.
 - A horizontal shaft is cut into segments, aligned to chunks. Segments with an even index are tree segments. Segments with an odd index are connector segments.
 - Each segment is a pure function of the world seed, the shaft and the segment index. The chunk generation sequence does not change the result.
 - A connector segment samples its tree on its own nodes plus two virtual nodes. A tree edge at a virtual node becomes a crossing to that neighbor tree segment.
 - The union of all segments is one tree. A chunk boundary gets several crossings, so no wall ring marks it.
 - A chunk needs at most two segments: its own, which can be a junction segment, and the connector segment before it along the axis.
 - A column is cut into segments of one chunk section, like a horizontal shaft. A column segment is a pure function of the world seed, the column and the section index.
-- One Origin Shift run over a long tree leaves parts of its start tree unmixed. Short segments mix fully.
 - At a build limit, a segment gets no virtual node on the outer side.
 - A junction cuts the maze grid of both shafts. The one-block rim around each shaft attachment sits on even positions, so it is wall.
 - A junction exposes two patches, the faces that no shaft covers. The seed picks one patch for the horizontal shaft. The other patch serves the column.
@@ -337,6 +369,7 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - Erosion runs after decay and before shear. An eroded block becomes air.
 - The rim of a patch face stays wall. Decay does not touch it.
 - The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
+- The prototype keeps Origin Shift and its start trees for comparison. The mod uses only Wilson's algorithm.
 
 ## Walker Trees
 

@@ -1,6 +1,6 @@
 # Plan: settings list, cloud height, shaft variations, preview mode
 
-Date: 2026-10-29. Status: revision 2, waiting for approval. Five work packages: A, B, C1, C2, D.
+Date: 2026-10-29. Status: revision 4. Wave 1 done. C2 dispatched with weighted Wilson. Five work packages: A, B, C1, C2, D.
 
 ## Decisions
 
@@ -17,8 +17,9 @@ Date: 2026-10-29. Status: revision 2, waiting for approval. Five work packages: 
 | Overworld defaults | Stone (stone, stone bricks, cobblestone) weight 7. Trial Chamber (tuff, tuff bricks, oxidized copper) weight 1. |
 | Nether default | Netherrack, nether bricks, red nether bricks. Weight 1. |
 | End default | End stone, end stone bricks, purpur block. Weight 1. |
-| Maze bias | One slider per variation, 0% to 100% in steps of 5%. 50% is uniform. Below 50% favors ringwise paths. Above 50% favors lengthwise paths. |
-| Bias sampler | At each Origin Shift step the walker picks the axis class with chance p and the ring class with chance 1-p, then a uniform neighbor in that class. An empty class falls back to the other class. |
+| Maze bias | One slider per variation, 5% to 95% in steps of 5%. 50% is uniform. Below 50% favors ringwise paths. Above 50% favors lengthwise paths. |
+| Bias sampler | Degree-weighted. Every axis edge has the weight p and every ring edge the weight 1-p. The walker picks one edge by weight. At 50% this is the uniform sampler. Chosen after the prototype comparison on 2026-10-29. |
+| Sampler | Weighted Wilson's algorithm replaces Origin Shift in the mod. The loop-erased random walk steps by edge weight. The sample is exact at every slider value. No start tree, no step count. Chosen after the start tree comparison on 2026-10-29: the breadth-first start of Origin Shift left ribs under a strong bias. |
 | Bias approval | The prototype renders the biased mazes first. The Java wiring waits for the owner's approval of the images. |
 | Variation GUI | A sub-heading per dimension. Per variation: a weight slider 0 to 16, the bias slider, three block fields, a Remove button. An Add button per dimension. A dimension keeps at least one variation. |
 | Block field | A text field. It parses a blockstate string such as `oxidized_copper` or `stone_bricks[...]`. While typing, a dropdown lists blocks whose id or name contains the text, with the item icon. |
@@ -147,12 +148,13 @@ Pick:
 - `AeroliteChunkGenerator#buildShafts` returns at once when the variation list of the level is empty.
 - `ChunkPaint` uses the blocks of the variation of each shaft and column. A junction box, its patches and the path blocks on its patches use the variation of the horizontal shaft of that junction.
 
-Sampler, as approved from C1:
-- `MazeGraph` keeps two adjacency lists per node, ring edges and axis edges. `addEdge(a, b, boolean axis)`.
+Sampler, as approved from the prototypes:
+- `MazeGraph` records the class of each edge. `addEdge(a, b, boolean axis)`.
 - A virtual node edge is an axis edge. A patch crossing is an axis edge. A patch edge along the shaft axis is an axis edge. A patch edge across it is a ring edge. On a column, lengthwise means along Y.
-- `sampleTree(RandomSource, float bias)` applies the class-first rule.
+- `sampleTree(RandomSource, float bias)` is weighted Wilson's algorithm. An axis edge has the weight bias, a ring edge the weight 1 - bias. The loop-erased random walk from each node not yet in the tree steps by edge weight until it hits the tree. The root is a random node.
+- Origin Shift, the breadth-first start tree and `STEPS_PER_NODE` leave the mod. The prototype keeps them for comparison.
+- The bias codec clamps to 0.05 to 0.95. The slider runs from 5% to 95% in steps of 5%.
 - `ShaftMaze` and `ShaftMazes` carry the bias. `ShaftLayout` passes the bias of the variation of each shaft and column.
-- `STEPS_PER_NODE` follows the C1 stats.
 
 Screen:
 - Section "Shaft Variations", key `createWorld.customize.aerolite.shaft_variations`, as `SettingsList` entries. The agent also moves the Clouds section of B into list entries when the owner has not done it.
@@ -160,10 +162,10 @@ Screen:
 - Per variation: a row with the weight slider "Weight: %s" (0 to 16) and the bias slider "Maze Bias: %s" with the suffix "(ringwise)", "(uniform)" or "(lengthwise)". A row with three `BlockField`s for interior, wall and path. A Remove button, disabled when the list has one variation. An Add button per dimension appends a copy of the first variation.
 - `BlockField extends EditBox`. It parses with `BlockStateParser`. A bad text gives a red border and keeps the old state. On focus with text, a dropdown lists up to 8 blocks whose id or name contains the text, each with the item icon from `GuiGraphics#renderItem` and the name. A click or Enter picks one. The screen draws the open dropdown after the list, so it covers the rows below.
 
-Spec: update the project `CLAUDE.md`. Glossary gains "Variation" and "Maze bias". The settings table replaces the three block rows with the variation lists, their defaults and the boolean. Remove the sentence about placeholder blocks. The Shafts section states the pick rule, the unlisted dimension rule and the class-first sampler. The slider list gains the section.
+Spec: update the project `CLAUDE.md`. Glossary gains "Variation" and "Maze bias" and replaces the "Origin Shift" row with "Wilson's algorithm". The Maze bullets on Origin Shift, its start tree and its step count become bullets on weighted Wilson. The settings table replaces the three block rows with the variation lists, their defaults and the boolean. Remove the sentence about placeholder blocks. The Shafts section states the pick rule, the unlisted dimension rule and the class-first sampler. The slider list gains the section.
 
 Tests:
-- `ShaftMazeTest` and `ColumnMazeTest` run `TreeCheck` at bias 0, 0.5 and 1.
+- `ShaftMazeTest` and `ColumnMazeTest` run `TreeCheck` at bias 0.05, 0.5 and 0.95.
 - A test for the weighted pick: deterministic for one seed, and a weight of 0 never picks.
 - `AeroliteSettingsTest` covers the map codec, the boolean and the fallback list.
 - `ShaftGameTests` check the blocks of the picked variation.

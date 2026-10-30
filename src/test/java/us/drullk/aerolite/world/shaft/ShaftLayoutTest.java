@@ -1,18 +1,28 @@
 package us.drullk.aerolite.world.shaft;
 
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.MazeEdges;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -20,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 class ShaftLayoutTest {
 
@@ -30,7 +41,7 @@ class ShaftLayoutTest {
     private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
 
     private ShaftLayout layout(long seed, int minSpacing, int maxSpacing) {
-        return new ShaftLayout(this.mazes, seed, "minecraft:overworld", MIN_Y, MAX_Y, AeroliteSettings.DEFAULT.withShaftSpacing(minSpacing, maxSpacing));
+        return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, AeroliteSettings.DEFAULT.withShaftSpacing(minSpacing, maxSpacing));
     }
 
     @Test
@@ -111,7 +122,7 @@ class ShaftLayoutTest {
     @Test
     void columnShareMatchesTheChanceOnEachShaft() {
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withShaftSpacing(32, 80).withColumnChance(0.9F);
-        ShaftLayout layout = new ShaftLayout(this.mazes, -777248163424996722L, "minecraft:overworld", MIN_Y, MAX_Y, settings);
+        ShaftLayout layout = new ShaftLayout(this.mazes, -777248163424996722L, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
         List<ShaftLayout.Shaft> crossings = layout.shafts(ShaftLayout.Axis.X, -6000, 6000);
         for (ShaftLayout.Shaft shaft : layout.shafts(ShaftLayout.Axis.Z, -1500, 1500)) {
             int eligible = 0;
@@ -133,6 +144,72 @@ class ShaftLayoutTest {
     @Test
     void layoutIsPure() {
         assertEquals(layout(9, 128, 384).shafts(ShaftLayout.Axis.X, -4000, 4000), layout(9, 128, 384).shafts(ShaftLayout.Axis.X, -4000, 4000));
+    }
+
+    private static final ShaftVariation NEVER = ShaftVariation.TRIAL_CHAMBER.withWeight(0);
+    private static final ShaftVariation HEAVY = ShaftVariation.STONE.withWeight(3);
+    private static final ShaftVariation LIGHT = new ShaftVariation(1, 0.2F,
+            Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.COBBLED_DEEPSLATE.defaultBlockState());
+
+    private ShaftLayout pickLayout(long seed) {
+        AeroliteSettings settings = AeroliteSettings.DEFAULT.withShaftSpacing(32, 64).withColumnChance(1)
+                .withVariations(Level.OVERWORLD, List.of(NEVER, HEAVY, LIGHT));
+        return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
+    }
+
+    private List<ShaftVariation> picks(ShaftLayout layout) {
+        List<ShaftVariation> picks = new ArrayList<>();
+        for (ShaftLayout.Axis axis : ShaftLayout.Axis.values()) {
+            for (ShaftLayout.Shaft shaft : layout.shafts(axis, -20000, 20000)) {
+                picks.add(layout.variation(shaft));
+            }
+        }
+        for (int xCell = -30; xCell < 30; xCell++) {
+            for (int zCell = -30; zCell < 30; zCell++) {
+                layout.column(xCell, zCell).map(layout::variation).ifPresent(picks::add);
+            }
+        }
+        return picks;
+    }
+
+    @Test
+    void variationPickIsPure() {
+        ShaftLayout layout = pickLayout(12);
+        assertEquals(picks(layout), picks(layout), "A second pass over one layout gives other picks");
+        assertEquals(picks(layout), picks(pickLayout(12)), "Two layouts of one seed give other picks");
+    }
+
+    @Test
+    void variationWeightOfZeroNeverPicks() {
+        List<ShaftVariation> picks = picks(pickLayout(13));
+        assertTrue(picks.size() > 1000);
+        assertFalse(picks.contains(NEVER));
+        long heavy = picks.stream().filter(HEAVY::equals).count();
+        long light = picks.stream().filter(LIGHT::equals).count();
+        assertTrue(light > 0, "The light variation never picks");
+        double share = heavy / (double) picks.size();
+        assertTrue(share > 0.65 && share < 0.85, "share " + share);
+    }
+
+    @Test
+    void mazeTakesTheBiasOfTheVariation() {
+        ShaftLayout layout = pickLayout(14);
+        for (ShaftLayout.Shaft shaft : layout.shafts(ShaftLayout.Axis.X, -4000, 4000)) {
+            assertEquals(layout.variation(shaft).bias(), layout.shaftMaze(shaft).bias());
+        }
+    }
+
+    @Test
+    void unlistedDimensionHasNoShafts() {
+        AeroliteSettings settings = AeroliteSettings.DEFAULT;
+        ShaftLayout unlisted = new ShaftLayout(this.mazes, 1,
+                ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath("aerolite", "elsewhere")), MIN_Y, MAX_Y, settings);
+        assertFalse(unlisted.hasShafts());
+        ShaftLayout nether = new ShaftLayout(this.mazes, 1, Level.NETHER, MIN_Y, MAX_Y, settings);
+        assertTrue(nether.hasShafts());
+        assertSame(ShaftVariation.NETHER, nether.variation(nether.shaft(ShaftLayout.Axis.X, 0).orElseThrow()));
+        ShaftLayout overworld = new ShaftLayout(this.mazes, 1, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
+        assertNotSame(ShaftVariation.NETHER, overworld.variation(overworld.shaft(ShaftLayout.Axis.X, 0).orElseThrow()));
     }
 
 }

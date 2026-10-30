@@ -3,7 +3,9 @@ package us.drullk.aerolite.world;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
@@ -22,6 +24,7 @@ import javax.annotation.Nullable;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 @Configurable
 public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
@@ -40,7 +43,7 @@ public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
     @Nullable
     private volatile CachedLayout cachedLayout;
 
-    private record CachedLayout(long seed, String dimension, int minY, int maxY, ShaftLayout layout) {
+    private record CachedLayout(long seed, ResourceKey<Level> dimension, int minY, int maxY, ShaftLayout layout) {
     }
 
     public AeroliteChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> settings, AeroliteSettings aeroliteSettings) {
@@ -61,15 +64,18 @@ public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
         return new AeroliteChunkGenerator(this.getBiomeSource(), this.generatorSettings(), settings);
     }
 
-    /** Writes the shafts, columns and junctions of one chunk. */
+    /** Writes the shafts, columns and junctions of one chunk. A dimension without variations gets no shafts. */
     public void buildShafts(ServerLevel level, ChunkAccess chunk) {
+        if (this.aeroliteSettings.variations(level.dimension()).isEmpty()) {
+            return;
+        }
         this.painter.paint(this.layout(level), chunk);
     }
 
     /** The shaft layout of the level. One generator serves one dimension, so the layout rarely changes. */
     public ShaftLayout layout(ServerLevel level) {
         long seed = level.getSeed();
-        String dimension = level.dimension().location().toString();
+        ResourceKey<Level> dimension = level.dimension();
         int minY = level.getMinBuildHeight();
         int maxY = level.getMaxBuildHeight();
         CachedLayout cached = this.cachedLayout;

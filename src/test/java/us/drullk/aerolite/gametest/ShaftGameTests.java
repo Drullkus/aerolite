@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.WorldPresetTags;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ProtoChunk;
@@ -27,6 +28,7 @@ import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
@@ -43,6 +45,7 @@ import java.util.Map;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -76,9 +79,9 @@ public final class ShaftGameTests {
     @GameTest(template = "empty")
     public static void painterBuildsAShaftCrossSection(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(1).withErosionThreshold(1);
-        ShaftLayout layout = new ShaftLayout(mazes, 42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), twoVariations());
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
+        ShaftVariation variation = layout.variation(shaft);
         int chunkZ = 0;
         while (!layout.columnsOn(shaft, 16 * chunkZ - 16, 16 * chunkZ + 32).isEmpty()) {
             chunkZ++;
@@ -91,7 +94,7 @@ public final class ShaftGameTests {
         int y = shaft.centerY();
         int paths = 0;
         for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
-            helper.assertTrue(chunk.getBlockState(new BlockPos(x, y, z)) == settings.interiorBlock(), "The shaft core is not the interior block");
+            helper.assertTrue(chunk.getBlockState(new BlockPos(x, y, z)) == variation.interior(), "The shaft core is not the interior block of its variation");
             for (int block = 0; block < Ring.BLOCKS; block++) {
                 int dy = ring.first(block);
                 int dx = ring.second(block);
@@ -102,9 +105,9 @@ public final class ShaftGameTests {
                 if (outer.isAir()) {
                     paths++;
                     BlockPos beneath = new BlockPos(x + clampInterior(dx), y + clampInterior(dy), z);
-                    helper.assertTrue(chunk.getBlockState(beneath) == settings.pathBlock(), "A maze path has no maze path block under it");
+                    helper.assertTrue(chunk.getBlockState(beneath) == variation.path(), "A maze path has no maze path block of its variation under it");
                 } else {
-                    helper.assertTrue(outer == settings.wallBlock(), "An outer layer block is not the maze wall block");
+                    helper.assertTrue(outer == variation.wall(), "An outer layer block is not the maze wall block of its variation");
                 }
             }
             helper.assertTrue(chunk.getBlockState(new BlockPos(x, y + Ring.OUTER + 1, z)).isAir(), "The block above the shaft is not air");
@@ -118,7 +121,7 @@ public final class ShaftGameTests {
     public static void erosionKeepsTheCore(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
-        ShaftLayout layout = new ShaftLayout(mazes, 42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
         int eroded = 0;
         for (int chunkZ = 0; chunkZ < 6; chunkZ++) {
@@ -128,6 +131,7 @@ public final class ShaftGameTests {
             ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(shaft.position()), chunkZ);
             ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
             painter.paint(layout, chunk);
+            BlockState interior = layout.variation(shaft).interior();
             for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
                 for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
                     for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
@@ -137,7 +141,7 @@ public final class ShaftGameTests {
                         }
                         BlockState state = chunk.getBlockState(new BlockPos(x, shaft.centerY() + first, z));
                         if (Math.max(Math.abs(first), Math.abs(second)) <= 1) {
-                            helper.assertTrue(state == settings.interiorBlock(), "Erosion removed a block of the 3x3 core");
+                            helper.assertTrue(state == interior, "Erosion removed a block of the 3x3 core");
                         } else if (Math.max(Math.abs(first), Math.abs(second)) < Ring.OUTER && state.isAir()) {
                             eroded++;
                         }
@@ -153,7 +157,7 @@ public final class ShaftGameTests {
     public static void erosionKeepsTheShaftCoresThroughJunctionBoxes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
-        ShaftLayout layout = new ShaftLayout(mazes, 42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Column column = null;
         for (int cell = 0; column == null; cell++) {
             for (int other = 0; column == null && other < 40; other++) {
@@ -211,12 +215,79 @@ public final class ShaftGameTests {
         ChunkPos pos = new ChunkPos(0, SectionPos.blockToSectionCoord(shaft.position()));
         ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
         generator.buildShafts(level, chunk);
-        helper.assertTrue(chunk.getBlockState(new BlockPos(pos.getMinBlockX(), shaft.centerY(), shaft.position())).is(generator.aeroliteSettings().interiorBlock().getBlock()),
+        helper.assertTrue(chunk.getBlockState(new BlockPos(pos.getMinBlockX(), shaft.centerY(), shaft.position())).is(layout.variation(shaft).interior().getBlock()),
                 "The generator wrote no shaft core");
         helper.succeed();
     }
 
+    /** Settings whose Overworld variations differ in every block, without decay and erosion. */
+    private static AeroliteSettings twoVariations() {
+        ShaftVariation deepslate = new ShaftVariation(1, 0.8F,
+                Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
+        return AeroliteSettings.DEFAULT.withDecayThreshold(1).withErosionThreshold(1)
+                .withVariations(Level.OVERWORLD, List.of(ShaftVariation.STONE.withWeight(1), deepslate));
+    }
+
+    @GameTest(template = "empty")
+    public static void junctionBoxTakesTheVariationOfItsHorizontalShaft(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ShaftLayout layout = new ShaftLayout(mazes, 7, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), twoVariations().withColumnChance(1));
+        Map<Long, ProtoChunk> chunks = new HashMap<>();
+        int columns = 0;
+        int mixed = 0;
+        for (int cell = 0; cell < 6; cell++) {
+            for (int other = 0; other < 6; other++) {
+                ShaftLayout.Column column = layout.column(cell, other).orElse(null);
+                if (column == null) {
+                    continue;
+                }
+                columns++;
+                ShaftVariation columnVariation = layout.variation(column);
+                for (ColumnJunction junction : column.junctions()) {
+                    ShaftVariation boxVariation = layout.variation(junction.alongX() ? column.xShaft() : column.zShaft());
+                    if (boxVariation != columnVariation) {
+                        mixed++;
+                    }
+                    BlockPos boxEdge = new BlockPos(column.x() + Ring.BOX, junction.center() + Ring.BOX, column.z() + Ring.BOX);
+                    helper.assertTrue(paintedAt(chunks, layout, level, boxEdge) == boxVariation.interior(), "A junction box block is not the interior block of its horizontal shaft");
+                }
+                // An even Y between the boxes holds no ruling, so ring block 1 there is always maze wall.
+                int between = (column.junctions().getFirst().center() + column.junctions().getLast().center()) / 2 & ~1;
+                helper.assertTrue(paintedAt(chunks, layout, level, new BlockPos(column.x(), between, column.z())) == columnVariation.interior(),
+                        "The column core is not the interior block of the column");
+                BlockState wall = paintedAt(chunks, layout, level, new BlockPos(column.x() + ring.first(1), between, column.z() + ring.second(1)));
+                helper.assertTrue(wall == columnVariation.wall(), "A column wall block is not the maze wall block of the column");
+            }
+        }
+        helper.assertTrue(columns > 0, "The layout has no column");
+        helper.assertTrue(mixed > 0, "No junction box differs in variation from its column");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void unlistedDimensionGetsNoShafts(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
+        AeroliteChunkGenerator listed = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
+        AeroliteSettings netherOnly = new AeroliteSettings(
+                listed.aeroliteSettings().minShaftSpacing(), listed.aeroliteSettings().maxShaftSpacing(), listed.aeroliteSettings().columnChance(),
+                listed.aeroliteSettings().decayScale(), listed.aeroliteSettings().decayThreshold(), listed.aeroliteSettings().erosionThreshold(),
+                listed.aeroliteSettings().cloudHeight(), Map.of(Level.NETHER, List.of(ShaftVariation.NETHER)), true);
+        AeroliteChunkGenerator generator = listed.withAeroliteSettings(netherOnly);
+        ShaftLayout listedLayout = listed.layout(level);
+        ShaftLayout.Shaft shaft = listedLayout.shaft(ShaftLayout.Axis.X, 0).orElseThrow();
+        ChunkPos pos = new ChunkPos(0, SectionPos.blockToSectionCoord(shaft.position()));
+        ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+        generator.buildShafts(level, chunk);
+        for (int y = level.getMinBuildHeight(); y < level.getMaxBuildHeight(); y++) {
+            helper.assertTrue(chunk.getBlockState(new BlockPos(pos.getMinBlockX(), y, shaft.position())).isAir(), "A dimension without variations got a shaft block");
+        }
+        helper.assertFalse(generator.layout(level).hasShafts(), "A dimension without variations has shafts");
+        helper.succeed();
+    }
+
     private static int clampInterior(int offset) {
+
         return Math.max(-Ring.OUTER + 1, Math.min(Ring.OUTER - 1, offset));
     }
 

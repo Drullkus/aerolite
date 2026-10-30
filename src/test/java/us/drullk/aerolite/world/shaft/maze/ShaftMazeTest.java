@@ -4,9 +4,12 @@ import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -17,15 +20,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 class ShaftMazeTest {
 
     private final Ring ring = new Ring();
     private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
 
+    /** The smallest, the uniform and the largest maze bias. */
+    static final float[] BIASES = {0.05F, 0.5F, 0.95F};
+
     private ShaftMaze maze(long seed, List<ShaftMaze.Box> boxes) {
+        return this.maze(seed, boxes, 0.5F);
+    }
+
+    private ShaftMaze maze(long seed, List<ShaftMaze.Box> boxes, float bias) {
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();
-        return this.mazes.shaft(lookup, new XoroshiroRandomSource(seed).forkPositional());
+        return this.mazes.shaft(lookup, new XoroshiroRandomSource(seed).forkPositional(), bias);
     }
 
     /** The distinct segments from the first chunk to the last chunk, by first chunk. */
@@ -53,14 +64,53 @@ class ShaftMazeTest {
 
     @Test
     void plainShaftIsOneTree() {
-        for (long seed = 0; seed < 4; seed++) {
-            TreeCheck.assertOneTree(edges(segments(maze(seed, List.of()), 0, 10)));
+        for (float bias : BIASES) {
+            for (long seed = 0; seed < 4; seed++) {
+                ShaftMaze maze = maze(seed, List.of(), bias);
+                int nodes = TreeCheck.assertOneTree(edges(segments(maze, 0, 10)));
+                assertEquals(reachableNodes(maze, 0, 10), nodes, "bias " + bias);
+            }
         }
     }
 
     @Test
     void plainShaftIsOneTreeAtNegativeChunks() {
-        TreeCheck.assertOneTree(edges(segments(maze(7, List.of()), -12, -2)));
+        for (float bias : BIASES) {
+            TreeCheck.assertOneTree(edges(segments(maze(7, List.of(), bias), -12, -2)));
+        }
+    }
+
+    /** The node count of the rulings from the first chunk to the last chunk, without the corner nodes that pruning can drop. */
+    private int reachableNodes(ShaftMaze maze, int firstChunk, int lastChunk) {
+        int rulings = (lastChunk - firstChunk + 1) * ShaftMaze.RULINGS_PER_CHUNK;
+        return rulings * (Ring.NODES - 4) + cornerNodes(edges(segments(maze, firstChunk, lastChunk)));
+    }
+
+    private int cornerNodes(List<MazeEdge> edges) {
+        Set<MazeNode> corners = new HashSet<>();
+        for (MazeEdge edge : edges) {
+            for (MazeNode node : List.of(edge.a(), edge.b())) {
+                if (node instanceof MazeNode.Ruling ruling && this.ring.isCorner(ruling.node())) {
+                    corners.add(node);
+                }
+            }
+        }
+        return corners.size();
+    }
+
+    @Test
+    void biasShiftsTheShareOfAxisEdges() {
+        double ringwise = axisShare(maze(2, List.of(), 0.05F));
+        double uniform = axisShare(maze(2, List.of(), 0.5F));
+        double lengthwise = axisShare(maze(2, List.of(), 0.95F));
+        assertTrue(ringwise < uniform && uniform < lengthwise, ringwise + " " + uniform + " " + lengthwise);
+    }
+
+    /** The share of tree edges that join two rulings. */
+    private static double axisShare(ShaftMaze maze) {
+        List<MazeEdge> edges = edges(segments(maze, 0, 10));
+        long axis = edges.stream().filter(edge -> edge.a() instanceof MazeNode.Ruling a && edge.b() instanceof MazeNode.Ruling b && a.along() != b.along()).count();
+        return axis / (double) edges.size();
     }
 
     @Test
@@ -74,10 +124,19 @@ class ShaftMazeTest {
 
     @Test
     void junctionShaftIsOneTree() {
-        for (int center = 160; center < 192; center++) {
-            for (int sign : new int[]{-1, 1}) {
-                ShaftMaze maze = maze(center, List.of(new ShaftMaze.Box(center, sign)));
-                TreeCheck.assertOneTree(edges(segments(maze, 4, 18)));
+        for (float bias : BIASES) {
+            for (int center = 160; center < 192; center++) {
+                for (int sign : new int[]{-1, 1}) {
+                    ShaftMaze maze = maze(center, List.of(new ShaftMaze.Box(center, sign)), bias);
+                    int nodes = TreeCheck.assertOneTree(edges(segments(maze, 4, 18)));
+                    long patchNodes = edges(segments(maze, 4, 18)).stream()
+                            .flatMap(edge -> Stream.of(edge.a(), edge.b()))
+                            .filter(MazeNode.Patch.class::isInstance)
+                            .distinct()
+                            .count();
+                    assertEquals(49, patchNodes, "The tree misses a patch node at bias " + bias);
+                    assertTrue(nodes > patchNodes);
+                }
             }
         }
     }
@@ -85,7 +144,13 @@ class ShaftMazeTest {
     @Test
     void closeBoxesShareOneJunctionSegment() {
         List<ShaftMaze.Box> boxes = List.of(new ShaftMaze.Box(184, 1), new ShaftMaze.Box(215, -1), new ShaftMaze.Box(246, 1));
-        ShaftMaze maze = maze(11, boxes);
+        for (float bias : BIASES) {
+            closeBoxesShareOneJunctionSegment(boxes, bias);
+        }
+    }
+
+    private void closeBoxesShareOneJunctionSegment(List<ShaftMaze.Box> boxes, float bias) {
+        ShaftMaze maze = maze(11, boxes, bias);
         ShaftMaze.Segment segment = maze.segmentAt(12);
         assertEquals(2, segment.boxes().size());
         assertEquals(segment.edges(), maze.segmentAt(segment.firstChunk()).edges());

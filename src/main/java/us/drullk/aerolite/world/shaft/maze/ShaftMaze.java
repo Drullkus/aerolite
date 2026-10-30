@@ -15,6 +15,7 @@ import java.util.stream.IntStream;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 public final class ShaftMaze {
 
@@ -30,15 +31,21 @@ public final class ShaftMaze {
     private final PositionalRandomFactory random;
     private final int minChunk;
     private final int maxChunk;
+    private final float bias;
 
-    /** A shaft from the chunk {@code minChunk} to the chunk {@code maxChunk}, both included. */
-    ShaftMaze(Ring ring, MazeEdges mazeEdges, BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk) {
+    /**
+     * A shaft from the chunk {@code minChunk} to the chunk {@code maxChunk}, both included.
+     *
+     * @param bias the axis edge weight of the maze sampler
+     */
+    ShaftMaze(Ring ring, MazeEdges mazeEdges, BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk, float bias) {
         this.ring = ring;
         this.mazeEdges = mazeEdges;
         this.boxes = boxes;
         this.random = random;
         this.minChunk = minChunk;
         this.maxChunk = maxChunk;
+        this.bias = bias;
     }
 
     public int minChunk() {
@@ -47,6 +54,10 @@ public final class ShaftMaze {
 
     public int maxChunk() {
         return this.maxChunk;
+    }
+
+    public float bias() {
+        return this.bias;
     }
 
     /** How the 7x7 patch of a box sits on the shaft. */
@@ -177,7 +188,7 @@ public final class ShaftMaze {
         if ((chunk & 1) != 0 && this.inRange(chunk + 1)) {
             right = graph.addVirtual(rulings[rulings.length - 1]);
         }
-        int[] parent = graph.graph.sampleTree(this.random.at(PLAIN, chunk, 0));
+        int[] parent = graph.graph.sampleTree(this.random.at(PLAIN, chunk, 0), this.bias);
         int leftNode = left;
         List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> this.crossing(partner, virtual == leftNode ? -2 : 2));
         return new Segment(chunk, chunk, List.of(), rulings, this.mazeEdges.pruneCornerLeaves(edges));
@@ -191,16 +202,16 @@ public final class ShaftMaze {
                 .toArray();
         RulingGraph graph = new RulingGraph(this.ring, rulings);
         for (Box box : members) {
-            int patch = graph.addPatch(box.center());
+            int patch = graph.addPatch(box.center(), box.patching() == Patching.SHAFT);
             int before = this.lastRulingBefore(box);
             int after = this.firstRulingAfter(box);
             for (int k = -2; k <= 2; k++) {
                 int v = this.crossingNode(box, k);
                 if (graph.has(before)) {
-                    graph.graph.addEdge(this.patchNode(graph, box, patch, -3, k), graph.node(before, v));
+                    graph.graph.addEdge(this.patchNode(graph, box, patch, -3, k), graph.node(before, v), true);
                 }
                 if (graph.has(after)) {
-                    graph.graph.addEdge(this.patchNode(graph, box, patch, 3, k), graph.node(after, v));
+                    graph.graph.addEdge(this.patchNode(graph, box, patch, 3, k), graph.node(after, v), true);
                 }
             }
         }
@@ -208,7 +219,7 @@ public final class ShaftMaze {
         if ((hi & 1) != 0 && this.inRange(hi + 1)) {
             graph.addVirtual(rulings[rulings.length - 1]);
         }
-        int[] parent = graph.graph.sampleTree(this.random.at(JUNCTION, lo, 0));
+        int[] parent = graph.graph.sampleTree(this.random.at(JUNCTION, lo, 0), this.bias);
         List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> this.crossing(partner, virtual == left ? -2 : 2));
         return new Segment(lo, hi, List.copyOf(members), rulings, this.mazeEdges.pruneCornerLeaves(edges));
     }

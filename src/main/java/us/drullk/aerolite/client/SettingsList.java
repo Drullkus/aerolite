@@ -39,16 +39,22 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         this.addEntry(new HeaderEntry(new StringWidget(ROW_WIDTH, this.minecraft.font.lineHeight, title, this.minecraft.font)));
     }
 
-    /** Adds a row of one full width widget or two half width widgets. The row sets the widget widths. */
+    /** Adds a row of one to three widgets of equal width. The row sets the widget widths. */
     public void addRow(AbstractWidget... widgets) {
-        if (widgets.length != 1 && widgets.length != 2) {
-            throw new IllegalArgumentException("A row holds one or two widgets, not " + widgets.length);
+        if (widgets.length < 1 || widgets.length > 3) {
+            throw new IllegalArgumentException("A row holds one to three widgets, not " + widgets.length);
         }
-        int width = widgets.length == 1 ? ROW_WIDTH : HALF_WIDTH;
+        int width = (ROW_WIDTH - (widgets.length - 1) * ROW_SPACING) / widgets.length;
         for (AbstractWidget widget : widgets) {
             widget.setWidth(width);
         }
         this.addEntry(new RowEntry(List.of(widgets)));
+    }
+
+    /** Removes every entry. */
+    public void clear() {
+        this.setFocused(null);
+        this.clearEntries();
     }
 
     @Override
