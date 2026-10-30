@@ -17,10 +17,16 @@ tree per segment. Three layouts join the segments:
 - connector: tree segments and connector segments alternate. A connector
   touches both neighbors through two virtual nodes.
 
+The bias P sets the Origin Shift step. The walker picks the axis class with
+chance P and the ring class with chance 1 - P. Then it picks a uniform
+neighbor in that class. An empty class falls back to the other class.
+
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_44feb929-a98e-4826-8aa2-5d56973d077a.md
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
+Written by Claude Code; conversation transcript:
+llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md
 """
 
 import argparse
@@ -33,6 +39,14 @@ RING = 24
 BLOCKS_AROUND = 2 * RING
 FACE_NODES = 6
 NODES_PER_CHUNK = 8
+DEFAULT_BIAS = 0.5
+CLOSEUP_CHUNKS = 6
+CLOSEUP_SCALE = 10
+
+# An axis edge joins two rulings. An edge to a virtual node is an axis edge.
+AXIS = "axis"
+# A ring edge joins two neighbor nodes of one ruling.
+RING_EDGE = "ring"
 
 
 def is_corner(v):
@@ -52,18 +66,28 @@ def ring_offset(block):
 
 
 class Graph:
-    """Undirected graph with adjacency lists that keep insertion sequence."""
+    """Undirected graph with adjacency lists that keep insertion sequence.
+
+    adj holds every neighbor. axis and ring hold the neighbors of one edge class.
+    """
 
     def __init__(self):
         self.adj = []
+        self.axis = []
+        self.ring = []
 
     def add_node(self):
         self.adj.append([])
+        self.axis.append([])
+        self.ring.append([])
         return len(self.adj) - 1
 
-    def add_edge(self, a, b):
+    def add_edge(self, a, b, kind):
         self.adj[a].append(b)
         self.adj[b].append(a)
+        side = self.axis if kind == AXIS else self.ring
+        side[a].append(b)
+        side[b].append(a)
 
 
 def segment_graph(length, with_left, with_right):
@@ -74,20 +98,20 @@ def segment_graph(length, with_left, with_right):
     for u in range(length):
         for v in range(RING):
             node = u * RING + v
-            g.add_edge(node, u * RING + (v + 1) % RING)
+            g.add_edge(node, u * RING + (v + 1) % RING, RING_EDGE)
             if u + 1 < length and not is_corner(v):
-                g.add_edge(node, (u + 1) * RING + v)
+                g.add_edge(node, (u + 1) * RING + v, AXIS)
     left = right = -1
     if with_left:
         left = g.add_node()
         for v in range(RING):
             if not is_corner(v):
-                g.add_edge(left, v)
+                g.add_edge(left, v, AXIS)
     if with_right:
         right = g.add_node()
         for v in range(RING):
             if not is_corner(v):
-                g.add_edge(right, (length - 1) * RING + v)
+                g.add_edge(right, (length - 1) * RING + v, AXIS)
     return g, left, right
 
 
@@ -104,11 +128,17 @@ def bfs_tree(g, root):
     return parent
 
 
-def origin_shift(g, rng, steps):
+def biased_step(g, rng, node, bias):
+    """Pick the axis class with chance bias, else the ring class, then a uniform neighbor."""
+    first, other = (g.axis, g.ring) if rng.random() < bias else (g.ring, g.axis)
+    return rng.choice(first[node] or other[node])
+
+
+def origin_shift(g, rng, steps, bias):
     root = rng.randrange(len(g.adj))
     parent = bfs_tree(g, root)
     for _ in range(steps):
-        nxt = rng.choice(g.adj[root])
+        nxt = biased_step(g, rng, root, bias)
         parent[root] = nxt
         root = nxt
         parent[root] = -1
@@ -143,10 +173,26 @@ def prune_corner_leaves(edges, is_corner_node):
             if not (is_corner_node(a) and degree[a] == 1) and not (is_corner_node(b) and degree[b] == 1)]
 
 
-def sample(g, rng, sampler, steps_per_node):
+def sample(g, rng, sampler, steps_per_node, bias):
+    """Wilson's algorithm ignores the bias. It stays the unbiased reference."""
     if sampler == "wilson":
         return wilson(g, rng)
-    return origin_shift(g, rng, steps_per_node * len(g.adj))
+    return origin_shift(g, rng, steps_per_node * len(g.adj), bias)
+
+
+def bias_value(text):
+    """Parse a bias from 0 to 1 on the command line."""
+    p = float(text)
+    if not 0.0 <= p <= 1.0:
+        raise argparse.ArgumentTypeError("the bias must be from 0 to 1")
+    return p
+
+
+def bias_suffix(sampler, bias):
+    """File name suffix. The default bias and Wilson's algorithm get none."""
+    if sampler == "wilson" or bias == DEFAULT_BIAS:
+        return ""
+    return f"_bias{bias:g}"
 
 
 class Segment:
@@ -159,11 +205,11 @@ class Segment:
         self.right_cross = []
 
 
-def build_segment(kind, length, rng, sampler, steps_per_node):
+def build_segment(kind, length, rng, sampler, steps_per_node, bias):
     with_left = kind == "connector"
     with_right = kind in ("connector", "forest")
     g, left, right = segment_graph(length, with_left, with_right)
-    parent = sample(g, rng, sampler, steps_per_node)
+    parent = sample(g, rng, sampler, steps_per_node, bias)
     seg = Segment(length)
     real = length * RING
     for node in range(len(g.adj)):
@@ -193,11 +239,11 @@ def segment_kind(layout, index):
     return layout
 
 
-def build_layout(layout, seed, segments, length, sampler, steps_per_node, first_index=0):
+def build_layout(layout, seed, segments, length, sampler, steps_per_node, bias, first_index=0):
     out = []
     for k in range(first_index, first_index + segments):
         rng = seg_rng(seed, layout, k)
-        out.append(build_segment(segment_kind(layout, k), length, rng, sampler, steps_per_node))
+        out.append(build_segment(segment_kind(layout, k), length, rng, sampler, steps_per_node, bias))
     return out
 
 
@@ -296,7 +342,8 @@ def corner_pass_fraction(seg):
     return len(present) / (seg.length * RING // FACE_NODES)
 
 
-def stats(seed, length, count):
+def stats(seed, length, count, bias):
+    print(f"bias {bias:g}. Wilson's algorithm ignores the bias.")
     print("layout      sampler      steps/node  dead ends  corner pass  left cross  right cross")
     runs = [("wilson", 0), ("originshift", 1), ("originshift", 4), ("originshift", 16), ("originshift", 64)]
     for kind in ("tree", "connector", "forest"):
@@ -307,7 +354,7 @@ def stats(seed, length, count):
             rights = []
             for k in range(count):
                 rng = seg_rng(seed, f"stats-{kind}-{sampler}-{spn}", k)
-                seg = build_segment(kind, length, rng, sampler, spn)
+                seg = build_segment(kind, length, rng, sampler, spn, bias)
                 ends.append(dead_end_fraction(seg))
                 passes.append(corner_pass_fraction(seg))
                 lefts.append(len(seg.left_cross))
@@ -315,7 +362,7 @@ def stats(seed, length, count):
             print(f"{kind:<11} {sampler:<12} {spn:>10}  {sum(ends)/count:>9.3f}  {sum(passes)/count:>11.3f}  {sum(lefts)/count:>10.2f}  {sum(rights)/count:>11.2f}")
 
 
-def svg_graph_view(path, seed, length, sampler, steps_per_node):
+def svg_graph_view(path, seed, length, sampler, steps_per_node, bias):
     """Draw three segments of the oneroot and connector layouts as node graphs."""
     cell = 13
     pad = 30
@@ -367,8 +414,8 @@ def svg_graph_view(path, seed, length, sampler, steps_per_node):
                 out.append(f'<text x="{cx}" y="{cy + 4}" text-anchor="middle">{label}</text>')
             out.append(f'<text x="{pad + seg_w + seg_w / 2}" y="{oy + pad + RING * cell + 20}" text-anchor="middle">connector O(k)</text>')
 
-    oneroot = build_layout("oneroot", seed, 3, length, sampler, steps_per_node)
-    connector = build_layout("connector", seed, 3, length, sampler, steps_per_node)
+    oneroot = build_layout("oneroot", seed, 3, length, sampler, steps_per_node, bias)
+    connector = build_layout("connector", seed, 3, length, sampler, steps_per_node, bias)
     draw_panel("oneroot layout: tree, tree, tree. One crossing per boundary. Big dots are corner nodes.", oneroot, 0, False)
     draw_panel("connector layout: tree E(0), connector O(1), tree E(2). Many crossings per boundary.", connector, panel_h, False)
     draw_panel("contracted view of O(1): each tree neighbor is one virtual node.", connector, 2 * panel_h, True)
@@ -388,21 +435,27 @@ def main():
     ap.add_argument("--length", type=int, default=NODES_PER_CHUNK, help="rulings per segment")
     ap.add_argument("--sampler", choices=("originshift", "wilson"), default="originshift")
     ap.add_argument("--steps-per-node", type=int, default=16)
+    ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="chance of the axis class at each Origin Shift step")
     ap.add_argument("--scale", type=int, default=4, help="pixels per block")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "images"))
     ap.add_argument("--stats", action="store_true", help="print sampler statistics and exit")
     args = ap.parse_args()
     if args.stats:
-        stats(args.seed, args.length, 200)
+        stats(args.seed, args.length, 200, args.bias)
         return
-    os.makedirs(args.out, exist_ok=True)
+    suffix = bias_suffix(args.sampler, args.bias)
+    closeup = os.path.join(args.out, "closeup")
+    os.makedirs(closeup, exist_ok=True)
     for layout in ("oneroot", "forest", "connector"):
-        segs = build_layout(layout, args.seed, args.chunks, args.length, args.sampler, args.steps_per_node)
-        name = f"band_{layout}_{args.sampler}.png"
+        segs = build_layout(layout, args.seed, args.chunks, args.length, args.sampler, args.steps_per_node, args.bias)
+        name = f"band_{layout}_{args.sampler}{suffix}.png"
         render_band(paint_band(segs), os.path.join(args.out, name), args.scale)
         print("wrote", name)
-    svg_graph_view(os.path.join(args.out, "graph_view.svg"), args.seed, args.length, args.sampler, args.steps_per_node)
-    print("wrote graph_view.svg")
+        render_band(paint_band(segs[:CLOSEUP_CHUNKS]), os.path.join(closeup, name), CLOSEUP_SCALE)
+        print("wrote", os.path.join("closeup", name))
+    name = f"graph_view{suffix}.svg"
+    svg_graph_view(os.path.join(args.out, name), args.seed, args.length, args.sampler, args.steps_per_node, args.bias)
+    print("wrote", name)
 
 
 if __name__ == "__main__":

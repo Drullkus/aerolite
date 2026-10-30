@@ -15,6 +15,25 @@ This folder holds the standalone maze prototype for the shaft surface. It needs 
 - Wilson's algorithm is the reference sampler. Both converge to the uniform spanning tree.
 - A virtual node touches the interior nodes of the facing ruling, never its corners.
 
+## Bias
+
+The option `--bias P` sets the bias of Origin Shift. P is a value from 0 to 1. The default is 0.5.
+
+- An axis edge joins two rulings, along the shaft axis.
+- A ring edge joins two neighbor nodes of one ruling.
+- An edge to a virtual node is an axis edge.
+- At each Origin Shift step, the walker picks the axis class with chance P and the ring class with chance 1 - P.
+- Then the walker picks a uniform neighbor inside the chosen class.
+- When the chosen class has no edge at the walker, the walker falls back to the other class. A corner node has no axis edge.
+- A bias above 0.5 favors maze paths along the shaft. A bias below 0.5 favors maze paths around the shaft.
+- The breadth-first start tree does not change with the bias.
+- Wilson's algorithm ignores the bias. It stays the unbiased reference.
+- In `junction.py`, a patch crossing is an axis edge.
+- A patch edge along the shaft axis is an axis edge. A patch edge across the shaft axis is a ring edge.
+- On a column, the axis is Y.
+- At P = 0.5, a node with equal axis and ring degree picks a uniform neighbor.
+- A node on the end ruling of a segment with no virtual node has one axis edge and two ring edges. At P = 0.5 it takes its axis edge with chance 1/2, not 1/3.
+
 ## Layouts
 
 | Layout | Segments | Boundary |
@@ -52,16 +71,40 @@ Render with the reference sampler:
 python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --sampler wilson
 ```
 
+Render the three layouts with a bias toward maze paths around the shaft:
+
+```bash
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --bias 0.1
+```
+
+Render the three layouts with a bias toward maze paths along the shaft:
+
+```bash
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --bias 0.9
+```
+
 Print the dead-end fraction, the share of corners that carry a crossing, and the crossing counts per sampler and step count:
 
 ```bash
 python3 prototypes/maze/originshift.py --stats
 ```
 
+Print the same statistics at one bias:
+
+```bash
+python3 prototypes/maze/originshift.py --stats --bias 0.9
+```
+
 Render one junction from both sides and confirm that the shaft is one tree:
 
 ```bash
 python3 prototypes/maze/junction.py --seed 1 --cx 203 --cy 70
+```
+
+Render the same junction at one bias:
+
+```bash
+python3 prototypes/maze/junction.py --seed 1 --cx 203 --cy 70 --bias 0.9
 ```
 
 Check that close boxes in one junction segment keep the shaft one tree:
@@ -82,6 +125,14 @@ Render the unwrapped surface of one segmented column:
 python3 prototypes/maze/junction.py --column-band
 ```
 
+Render the same column at one bias:
+
+```bash
+python3 prototypes/maze/junction.py --column-band --bias 0.9
+```
+
+Every scene of `junction.py` accepts `--bias P`. This includes `--cluster-stats`, `--column-stats` and `--cut-stats`.
+
 Measure the stranded components of the cut model:
 
 ```bash
@@ -93,7 +144,12 @@ python3 prototypes/maze/junction.py --cut-stats --count 40
 The images are in `images/`.
 
 - `band_<layout>_<sampler>.png` is the unwrapped surface. One block is 4 pixels. The top strip alternates color per chunk. The lighter rows are the four corners of the shaft.
-- `closeup/` holds six chunks at 10 pixels per block.
+- `closeup/` holds the first six chunks of each band at 10 pixels per block. The render of the bands writes them.
 - `graph_view.svg` shows three segments of the `oneroot` and `connector` layouts as node graphs, plus the contracted view of one connector. Big dots are corner nodes.
 - `column_band.png` is the unwrapped surface of one segmented column from the bottom build limit to the top build limit. The junction boxes have a blue tint.
 - `junction_front_<role>_patch.png` and `junction_back_<role>_patch.png` are isometric views of one junction. The role names the patch that faces the viewer. Raised blocks are maze walls. Recessed blocks are maze paths. The junction box has a blue tint.
+- A bias other than 0.5 adds `_bias<P>` to the file name, for example `band_connector_originshift_bias0.9.png`, `closeup/band_connector_originshift_bias0.9.png`, `graph_view_bias0.9.svg`, `column_band_bias0.9.png` and `junction_back_shaft_patch_bias0.9.png`.
+- A Wilson render gets no bias suffix, because Wilson's algorithm ignores the bias.
+- The folder holds the bands, closeups and graph views for P = 0.1, 0.25, 0.5, 0.75 and 0.9 with seed 1 and 24 chunks.
+- The folder holds the junction scene with seed 1 at X 203 and Y 70, and the column band, for P = 0.1, 0.5 and 0.9.
+- `seed3/` holds one junction with seed 3, rendered before the bias option existed.
