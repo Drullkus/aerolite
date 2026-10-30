@@ -290,7 +290,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The weight slider runs from 0 to 16. The last positive weight of a dimension does not go below 1.
 - The maze bias slider runs from 5% to 95% in steps of 5%.
 - The maze bias label says "ringwise" below 50%, "uniform" at 50% and "lengthwise" above 50%.
-- Each variation has a row with three block fields: the interior block, the maze wall block and the maze path block.
+- Each variation has a row with three block fields. From left to right they are the maze wall block, the maze path block and the interior block.
 - In the menu, a text row above the block fields shows the label of each field. A block field has no tooltip.
 - A block field reads a block id or a block state string, such as `oxidized_copper` or `oak_log[axis=x]`.
 - Bad text gives the block field a red border. The field keeps its last good block.
@@ -326,6 +326,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - After the dimensions, the panel has a combo of the dimensions to add and an Add button.
 - When no dimension is left to add, the combo and the Add button are off. The combo reads "All dimensions configured".
 - The panel shows the label of each block field left of the field. A block field has no tooltip.
+- The panel shows the block fields in the sequence of the menu, from top to bottom.
 - The dropdown of a panel block field is a popup over the panel. It moves no other widget.
 - The popup shows at most eight blocks with their item icons. It scrolls when the space below the field is too short.
 - A click on a block in the popup sets the field and the variation.

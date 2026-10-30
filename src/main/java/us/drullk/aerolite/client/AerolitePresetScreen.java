@@ -218,17 +218,17 @@ public class AerolitePresetScreen extends Screen {
         list.addRow(weight[0], bias);
 
         list.addLabels(
-                Component.translatable("createWorld.customize.aerolite.interior_block"),
                 Component.translatable("createWorld.customize.aerolite.wall_block"),
-                Component.translatable("createWorld.customize.aerolite.path_block")
+                Component.translatable("createWorld.customize.aerolite.path_block"),
+                Component.translatable("createWorld.customize.aerolite.interior_block")
         );
         list.addRow(
-                this.blockField(variation.interior(), "createWorld.customize.aerolite.interior_block",
-                        state -> this.editVariation(dimension, index, current -> current.withInterior(state))),
                 this.blockField(variation.wall(), "createWorld.customize.aerolite.wall_block",
                         state -> this.editVariation(dimension, index, current -> current.withWall(state))),
                 this.blockField(variation.path(), "createWorld.customize.aerolite.path_block",
-                        state -> this.editVariation(dimension, index, current -> current.withPath(state)))
+                        state -> this.editVariation(dimension, index, current -> current.withPath(state))),
+                this.blockField(variation.interior(), "createWorld.customize.aerolite.interior_block",
+                        state -> this.editVariation(dimension, index, current -> current.withInterior(state)))
         );
 
         Button remove = Button.builder(Component.translatable("createWorld.customize.aerolite.remove_variation"), button -> {
