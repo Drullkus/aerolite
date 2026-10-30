@@ -1,7 +1,5 @@
 package us.drullk.aerolite.client.preview;
 
-import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
@@ -25,11 +23,15 @@ import net.minecraft.world.level.material.FluidState;
 import net.neoforged.neoforge.client.model.lighting.QuadLighter;
 
 import javax.annotation.Nullable;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The blocks of the preview region for the block renderer. Every block has full light. One thread reads it.
+ * The blocks of the preview region for the block renderer. Every block has full light.
+ * The bake threads read it in parallel. A chunk that is not painted yet reads as air.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
 
@@ -40,11 +42,11 @@ final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
     private final boolean constantAmbientLight;
     private final BiomeSource biomeSource;
     private final Climate.Sampler sampler;
-    private final Long2ObjectMap<Holder<Biome>> biomes = new Long2ObjectOpenHashMap<>();
+    private final Map<Long, Holder<Biome>> biomes = new ConcurrentHashMap<>();
     private final LevelLightEngine lightEngine;
 
     /**
-     * @param chunks the chunks from {@code -radius} to {@code radius}, with the X index first
+     * @param chunks the chunks from {@code -radius} to {@code radius}, with the X index first; the paint thread fills it
      */
     PreviewBlockGetter(ProtoChunk[] chunks, int radius, int minY, int height, boolean constantAmbientLight, BiomeSource biomeSource, Climate.Sampler sampler) {
         this.chunks = chunks;
@@ -69,7 +71,8 @@ final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
                 || pos.getY() < this.minY || pos.getY() >= this.minY + this.height) {
             return Blocks.AIR.defaultBlockState();
         }
-        return this.chunks[index(chunkX, chunkZ, this.radius)].getBlockState(pos);
+        ProtoChunk chunk = this.chunks[index(chunkX, chunkZ, this.radius)];
+        return chunk == null ? Blocks.AIR.defaultBlockState() : chunk.getBlockState(pos);
     }
 
     @Override

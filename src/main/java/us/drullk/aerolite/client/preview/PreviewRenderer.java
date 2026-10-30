@@ -2,7 +2,6 @@ package us.drullk.aerolite.client.preview;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.GlConst;
-import com.mojang.blaze3d.shaders.FogShape;
 import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
@@ -17,7 +16,6 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.math.Axis;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
-import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -31,18 +29,21 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 import us.drullk.aerolite.Aerolite;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
- * Draws the baked sections of the preview, with the sky, the fog, a floor grid and the region outline.
- * The fog covers the blocks only.
- * The model space has the region center at the origin, so the fog grows from the center as it does around a player.
+ * Draws the baked sections of the preview, with the sky, a floor grid and the region outline.
+ * Each baked chunk shows as soon as it arrives. The first chunk of a new generation drops the drawn chunks.
+ * An outline edge draws translucent when a pixel of it is in front of a block. Else it draws opaque.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 final class PreviewRenderer {
 
@@ -51,13 +52,17 @@ final class PreviewRenderer {
     private static final int LIGHTMAP_SIZE = 16;
     private static final int GRID_COLOR = 0x80A0A0A0;
     private static final int OUTLINE_COLOR = 0xFFFFFFFF;
+    private static final int OUTLINE_COVER_COLOR = 0x40FFFFFF;
     private static final float SKY_NEAR = 1;
     private static final float SKY_FAR = 1000;
+    private static final int EDGES = 12;
+    private static final int MAX_EDGE_SAMPLES = 4096;
+    private static final double RAY_START = 1.0E-3;
 
     private record SectionBuffer(BlockPos origin, RenderType layer, VertexBuffer buffer) {
     }
 
-    /** The region and backdrop of one finished generation. */
+    /** The region and backdrop of the drawn generation. */
     private record Scene(PreviewDimension dimension, int radius, Holder<Biome> centerBiome) {
 
         float centerX() {
@@ -71,13 +76,29 @@ final class PreviewRenderer {
         float centerZ() {
             return 8;
         }
+
+        int size() {
+            return 2 * this.radius + 1;
+        }
+
+        int sections() {
+            return (this.dimension.maxY() - this.dimension.minY()) >> 4;
+        }
     }
 
     private final List<SectionBuffer> active = new ArrayList<>();
-    private final List<SectionBuffer> pending = new ArrayList<>();
-    private long pendingGeneration = -1;
+    private long activeGeneration = -1;
     @Nullable
     private Scene scene;
+    /** The solid bits of each section of the drawn chunks, by chunk grid index and then section index. */
+    private long[][] solids = new long[0][];
+    private int solidsVersion;
+    private final boolean[] coverEdges = new boolean[EDGES];
+    private final Matrix4f coverView = new Matrix4f().zero();
+    private final Matrix4f coverProjection = new Matrix4f().zero();
+    private int coverVersion = -1;
+    private int coverWidth;
+    private int coverHeight;
     private final DynamicTexture lightmap;
 
     PreviewRenderer() {
@@ -92,36 +113,54 @@ final class PreviewRenderer {
         return this.active.size();
     }
 
-    /** Uploads the meshes of the builder. A finished generation replaces the drawn one. */
+    /** Uploads each baked chunk of the builder. The first chunk of a newer generation replaces the drawn chunks. */
     void drain(PreviewBuilder builder) {
         PreviewBuilder.Output output;
         while ((output = builder.poll()) != null) {
             if (output.generation() < builder.latestGeneration()) {
-                if (output instanceof PreviewBuilder.Baked baked) {
-                    baked.free();
+                if (output instanceof PreviewBuilder.ChunkReady ready) {
+                    ready.free();
                 }
                 continue;
             }
-            if (output.generation() != this.pendingGeneration) {
-                free(this.pending);
-                this.pendingGeneration = output.generation();
+            if (output.generation() != this.activeGeneration) {
+                this.start(output.generation(), output.region());
             }
             switch (output) {
-                case PreviewBuilder.Baked baked -> {
-                    VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
-                    buffer.bind();
-                    buffer.upload(baked.mesh());
-                    VertexBuffer.unbind();
-                    baked.buffer().close();
-                    this.pending.add(new SectionBuffer(baked.origin(), baked.layer(), buffer));
-                }
+                case PreviewBuilder.ChunkReady ready -> this.upload(ready);
                 case PreviewBuilder.Complete complete -> {
-                    free(this.active);
-                    this.active.addAll(this.pending);
-                    this.pending.clear();
-                    this.scene = new Scene(complete.dimension(), complete.radius(), complete.centerBiome());
+                    // Every chunk of the generation arrived before this message.
                 }
             }
+        }
+    }
+
+    private void start(long generation, PreviewBuilder.Region region) {
+        free(this.active);
+        this.activeGeneration = generation;
+        Scene scene = new Scene(region.dimension(), region.radius(), region.centerBiome());
+        this.scene = scene;
+        this.solids = new long[scene.size() * scene.size() * scene.sections()][];
+        this.solidsVersion++;
+    }
+
+    private void upload(PreviewBuilder.ChunkReady ready) {
+        for (PreviewBuilder.Baked baked : ready.meshes()) {
+            VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
+            buffer.bind();
+            buffer.upload(baked.mesh());
+            VertexBuffer.unbind();
+            baked.buffer().close();
+            this.active.add(new SectionBuffer(baked.origin(), baked.layer(), buffer));
+        }
+        Scene scene = this.scene;
+        if (scene != null) {
+            int sections = scene.sections();
+            int base = PreviewBlockGetter.index(ready.pos().x, ready.pos().z, scene.radius()) * sections;
+            for (int section = 0; section < Math.min(sections, ready.solids().length); section++) {
+                this.solids[base + section] = ready.solids()[section];
+            }
+            this.solidsVersion++;
         }
     }
 
@@ -144,9 +183,7 @@ final class PreviewRenderer {
         }
         DimensionSpecialEffects effects = DimensionSpecialEffects.forType(scene.dimension().type());
         Biome biome = scene.centerBiome().value();
-        Vec3 sky = Vec3.fromRGB24(biome.getSkyColor());
-        Vec3 fog = fogColor(effects, biome, sky, scene.radius());
-        Vec3 clear = effects.skyType() == DimensionSpecialEffects.SkyType.NORMAL ? sky : fog;
+        Vec3 clear = Vec3.fromRGB24(effects.skyType() == DimensionSpecialEffects.SkyType.NORMAL ? biome.getSkyColor() : biome.getFogColor());
         RenderSystem.clearColor((float) clear.x, (float) clear.y, (float) clear.z, 1);
         RenderSystem.clear(GlConst.GL_COLOR_BUFFER_BIT | GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
 
@@ -170,55 +207,19 @@ final class PreviewRenderer {
         RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
         modelView.set(view);
         RenderSystem.applyModelViewMatrix();
-        this.setupFog(effects, scene, fog);
+        // A fog that a world left in the render system must not tint the blocks.
+        RenderSystem.setShaderFogStart(Float.MAX_VALUE);
 
         for (RenderType layer : RenderType.chunkBufferLayers()) {
             this.renderLayer(layer, scene, view, projection);
         }
-        // The grid and the outline stay visible through the fog.
-        FogRenderer.setupNoFog();
+        this.updateCoverEdges(scene, camera.position(), view, projection, target.width, target.height);
         this.renderLines(scene);
 
         modelView.popMatrix();
         RenderSystem.applyModelViewMatrix();
         RenderSystem.setProjectionMatrix(oldProjection, oldSorting);
         RenderSystem.clear(GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
-    }
-
-    // [VANILLACOPY] FogRenderer#setupColor, open air branch: noon brightness, no sunrise, no rain, no void darkness, the center biome only
-    private static Vec3 fogColor(DimensionSpecialEffects effects, Biome biome, Vec3 sky, int renderDistanceChunks) {
-        float f4 = 0.25F + 0.75F * (float) renderDistanceChunks / 32.0F;
-        f4 = 1.0F - (float) Math.pow((double) f4, 0.25);
-        float f11 = 1.0F;
-        Vec3 vec32 = effects.getBrightnessDependentFogColor(Vec3.fromRGB24(biome.getFogColor()), f11);
-        float fogRed = (float) vec32.x();
-        float fogGreen = (float) vec32.y();
-        float fogBlue = (float) vec32.z();
-        fogRed = fogRed + ((float) sky.x - fogRed) * f4;
-        fogGreen = fogGreen + ((float) sky.y - fogGreen) * f4;
-        fogBlue = fogBlue + ((float) sky.z - fogBlue) * f4;
-        return new Vec3(fogRed, fogGreen, fogBlue);
-    }
-
-    // [VANILLACOPY] FogRenderer#setupFog, terrain fog of open air: the radius is the render distance, no fluid, no mob effect, no boss fog
-    private void setupFog(DimensionSpecialEffects effects, Scene scene, Vec3 fog) {
-        float farPlaneDistance = scene.radius() * 16;
-        float start;
-        float end;
-        FogShape shape = FogShape.SPHERE;
-        if (effects.isFoggyAt(Mth.floor(scene.centerX()), Mth.floor(scene.centerZ()))) {
-            start = farPlaneDistance * 0.05F;
-            end = Math.min(farPlaneDistance, 192.0F) * 0.5F;
-        } else {
-            float f = Mth.clamp(farPlaneDistance / 10.0F, 4.0F, 64.0F);
-            start = farPlaneDistance - f;
-            end = farPlaneDistance;
-            shape = FogShape.CYLINDER;
-        }
-        RenderSystem.setShaderFogStart(start);
-        RenderSystem.setShaderFogEnd(end);
-        RenderSystem.setShaderFogShape(shape);
-        RenderSystem.setShaderFogColor((float) fog.x, (float) fog.y, (float) fog.z);
     }
 
     // [VANILLACOPY] LevelRenderer#renderSectionLayer: the section list of the preview, a white lightmap, offsets from the region center
@@ -269,27 +270,210 @@ final class PreviewRenderer {
         float min = -scene.radius() * 16 - scene.centerX();
         float max = (scene.radius() + 1) * 16 - scene.centerX();
         float bottom = scene.dimension().minY() - scene.centerY();
-        float top = scene.dimension().maxY() - scene.centerY();
         BufferBuilder lines = Tesselator.getInstance().begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
         for (float edge = min; edge <= max + 0.5F; edge += 16) {
             line(lines, edge, bottom, min, edge, bottom, max, GRID_COLOR);
             line(lines, min, bottom, edge, max, bottom, edge, GRID_COLOR);
         }
-        float[] sides = {min, max};
-        float[] levels = {bottom, top};
-        for (float side : sides) {
-            for (float other : sides) {
-                line(lines, side, bottom, other, side, top, other, OUTLINE_COLOR);
-            }
-            for (float level : levels) {
-                line(lines, min, level, side, max, level, side, OUTLINE_COLOR);
-                line(lines, side, level, min, side, level, max, OUTLINE_COLOR);
-            }
+        float[][] edges = edges(scene);
+        for (int i = 0; i < EDGES; i++) {
+            float[] edge = edges[i];
+            line(lines, edge[0], edge[1], edge[2], edge[3], edge[4], edge[5], this.coverEdges[i] ? OUTLINE_COVER_COLOR : OUTLINE_COLOR);
         }
         MeshData mesh = lines.build();
         if (mesh != null) {
             RenderType.lines().draw(mesh);
         }
+    }
+
+    /**
+     * The twelve edges of the region box in model space.
+     * Each row holds the two end points and then the two faces that meet at the edge.
+     * The faces are 0 and 1 for least and most X, 2 and 3 for Y, 4 and 5 for Z.
+     */
+    private static float[][] edges(Scene scene) {
+        float min = -scene.radius() * 16 - scene.centerX();
+        float max = (scene.radius() + 1) * 16 - scene.centerX();
+        float bottom = scene.dimension().minY() - scene.centerY();
+        float top = scene.dimension().maxY() - scene.centerY();
+        float[] sides = {min, max};
+        float[] levels = {bottom, top};
+        float[][] edges = new float[EDGES][];
+        int next = 0;
+        for (int a = 0; a < 2; a++) {
+            for (int b = 0; b < 2; b++) {
+                edges[next++] = new float[]{sides[a], bottom, sides[b], sides[a], top, sides[b], a, 4 + b};
+                edges[next++] = new float[]{min, levels[a], sides[b], max, levels[a], sides[b], 2 + a, 4 + b};
+                edges[next++] = new float[]{sides[b], levels[a], min, sides[b], levels[a], max, 2 + a, b};
+            }
+        }
+        return edges;
+    }
+
+    /**
+     * Finds the edges with a pixel in front of a block. Only an edge between two faces that face the camera qualifies.
+     * For such an edge, the test samples the edge once per pixel and marches the view ray from each sample through the region.
+     * The march steps through sections first and through blocks only in a section with a solid block.
+     * The result stays until the view, the window size or the drawn chunks change.
+     */
+    private void updateCoverEdges(Scene scene, Vector3f camera, Matrix4f view, Matrix4f projection, int width, int height) {
+        if (this.coverVersion == this.solidsVersion && this.coverWidth == width && this.coverHeight == height
+                && this.coverView.equals(view) && this.coverProjection.equals(projection)) {
+            return;
+        }
+        this.coverVersion = this.solidsVersion;
+        this.coverWidth = width;
+        this.coverHeight = height;
+        this.coverView.set(view);
+        this.coverProjection.set(projection);
+        float min = -scene.radius() * 16 - scene.centerX();
+        float max = (scene.radius() + 1) * 16 - scene.centerX();
+        float bottom = scene.dimension().minY() - scene.centerY();
+        float top = scene.dimension().maxY() - scene.centerY();
+        boolean[] frontFaces = {camera.x < min, camera.x > max, camera.y < bottom, camera.y > top, camera.z < min, camera.z > max};
+        Matrix4f viewProjection = new Matrix4f(projection).mul(view);
+        float[][] edges = edges(scene);
+        for (int i = 0; i < EDGES; i++) {
+            float[] edge = edges[i];
+            this.coverEdges[i] = frontFaces[(int) edge[6]] && frontFaces[(int) edge[7]]
+                    && this.coversBlock(scene, edge, camera, viewProjection, width, height);
+        }
+    }
+
+    private boolean coversBlock(Scene scene, float[] edge, Vector3f camera, Matrix4f viewProjection, int width, int height) {
+        Vector4f start = viewProjection.transform(new Vector4f(edge[0], edge[1], edge[2], 1));
+        Vector4f end = viewProjection.transform(new Vector4f(edge[3], edge[4], edge[5], 1));
+        double samples;
+        if (start.w > 0 && end.w > 0) {
+            samples = Math.hypot((start.x / start.w - end.x / end.w) * width / 2, (start.y / start.w - end.y / end.w) * height / 2);
+        } else {
+            // An end point behind the camera has no pixel, so two samples per block stand in.
+            samples = 2 * Math.sqrt(Mth.square(edge[3] - edge[0]) + Mth.square(edge[4] - edge[1]) + Mth.square(edge[5] - edge[2]));
+        }
+        int count = Mth.clamp((int) Math.ceil(samples) + 1, 2, MAX_EDGE_SAMPLES);
+        Vector4f clip = new Vector4f();
+        for (int i = 0; i < count; i++) {
+            float t = i / (float) (count - 1);
+            float x = Mth.lerp(t, edge[0], edge[3]);
+            float y = Mth.lerp(t, edge[1], edge[4]);
+            float z = Mth.lerp(t, edge[2], edge[5]);
+            viewProjection.transform(clip.set(x, y, z, 1));
+            if (clip.w <= 0 || Math.abs(clip.x) > clip.w || Math.abs(clip.y) > clip.w) {
+                continue;
+            }
+            double dx = x - camera.x;
+            double dy = y - camera.y;
+            double dz = z - camera.z;
+            double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (length > 0 && this.rayHitsSolid(scene, x + scene.centerX(), y + scene.centerY(), z + scene.centerZ(), dx / length, dy / length, dz / length)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Marches a ray in block space from a point on the region box until it leaves the box. */
+    private boolean rayHitsSolid(Scene scene, double originX, double originY, double originZ, double dx, double dy, double dz) {
+        int size = scene.size();
+        int sections = scene.sections();
+        double x = originX + scene.radius() * 16;
+        double y = originY - scene.dimension().minY();
+        double z = originZ + scene.radius() * 16;
+        double exit = Math.min(Math.min(exit(x, dx, size * 16), exit(y, dy, sections * 16)), exit(z, dz, size * 16));
+        double t = RAY_START;
+        if (t >= exit) {
+            return false;
+        }
+        int cellX = Mth.clamp(Mth.floor((x + dx * t) / 16), 0, size - 1);
+        int cellY = Mth.clamp(Mth.floor((y + dy * t) / 16), 0, sections - 1);
+        int cellZ = Mth.clamp(Mth.floor((z + dz * t) / 16), 0, size - 1);
+        double nextX = next(x, dx, cellX, 16);
+        double nextY = next(y, dy, cellY, 16);
+        double nextZ = next(z, dz, cellZ, 16);
+        double deltaX = dx == 0 ? Double.POSITIVE_INFINITY : 16 / Math.abs(dx);
+        double deltaY = dy == 0 ? Double.POSITIVE_INFINITY : 16 / Math.abs(dy);
+        double deltaZ = dz == 0 ? Double.POSITIVE_INFINITY : 16 / Math.abs(dz);
+        while (t < exit) {
+            double next = Math.min(nextX, Math.min(nextY, nextZ));
+            long[] bits = this.solids[(cellX * size + cellZ) * sections + cellY];
+            if (bits != null && hitsBlock(bits, cellX, cellY, cellZ, x, y, z, dx, dy, dz, t, Math.min(next, exit))) {
+                return true;
+            }
+            if (next == nextX) {
+                cellX += dx > 0 ? 1 : -1;
+                nextX += deltaX;
+            } else if (next == nextY) {
+                cellY += dy > 0 ? 1 : -1;
+                nextY += deltaY;
+            } else {
+                cellZ += dz > 0 ? 1 : -1;
+                nextZ += deltaZ;
+            }
+            if (cellX < 0 || cellX >= size || cellY < 0 || cellY >= sections || cellZ < 0 || cellZ >= size) {
+                return false;
+            }
+            t = next;
+        }
+        return false;
+    }
+
+    /** Marches a ray through the blocks of one section from the ray parameter {@code from} to {@code to}. */
+    private static boolean hitsBlock(long[] bits, int cellX, int cellY, int cellZ, double x, double y, double z,
+                                     double dx, double dy, double dz, double from, double to) {
+        int blockX = Mth.clamp(Mth.floor(x + dx * from), cellX * 16, cellX * 16 + 15);
+        int blockY = Mth.clamp(Mth.floor(y + dy * from), cellY * 16, cellY * 16 + 15);
+        int blockZ = Mth.clamp(Mth.floor(z + dz * from), cellZ * 16, cellZ * 16 + 15);
+        double nextX = next(x, dx, blockX, 1);
+        double nextY = next(y, dy, blockY, 1);
+        double nextZ = next(z, dz, blockZ, 1);
+        double deltaX = dx == 0 ? Double.POSITIVE_INFINITY : 1 / Math.abs(dx);
+        double deltaY = dy == 0 ? Double.POSITIVE_INFINITY : 1 / Math.abs(dy);
+        double deltaZ = dz == 0 ? Double.POSITIVE_INFINITY : 1 / Math.abs(dz);
+        double t = from;
+        while (t < to) {
+            int bit = (blockY & 15) << 8 | (blockZ & 15) << 4 | blockX & 15;
+            if ((bits[bit >> 6] >>> (bit & 63) & 1) != 0) {
+                return true;
+            }
+            double next = Math.min(nextX, Math.min(nextY, nextZ));
+            if (next == nextX) {
+                blockX += dx > 0 ? 1 : -1;
+                nextX += deltaX;
+            } else if (next == nextY) {
+                blockY += dy > 0 ? 1 : -1;
+                nextY += deltaY;
+            } else {
+                blockZ += dz > 0 ? 1 : -1;
+                nextZ += deltaZ;
+            }
+            if (blockX >> 4 != cellX || blockY >> 4 != cellY || blockZ >> 4 != cellZ) {
+                return false;
+            }
+            t = next;
+        }
+        return false;
+    }
+
+    /** The ray parameter where the ray leaves the range from 0 to {@code limit} on one axis. */
+    private static double exit(double position, double direction, double limit) {
+        if (direction > 0) {
+            return (limit - position) / direction;
+        }
+        if (direction < 0) {
+            return -position / direction;
+        }
+        return Double.POSITIVE_INFINITY;
+    }
+
+    /** The ray parameter of the next cell border on one axis. */
+    private static double next(double position, double direction, int cell, int cellSize) {
+        if (direction > 0) {
+            return ((cell + 1) * cellSize - position) / direction;
+        }
+        if (direction < 0) {
+            return (cell * cellSize - position) / direction;
+        }
+        return Double.POSITIVE_INFINITY;
     }
 
     private static void line(BufferBuilder lines, float x0, float y0, float z0, float x1, float y1, float z1, int color) {
@@ -346,12 +530,12 @@ final class PreviewRenderer {
     void close(PreviewBuilder builder) {
         PreviewBuilder.Output output;
         while ((output = builder.poll()) != null) {
-            if (output instanceof PreviewBuilder.Baked baked) {
-                baked.free();
+            if (output instanceof PreviewBuilder.ChunkReady ready) {
+                ready.free();
             }
         }
         free(this.active);
-        free(this.pending);
+        Arrays.fill(this.solids, null);
         Minecraft.getInstance().getTextureManager().release(LIGHTMAP);
     }
 

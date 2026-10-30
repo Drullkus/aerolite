@@ -25,7 +25,7 @@ Date: 2026-10-29. For a new Claude session that dispatches Opus subagents. Main 
 
 | Topic | Decision |
 |---|---|
-| Box lines | The region box edges draw only over the background. A line pixel that overlaps a block pixel, in front of it or behind it, is skipped. Mechanism: draw the edges with `glDepthRange(1, 1)` and depth function `LEQUAL`, so a fragment passes only where the depth buffer still holds the far plane. The floor grid draws with the normal depth test. |
+| Box lines | Each region box edge draws opaque. An edge with any pixel in front of a block inside the region draws at 75% translucency. The floor grid draws with the normal depth test. Corrected 2026-10-30: the depth-range draw is dropped. |
 | Fog | Removed. No fog setup, no fog color math. The sky fill stays as it is. |
 | Progressive scene | Chunks appear as they finish, in a spiral from the center chunk outward. One worker thread paints the chunks in spiral sequence. A pool of available cores minus one, at least one, bakes the sections. Baked sections hand over in spiral chunk sequence. The render thread uploads each finished chunk at once and shows it. |
 | Collapsible dimensions | In the ImGui panel every dimension under Shaft Variations is a tree node that collapses. Default open. |
@@ -40,14 +40,14 @@ Date: 2026-10-29. For a new Claude session that dispatches Opus subagents. Main 
 | Preview of a removed dimension | The preview stays on that dimension and shows the empty region: sky, grid and outline, no shafts. |
 | Menu labels | The vanilla screen shows the label of each block field in a text row above the row of fields. No tooltips. |
 | Panel labels | The ImGui panel shows the label of each block field left of the field. No tooltips. |
-| Vanilla dropdown | The vanilla screen has no combo widget. The add row is a `CycleButton` over the candidates on the left and an Add button on the right. Both are disabled with the text "All dimensions configured" when no candidate is left. The owner may ask for a different widget. |
+| Vanilla dropdown | The vanilla screen has no combo widget. The add row is a dropdown widget over the candidates on the left and an Add button on the right. The dropdown opens a list on click and closes on a pick. Both are disabled with the text "All dimensions configured" when no candidate is left. Corrected 2026-10-30: no cycle button. |
 
 ## Wave 1, package E: scene
 
 Branch `claude/preview-scene`. Files: `src/main/java/us/drullk/aerolite/client/preview/PreviewRenderer.java`, `PreviewBuilder.java`, `PreviewBlockGetter.java`. No other file. No `CLAUDE.md`, no lang.
 
 - Remove the fog: `setupFog`, `fogColor`, the `FogRenderer` and `FogShape` imports and the fog bullets of the class Javadoc. Keep the sky fill and the end sky.
-- Box edges over the background only, per the decision. The grid keeps the normal depth test.
+- Box edges per the decision: opaque, or 75% translucent when any pixel of the edge is in front of a block. The grid keeps the normal depth test.
 - Progressive build:
   - `PreviewBuilder` paints chunks in a spiral from the center chunk: `(0,0)`, then the ring at distance 1, and so on to the radius. One paint thread.
   - A bake pool of `max(1, availableProcessors - 1)` threads bakes the sections of a painted chunk. Results hand over in spiral chunk sequence: a chunk is published when all its sections are baked and every earlier chunk in the spiral is published.
