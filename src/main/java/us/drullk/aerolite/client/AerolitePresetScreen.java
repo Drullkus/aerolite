@@ -107,6 +107,11 @@ public class AerolitePresetScreen extends Screen {
                 });
         list.addRow(thresholds);
 
+        list.addHeader(Component.translatable("createWorld.customize.aerolite.clouds"));
+        list.addRow(new StepSlider(PresetSliders.CLOUD_HEIGHT_STEPS, this.sliders.cloudHeightStep(this.settings.cloudHeight()),
+                step -> Component.translatable("createWorld.customize.aerolite.cloud_height", this.sliders.cloudHeight(step)),
+                step -> this.settings = this.settings.withCloudHeight(this.sliders.cloudHeight(step))));
+
         LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
         footer.addChild(Button.builder(CommonComponents.GUI_DONE, button -> {
             AeroliteSettings chosen = this.settings;

@@ -202,7 +202,14 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 
 - The preset is in `#minecraft:normal`. It shows in the world type list without Alt.
 - The preset gives the Aerolite generator to the Overworld, the Nether and the End.
-- Each dimension keeps its vanilla dimension type. The Overworld has its sun, moon, day cycle and weather. The Overworld spans -64 to 320.
+- The Overworld uses the Aerolite dimension type `aerolite:overworld`.
+- The Aerolite dimension type is a copy of the vanilla Overworld type with the effects id `aerolite:overworld`.
+- The Nether and the End keep their vanilla dimension types.
+- The Overworld keeps its sun, moon, day cycle and weather. The Overworld spans -64 to 320.
+- The cloud height is a setting. The default is Y -32.
+- The cloud height applies to the Overworld only.
+- A packet carries the cloud height to the client on login, on respawn and on dimension change.
+- The client effects of `aerolite:overworld` put the clouds at the cloud height of the last packet.
 - Each dimension uses its own vanilla biome list. Overworld biomes in the Overworld, Nether biomes in the Nether, End biomes in the End.
 - Each dimension has the same structure: shafts, islands, bridges and center structures.
 - Each dimension uses the Aerolite generator, a subclass of the vanilla noise-based chunk generator. It carries the settings.
@@ -233,6 +240,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 | Maze path block | Cobblestone |
 | Bridge chance | 0.5 |
 | Allowed biome list | The vanilla biome list of the dimension |
+| Cloud height | Y -32 |
 
 The three shaft blocks are placeholders. The producer swaps them later.
 
@@ -241,7 +249,7 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The shaft spacing is the center distance of two neighbor horizontal shafts on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a shaft.
 - The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
-- The screen has six sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale, the maze decay threshold and the shaft erosion threshold.
+- The screen has seven sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale, the maze decay threshold, the shaft erosion threshold and the cloud height.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.
@@ -250,6 +258,8 @@ The three shaft blocks are placeholders. The producer swaps them later.
 - The erosion threshold slider runs from 5% to 100% in steps of 5%.
 - The erosion threshold stays at least 5% above the decay threshold. A slider that passes the other pushes it along, so the decay threshold tops out at 95%.
 - A save with a decay threshold at or above its erosion threshold loads with the erosion threshold raised to the decay threshold plus 5%.
+- The cloud height slider is in the section Clouds, after the section Shaft Surface.
+- The cloud height slider runs from Y -64 to Y 320 in steps of 8.
 - The other settings have no slider yet. They live in the generator settings with their defaults.
 
 ## Shafts

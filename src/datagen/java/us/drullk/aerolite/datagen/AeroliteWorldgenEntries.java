@@ -5,6 +5,8 @@ import net.minecraft.core.RegistrySetBuilder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.data.worldgen.BootstrapContext;
 import net.minecraft.data.worldgen.SurfaceRuleData;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.util.valueproviders.UniformInt;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterLists;
@@ -27,20 +29,44 @@ import us.drullk.aerolite.world.AeroliteWorldgen;
 
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 
 /**
- * The worldgen entries of the preset: the void noise settings of each dimension and the preset.
+ * The worldgen entries of the preset: the Overworld dimension type, the void noise settings of each dimension and the preset.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 @Component
 public final class AeroliteWorldgenEntries {
 
     public RegistrySetBuilder builder() {
         return new RegistrySetBuilder()
+                .add(Registries.DIMENSION_TYPE, this::dimensionTypes)
                 .add(Registries.NOISE_SETTINGS, this::noiseSettings)
                 .add(Registries.WORLD_PRESET, this::worldPresets);
+    }
+
+    private void dimensionTypes(BootstrapContext<DimensionType> context) {
+        // [VANILLACOPY] DimensionTypes#bootstrap overworld, effects id aerolite:overworld
+        context.register(AeroliteWorldgen.OVERWORLD_TYPE, new DimensionType(
+                OptionalLong.empty(),
+                true,
+                false,
+                false,
+                true,
+                1.0,
+                true,
+                false,
+                -64,
+                384,
+                384,
+                BlockTags.INFINIBURN_OVERWORLD,
+                AeroliteWorldgen.OVERWORLD_EFFECTS,
+                0.0F,
+                new DimensionType.MonsterSettings(false, true, UniformInt.of(0, 7), 0)
+        ));
     }
 
     private void noiseSettings(BootstrapContext<NoiseGeneratorSettings> context) {
@@ -76,7 +102,7 @@ public final class AeroliteWorldgenEntries {
         HolderGetter<NoiseGeneratorSettings> noiseSettings = context.lookup(Registries.NOISE_SETTINGS);
         HolderGetter<MultiNoiseBiomeSourceParameterList> parameterLists = context.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
         LevelStem overworld = new LevelStem(
-                dimensionTypes.getOrThrow(BuiltinDimensionTypes.OVERWORLD),
+                dimensionTypes.getOrThrow(AeroliteWorldgen.OVERWORLD_TYPE),
                 new AeroliteChunkGenerator(
                         MultiNoiseBiomeSource.createFromPreset(parameterLists.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)),
                         noiseSettings.getOrThrow(AeroliteWorldgen.OVERWORLD_NOISE),

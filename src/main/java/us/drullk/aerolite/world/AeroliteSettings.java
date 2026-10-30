@@ -11,6 +11,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * The settings of the preset. The player sets them in the world creation menu.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  *
  * @param minShaftSpacing the smallest center distance of two neighbor horizontal shafts on one axis
  * @param maxShaftSpacing the largest center distance of two neighbor horizontal shafts on one axis
@@ -18,6 +19,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * @param decayScale      the size of one decay region along a shaft, a power of two
  * @param decayThreshold  decay noise below the negative threshold keeps only maze walls, above it only maze paths
  * @param erosionThreshold decay noise beyond this threshold in either direction erodes shafts and junction boxes
+ * @param cloudHeight     the Y level of the clouds in the Overworld
  */
 public record AeroliteSettings(
         int minShaftSpacing,
@@ -28,7 +30,8 @@ public record AeroliteSettings(
         float erosionThreshold,
         BlockState interiorBlock,
         BlockState wallBlock,
-        BlockState pathBlock
+        BlockState pathBlock,
+        int cloudHeight
 ) {
 
     public static final int MIN_SHAFT_SPACING = 32;
@@ -37,6 +40,8 @@ public record AeroliteSettings(
     public static final int MAX_DECAY_SCALE = 1024;
     /** The smallest step from the decay threshold to the erosion threshold. */
     public static final float THRESHOLD_STEP = 0.05F;
+    public static final int MIN_CLOUD_HEIGHT = -64;
+    public static final int MAX_CLOUD_HEIGHT = 320;
 
     public static final AeroliteSettings DEFAULT = new AeroliteSettings(
             128,
@@ -47,7 +52,8 @@ public record AeroliteSettings(
             0.7F,
             Blocks.STONE.defaultBlockState(),
             Blocks.STONE_BRICKS.defaultBlockState(),
-            Blocks.COBBLESTONE.defaultBlockState()
+            Blocks.COBBLESTONE.defaultBlockState(),
+            -32
     );
 
     private static final Codec<Integer> DECAY_SCALE_CODEC = Codec.intRange(MIN_DECAY_SCALE, MAX_DECAY_SCALE).validate(scale -> Mth.isPowerOfTwo(scale)
@@ -65,7 +71,8 @@ public record AeroliteSettings(
             Codec.floatRange(THRESHOLD_STEP, 1).optionalFieldOf("erosion_threshold", DEFAULT.erosionThreshold).forGetter(AeroliteSettings::erosionThreshold),
             BlockState.CODEC.optionalFieldOf("interior_block", DEFAULT.interiorBlock).forGetter(AeroliteSettings::interiorBlock),
             BlockState.CODEC.optionalFieldOf("wall_block", DEFAULT.wallBlock).forGetter(AeroliteSettings::wallBlock),
-            BlockState.CODEC.optionalFieldOf("path_block", DEFAULT.pathBlock).forGetter(AeroliteSettings::pathBlock)
+            BlockState.CODEC.optionalFieldOf("path_block", DEFAULT.pathBlock).forGetter(AeroliteSettings::pathBlock),
+            Codec.intRange(MIN_CLOUD_HEIGHT, MAX_CLOUD_HEIGHT).optionalFieldOf("cloud_height", DEFAULT.cloudHeight).forGetter(AeroliteSettings::cloudHeight)
     ).apply(instance, AeroliteSettings::new)).validate(settings -> settings.minShaftSpacing <= settings.maxShaftSpacing
             ? DataResult.success(settings)
             : DataResult.error(() -> "Minimum shaft spacing exceeds maximum shaft spacing: " + settings.minShaftSpacing + " > " + settings.maxShaftSpacing)
@@ -83,23 +90,27 @@ public record AeroliteSettings(
     }
 
     public AeroliteSettings withShaftSpacing(int min, int max) {
-        return new AeroliteSettings(min, max, this.columnChance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+        return new AeroliteSettings(min, max, this.columnChance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock, this.cloudHeight);
     }
 
     public AeroliteSettings withColumnChance(float chance) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, chance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, chance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock, this.cloudHeight);
     }
 
     public AeroliteSettings withDecayScale(int scale) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, scale, this.decayThreshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, scale, this.decayThreshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock, this.cloudHeight);
     }
 
     public AeroliteSettings withErosionThreshold(float threshold) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, this.decayThreshold, threshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, this.decayThreshold, threshold, this.interiorBlock, this.wallBlock, this.pathBlock, this.cloudHeight);
     }
 
     public AeroliteSettings withDecayThreshold(float threshold) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, threshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock);
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, threshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock, this.cloudHeight);
+    }
+
+    public AeroliteSettings withCloudHeight(int height) {
+        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interiorBlock, this.wallBlock, this.pathBlock, height);
     }
 
 }

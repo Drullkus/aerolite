@@ -1,4 +1,6 @@
 {
+  "createWorld.customize.aerolite.cloud_height": "Cloud Height: %s",
+  "createWorld.customize.aerolite.clouds": "Clouds",
   "createWorld.customize.aerolite.column_chance": "Column Chance: %s",
   "createWorld.customize.aerolite.decay_scale": "Maze Decay Scale: %s",
   "createWorld.customize.aerolite.decay_threshold": "Maze Decay Threshold: %s",
