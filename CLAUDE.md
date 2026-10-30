@@ -350,6 +350,13 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - A view gizmo sits in the top right corner of the game view, left of the panel.
 - A drag on the view gizmo turns the camera. A click on a face, an edge or a corner turns the camera to look at it.
 - The camera pitch stays between -89 and 89 degrees. A top view and a bottom view keep a small tilt.
+- The panel, its block field popups and the view gizmo draw at one constant font scale.
+- The panel scale does not follow the GUI scale option.
+- The constant `FONT_SCALE` in `ImGuiPreviewPanel` sets the panel scale.
+- imgui-mc sets the ImGui main font scale from the GUI scale before each frame.
+- The panel sets the main font scale to `FONT_SCALE` while it draws and restores it after.
+- Each popup icon renders at the framebuffer pixel size of its row, rounded up to a multiple of 16.
+- A change of that pixel size renders the icon atlas again.
 
 ## Shafts
 

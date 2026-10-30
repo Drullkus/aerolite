@@ -3,6 +3,7 @@ package us.drullk.aerolite.client.preview.imgui;
 import foundry.imgui.api.ImGuiMCEvents;
 import foundry.veil.api.client.render.VeilRenderSystem;
 import imgui.ImGui;
+import imgui.ImGuiStyle;
 import imgui.ImGuiViewport;
 import imgui.ImVec4;
 import imgui.flag.ImGuiChildFlags;
@@ -56,6 +57,8 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoTitleBar
             | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse
             | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoDocking;
+    /** The font scale of the panel, its popups and the view gizmo. This is the one place to dial the panel scale. */
+    private static final float FONT_SCALE = 1F;
 
     private final Map<String, ImGuiBlockField> blockFields = new HashMap<>();
     private final int[] windowWidth = new int[1];
@@ -122,6 +125,21 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             return;
         }
         this.fixFramebufferScale();
+        // imgui-mc sets the main font scale from the GUI scale before each frame.
+        ImGuiStyle style = ImGui.getStyle();
+        float sharedScale = style.getFontScaleMain();
+        style.setFontScaleMain(FONT_SCALE);
+        // A size of 0 keeps the unscaled base size. The push applies the new scale.
+        ImGui.pushFont(ImGui.getFont(), 0);
+        try {
+            this.drawScreen(screen);
+        } finally {
+            ImGui.popFont();
+            style.setFontScaleMain(sharedScale);
+        }
+    }
+
+    private void drawScreen(PreviewScreen screen) {
         this.tools = screen.tools();
         if (screen != this.drawn) {
             this.drawn = screen;

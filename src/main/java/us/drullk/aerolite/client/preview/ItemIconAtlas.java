@@ -22,13 +22,16 @@ import java.util.Map;
 
 /**
  * Renders item icons on demand into one render target. The ImGui panel shows the cells of the target.
+ * A cell is a multiple of 16 pixels on a side, so each item texel covers a square of whole pixels.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_85da4419-5789-4ddd-8712-bcdaaca5bcce.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class ItemIconAtlas {
 
-    public static final int CELL = 16;
+    /** The pixel size of an item in a vanilla GUI at scale 1. */
+    private static final int ITEM_SIZE = 16;
     private static final int COLUMNS = 16;
     private static final int START_ROWS = 4;
 
@@ -41,6 +44,7 @@ public final class ItemIconAtlas {
     @Nullable
     private TextureTarget target;
     private int rows = START_ROWS;
+    private int cell = ITEM_SIZE;
 
     public ItemIconAtlas() {
     }
@@ -49,6 +53,24 @@ public final class ItemIconAtlas {
     @Nullable
     public RenderTarget target() {
         return this.target;
+    }
+
+    /**
+     * Sets the cell size to the given pixel size, rounded up to a multiple of 16. Returns the cell size in pixels.
+     * A new cell size draws every icon again at the next {@link #flush}.
+     */
+    public int requestCell(int pixels) {
+        int wanted = Math.max(1, (pixels + ITEM_SIZE - 1) / ITEM_SIZE) * ITEM_SIZE;
+        if (wanted != this.cell) {
+            this.cell = wanted;
+            if (this.target != null) {
+                this.target.destroyBuffers();
+                this.target = null;
+            }
+            this.pending.clear();
+            this.pending.addAll(this.slots.keySet());
+        }
+        return this.cell;
     }
 
     /** The cell of the item, or null until the next {@link #flush} draws it. Air has no cell. */
@@ -66,11 +88,11 @@ public final class ItemIconAtlas {
         if (this.target == null || this.pending.contains(item)) {
             return null;
         }
-        int x = slot % COLUMNS * CELL;
-        int y = slot / COLUMNS * CELL;
+        int x = slot % COLUMNS * this.cell;
+        int y = slot / COLUMNS * this.cell;
         float width = this.target.width;
         float height = this.target.height;
-        return new Cell(x / width, 1 - y / height, (x + CELL) / width, 1 - (y + CELL) / height);
+        return new Cell(x / width, 1 - y / height, (x + this.cell) / width, 1 - (y + this.cell) / height);
     }
 
     /** Draws the pending icons. Call it in a screen render, while the main render target is bound. */
@@ -87,7 +109,7 @@ public final class ItemIconAtlas {
             if (this.target != null) {
                 this.target.destroyBuffers();
             }
-            this.target = new TextureTarget(COLUMNS * CELL, this.rows * CELL, true, Minecraft.ON_OSX);
+            this.target = new TextureTarget(COLUMNS * this.cell, this.rows * this.cell, true, Minecraft.ON_OSX);
             this.target.setClearColor(0, 0, 0, 0);
             this.target.clear(Minecraft.ON_OSX);
             this.pending.clear();
@@ -99,9 +121,15 @@ public final class ItemIconAtlas {
         this.target.bindWrite(true);
         RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(0, this.target.width, this.target.height, 0, 1000, ClientHooks.getGuiFarPlane()), VertexSorting.ORTHOGRAPHIC_Z);
         GuiGraphics atlas = new GuiGraphics(minecraft, minecraft.renderBuffers().bufferSource());
+        // A uniform scale keeps the item normals, so the lighting matches a vanilla GUI.
+        float scale = this.cell / (float) ITEM_SIZE;
         for (Item item : this.pending) {
             int slot = this.slots.get(item);
-            atlas.renderItem(new ItemStack(item), slot % COLUMNS * CELL, slot / COLUMNS * CELL);
+            atlas.pose().pushPose();
+            atlas.pose().translate(slot % COLUMNS * this.cell, slot / COLUMNS * this.cell, 0);
+            atlas.pose().scale(scale, scale, scale);
+            atlas.renderItem(new ItemStack(item), 0, 0);
+            atlas.pose().popPose();
         }
         atlas.flush();
         this.pending.clear();
