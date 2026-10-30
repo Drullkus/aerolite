@@ -14,17 +14,23 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import us.drullk.aerolite.client.PresetEdits;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * One dimension that the preview can show, from the world creation context.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  *
  * @param type the dimension type; it gives the build height, as it does for the level
  */
 public record PreviewDimension(ResourceKey<Level> key, Component name, DimensionType type, BiomeSource biomeSource,
                                Holder<NoiseGeneratorSettings> noiseSettings) {
+
+    /** The Overworld, the Nether and the End come first, then the other dimensions by id. */
+    private static final List<ResourceKey<Level>> VANILLA_DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
 
     public int minY() {
         return this.type.minY();
@@ -35,18 +41,24 @@ public record PreviewDimension(ResourceKey<Level> key, Component name, Dimension
         return this.type.minY() + this.type.height();
     }
 
-    /** The dimensions of the variation sections that the context holds with a noise-based generator. */
-    public static List<PreviewDimension> of(WorldCreationContext context) {
+    /** Every level stem of the context with a noise-based generator, in the sequence of the variation sections. */
+    public static List<PreviewDimension> of(WorldCreationContext context, PresetEdits edits) {
         List<PreviewDimension> dimensions = new ArrayList<>();
-        for (ResourceKey<Level> key : PresetEdits.DIMENSIONS) {
-            LevelStem stem = context.selectedDimensions().dimensions().get(Registries.levelToLevelStem(key));
-            if (stem != null && stem.generator() instanceof NoiseBasedChunkGenerator generator) {
-                dimensions.add(new PreviewDimension(key,
-                        Component.translatable("createWorld.customize.aerolite.dimension." + key.location().getPath()),
-                        stem.type().value(), generator.getBiomeSource(), generator.generatorSettings()));
+        for (Map.Entry<ResourceKey<LevelStem>, LevelStem> entry : context.selectedDimensions().dimensions().entrySet()) {
+            if (entry.getValue().generator() instanceof NoiseBasedChunkGenerator generator) {
+                ResourceKey<Level> key = Registries.levelStemToLevel(entry.getKey());
+                dimensions.add(new PreviewDimension(key, edits.dimensionName(key), entry.getValue().type().value(),
+                        generator.getBiomeSource(), generator.generatorSettings()));
             }
         }
-        return dimensions;
+        dimensions.sort(Comparator.comparingInt((PreviewDimension dimension) -> rank(dimension.key()))
+                .thenComparing(dimension -> dimension.key().location()));
+        return List.copyOf(dimensions);
+    }
+
+    private static int rank(ResourceKey<Level> key) {
+        int index = VANILLA_DIMENSIONS.indexOf(key);
+        return index < 0 ? VANILLA_DIMENSIONS.size() : index;
     }
 
 }

@@ -56,6 +56,8 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.preview.seed", "Seed: %s");
         this.add("createWorld.customize.aerolite.preview.reseed", "Reseed");
         this.add("createWorld.customize.aerolite.preview.radius", "Radius: %s chunks");
+        this.add("createWorld.customize.aerolite.preview.dimension", "Dimension");
+        this.add("createWorld.customize.aerolite.preview.show_dimension", "Preview this dimension");
         this.add("createWorld.customize.aerolite.preview.waiting", "Waiting");
         this.add("createWorld.customize.aerolite.preview.painting", "Painting chunks: %s / %s");
         this.add("createWorld.customize.aerolite.preview.baking", "Baking sections: %s / %s");

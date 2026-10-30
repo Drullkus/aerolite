@@ -258,7 +258,6 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 | Overworld variations | Stone (stone, stone bricks, cobblestone), weight 7, maze bias 50%. Trial chamber (tuff, tuff bricks, oxidized copper), weight 1, maze bias 50%. |
 | Nether variations | Netherrack, nether bricks, red nether bricks. Weight 1, maze bias 50%. |
 | End variations | End stone, end stone bricks, purpur block. Weight 1, maze bias 50%. |
-| Shafts in unlisted dimensions | Off |
 | Bridge chance | 0.5 |
 | Allowed biome list | The vanilla biome list of the dimension |
 | Cloud height | Y -32 |
@@ -268,6 +267,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The shaft spacing is the center distance of two neighbor horizontal shafts on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a shaft.
 - The variations are a map from dimension to a list of variations. Every list holds at least one variation with a positive weight.
+- A dimension without a variations list gets no shafts.
 - A variation lists its blocks in the sequence interior block, maze wall block, maze path block.
 - The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
 - The screen has seven sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale, the maze decay threshold, the shaft erosion threshold and the cloud height.
@@ -283,20 +283,28 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The cloud height slider is in the section Clouds, after the section Shaft Surface.
 - The cloud height slider runs from Y -64 to Y 320 in steps of 8.
 - The section Shaft Variations comes after the section Clouds.
-- Its first row is a cycle button for the setting "Shafts in Unlisted Dimensions".
-- Then each dimension has a header: Overworld, The Nether and The End.
+- Each configured dimension has a header with its name. The Overworld, the Nether and the End come first, then the others by id.
+- A dimension other than the three vanilla dimensions shows its id path as its name.
+- A Remove button at the right end of each dimension header removes the dimension and its variations.
 - Each variation has a row with a weight slider and a maze bias slider.
 - The weight slider runs from 0 to 16. The last positive weight of a dimension does not go below 1.
 - The maze bias slider runs from 5% to 95% in steps of 5%.
 - The maze bias label says "ringwise" below 50%, "uniform" at 50% and "lengthwise" above 50%.
 - Each variation has a row with three block fields: the interior block, the maze wall block and the maze path block.
+- In the menu, a text row above the block fields shows the label of each field. A block field has no tooltip.
 - A block field reads a block id or a block state string, such as `oxidized_copper` or `oak_log[axis=x]`.
 - Bad text gives the block field a red border. The field keeps its last good block.
 - While a block field has focus and text, a dropdown lists up to 8 blocks whose id or name holds the text. A click or Enter picks one.
 - The dropdown shows the item icon and the name of each block. It lists no air block.
 - Each variation has a Remove button. A dimension with one variation has its Remove button off.
 - An Add button after the rows of each dimension appends a copy of the first variation.
-- An add or a remove rebuilds the list and keeps the scroll position.
+- After the last dimension, an add row holds a dropdown on the left and an Add button on the right.
+- The dropdown lists every level of the world being created that has no variations list.
+- A click on the dropdown opens its list. A pick closes the list.
+- The Add button adds the chosen dimension with its default variation list.
+- The Overworld, the Nether and the End get their defaults. Any other dimension gets one stone variation with weight 1.
+- When no dimension is left to add, the dropdown and the Add button are off. The dropdown reads "All dimensions configured".
+- An add or a remove of a variation or a dimension rebuilds the list and keeps the scroll position.
 - The other settings have no slider yet. They live in the generator settings with their defaults.
 
 ### Preview
@@ -310,16 +318,34 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - An ImGui panel covers the right edge of the window. The game view fills the part left of the panel.
 - A splitter on the left edge of the panel sets the panel width, from 240 to 600 ImGui units.
 - The panel has the sections of the Aerolite screen, with the same slider steps and the same rules.
-- A block field in the panel lists up to 8 matching blocks with their item icons.
-- The Preview section of the panel has a dimension dropdown: Overworld, Nether, End. The Overworld comes first.
-- The dimension gives the build height, the biome source, the variations, the sky and the fog of the preview.
+- The panel shows its sections in this sequence: Preview, Shaft Placement, Shaft Surface, Clouds, Shaft Variations.
+- Under Shaft Variations, each dimension of the panel is a tree node that collapses. Each node starts open.
+- A radio button left of each dimension name selects the previewed dimension.
+- The radio buttons and the dimension dropdown of the Preview section always show the same dimension.
+- A small Remove button sits at the right end of each dimension line in the panel.
+- After the dimensions, the panel has a combo of the dimensions to add and an Add button.
+- When no dimension is left to add, the combo and the Add button are off. The combo reads "All dimensions configured".
+- The panel shows the label of each block field left of the field. A block field has no tooltip.
+- The dropdown of a panel block field is a popup over the panel. It moves no other widget.
+- The popup shows at most eight blocks with their item icons. It scrolls when the space below the field is too short.
+- A click on a block in the popup sets the field and the variation.
+- The Preview section of the panel has a dimension dropdown. It lists every level of the world being created with a noise generator.
+- The Overworld, the Nether and the End come first. The preview starts on the first dimension of the list.
+- The dimension gives the build height, the biome source, the variations and the sky of the preview.
+- A previewed dimension without a variations list shows the empty region: the sky, the grid and the outline.
+- A removed dimension stays in the preview and shows the empty region.
 - The seed is the seed text of the world creation screen. An empty text gives a random seed.
 - The panel shows the seed. The Reseed button picks a new random seed.
 - The radius slider runs from 2 to 32 chunks in steps of 1.
 - The radius starts at the render distance option of the client.
 - Every change starts a rebuild on a worker thread after 300 ms. A progress bar shows the baked sections.
-- The fog follows the terrain fog of the dimension, with the radius as the render distance. The fog grows from the region center.
+- The scene appears chunk by chunk, in a spiral from the center chunk outward.
+- Each edge of the region box draws opaque. An edge with any pixel in front of a block draws 75% translucent.
+- The preview has no fog.
 - A drag in the game view turns the camera around the region center. The scroll wheel zooms.
+- A view gizmo sits in the top right corner of the game view, left of the panel.
+- A drag on the view gizmo turns the camera. A click on a face, an edge or a corner turns the camera to look at it.
+- The camera pitch stays between -89 and 89 degrees. A top view and a bottom view keep a small tilt.
 
 ## Shafts
 
@@ -352,8 +378,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - Every horizontal shaft and every column picks one variation by weight. A weight of 0 never picks.
 - A horizontal shaft picks with a random at its axis and cell. A column picks with a random at the cells of its two shafts.
 - A junction box takes the variation of its horizontal shaft. So do its two patches and the maze path blocks on them.
-- A dimension that is not in the variation map uses the Overworld list when "Shafts in Unlisted Dimensions" is on.
-- When that setting is off, such a dimension gets no shafts. The noise settings of the dimension still make its terrain.
+- A dimension that is not in the variation map gets no shafts. The noise settings of the dimension still make its terrain.
 - Shafts pierce islands. Where a shaft and an island overlap, the shaft replaces the terrain.
 
 ### Cross section

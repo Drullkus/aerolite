@@ -131,26 +131,6 @@ public record AeroliteSettings(
         return this.variations.getOrDefault(dimension, List.of());
     }
 
-    /**
-     * Always false. The setting is gone and a dimension outside the map gets no shafts.
-     *
-     * @deprecated The ImGui panel still calls it. Remove it with the checkbox of the panel.
-     */
-    @Deprecated(forRemoval = true)
-    public boolean shaftsInUnlistedDimensions() {
-        return false;
-    }
-
-    /**
-     * Returns these settings unchanged. The setting is gone.
-     *
-     * @deprecated The ImGui panel still calls it. Remove it with the checkbox of the panel.
-     */
-    @Deprecated(forRemoval = true)
-    public AeroliteSettings withShaftsInUnlistedDimensions(boolean shafts) {
-        return this;
-    }
-
     /** Puts the variation list of one dimension into the map. A listed dimension gets its list replaced. */
     public AeroliteSettings withDimension(ResourceKey<Level> dimension, List<ShaftVariation> list) {
         Map<ResourceKey<Level>, List<ShaftVariation>> map = new LinkedHashMap<>(this.variations);

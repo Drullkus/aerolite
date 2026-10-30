@@ -25,14 +25,6 @@ public final class PresetEdits {
     /** The vanilla dimensions, in screen sequence. They come before every other dimension. */
     private static final List<ResourceKey<Level>> VANILLA_DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
 
-    /**
-     * The three vanilla dimensions.
-     *
-     * @deprecated The preview still calls it. Use {@link #configuredDimensions} or {@link #addableDimensions}.
-     */
-    @Deprecated(forRemoval = true)
-    public static final List<ResourceKey<Level>> DIMENSIONS = VANILLA_DIMENSIONS;
-
     private final PresetSliders sliders;
 
     public PresetEdits(@Autowired PresetSliders sliders) {

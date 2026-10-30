@@ -2,8 +2,11 @@ package us.drullk.aerolite.client.preview.imgui;
 
 import foundry.imgui.api.ImGuiMC;
 import imgui.ImGui;
-import imgui.flag.ImGuiChildFlags;
+import imgui.ImGuiStyle;
+import imgui.ImGuiViewport;
 import imgui.flag.ImGuiCol;
+import imgui.flag.ImGuiHoveredFlags;
+import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImString;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.world.level.block.Block;
@@ -17,21 +20,28 @@ import java.util.List;
 
 /**
  * An ImGui text field for one block state. While it has focus and text, a list of matches with item icons shows below it.
+ * The list is a window over the panel, so it moves no other widget. It scrolls when the space below the field is too short.
+ * A click on a match sets the text, parses it and returns the state.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 final class ImGuiBlockField {
 
     private static final int TEXT_CAPACITY = 256;
     private static final float INVALID_RED = 0.55F;
+    /** The list keeps the field focused, so it never takes the focus when it appears. */
+    private static final int LIST_FLAGS = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove
+            | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoFocusOnAppearing
+            | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoDocking;
 
     private final ImString text = new ImString(TEXT_CAPACITY);
     @Nullable
     private BlockState shown;
     private boolean valid = true;
     private boolean open;
-    /** True when the mouse was over the match list in the last frame. A click on a match takes the focus from the field. */
-    private boolean listHovered;
+    /** True when the list was hovered or focused in the last frame. A click on a match takes the focus from the field. */
+    private boolean listInUse;
     private List<Block> matches = new ArrayList<>();
 
     /** Draws the field. Returns the new state, or null when the state stays. */
@@ -51,25 +61,61 @@ final class ImGuiBlockField {
             ImGui.popStyleColor();
         }
         boolean active = ImGui.isItemActive();
-        if (ImGui.isItemHovered()) {
-            ImGui.setTooltip(I18n.get(hintKey));
-        }
+        float left = ImGui.getItemRectMinX();
+        float bottom = ImGui.getItemRectMaxY();
+        float width = ImGui.getItemRectSizeX();
+
         BlockState result = null;
         if (changed) {
-            BlockState parsed = search.parse(this.text.get());
-            this.valid = parsed != null;
-            if (parsed != null && parsed != state) {
-                result = parsed;
-                this.shown = parsed;
-            }
+            result = this.parse(search, state);
         }
         if (changed || ImGui.isItemActivated()) {
             this.matches = search.search(this.text.get());
             this.open = true;
         }
-        if (this.open && !this.text.get().isEmpty() && !this.matches.isEmpty() && (active || this.listHovered)) {
-            float row = ImGui.getFrameHeight();
-            ImGui.beginChild(id + "_matches", 0, row * this.matches.size() + 2 * ImGui.getStyle().getWindowPaddingY(), ImGuiChildFlags.Borders);
+        if (!active && !this.listInUse) {
+            this.open = false;
+        }
+        if (this.open && !this.text.get().isEmpty() && !this.matches.isEmpty()) {
+            BlockState picked = this.drawList(id, left, bottom, width, search, icons);
+            if (picked != null) {
+                result = picked;
+            }
+        } else {
+            this.listInUse = false;
+        }
+        return result;
+    }
+
+    @Nullable
+    private BlockState parse(BlockSearch search, BlockState state) {
+        BlockState parsed = search.parse(this.text.get());
+        this.valid = parsed != null;
+        if (parsed == null || parsed == state) {
+            return null;
+        }
+        this.shown = parsed;
+        return parsed;
+    }
+
+    /** Draws the match list under the field, in desktop coordinates of the main viewport. Returns the picked state. */
+    @Nullable
+    private BlockState drawList(String id, float left, float top, float width, BlockSearch search, ItemIconAtlas icons) {
+        ImGuiStyle style = ImGui.getStyle();
+        float row = ImGui.getFrameHeight();
+        int rows = Math.min(this.matches.size(), BlockSearch.MAX_MATCHES);
+        float wanted = rows * row + (rows - 1) * style.getItemSpacingY() + 2 * style.getWindowPaddingY();
+        ImGuiViewport viewport = ImGui.getMainViewport();
+        float below = viewport.getPosY() + viewport.getSizeY() - top;
+        float height = Math.max(row + 2 * style.getWindowPaddingY(), Math.min(wanted, below));
+
+        ImGui.setNextWindowViewport(viewport.getID());
+        ImGui.setNextWindowPos(left, top);
+        ImGui.setNextWindowSize(width, height);
+        BlockState result = null;
+        if (ImGui.begin(id + "_matches", LIST_FLAGS)) {
+            // The panel comes to the front on a click in the field. The list stays over it.
+            imgui.internal.ImGui.bringWindowToDisplayFront(imgui.internal.ImGui.getCurrentWindow());
             for (Block block : this.matches) {
                 ItemIconAtlas.Cell cell = icons.cell(block.asItem());
                 if (cell != null && icons.target() != null) {
@@ -78,22 +124,23 @@ final class ImGuiBlockField {
                     ImGui.dummy(row, row);
                 }
                 ImGui.sameLine();
-                if (ImGui.selectable(block.getName().getString() + "##" + search.text(block.defaultBlockState()))) {
-                    BlockState picked = block.defaultBlockState();
-                    this.text.set(search.text(picked));
-                    this.valid = true;
-                    this.shown = picked;
+                String blockText = search.text(block.defaultBlockState());
+                if (ImGui.selectable(block.getName().getString() + "##" + blockText)) {
+                    this.text.set(blockText);
+                    BlockState parsed = search.parse(this.text.get());
+                    this.valid = parsed != null;
+                    if (parsed != null) {
+                        this.shown = parsed;
+                        result = parsed;
+                    }
                     this.open = false;
-                    result = picked;
                 }
             }
-            this.listHovered = ImGui.isWindowHovered();
-            ImGui.endChild();
-        } else {
-            this.listHovered = false;
-            if (!active) {
-                this.open = false;
-            }
+            this.listInUse = ImGui.isWindowFocused() || ImGui.isWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
+        }
+        ImGui.end();
+        if (!this.open) {
+            this.listInUse = false;
         }
         return result;
     }

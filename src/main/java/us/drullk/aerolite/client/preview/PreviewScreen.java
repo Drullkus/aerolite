@@ -11,7 +11,9 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
@@ -25,8 +27,10 @@ import java.util.function.Consumer;
 /**
  * The preview of the preset settings. It shows the shafts of a region around the origin.
  * The ImGui panel on the right edits a copy of the settings. Done sends the copy back. Cancel drops it.
+ * A previewed dimension without variations shows the empty region: sky, grid and outline.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -39,6 +43,7 @@ public class PreviewScreen extends Screen {
     private final PresetTools tools;
     private final Consumer<AeroliteSettings> onDone;
     private final List<PreviewDimension> dimensions;
+    private final List<ResourceKey<Level>> levels;
     private final Registry<Biome> biomes;
     private final HolderGetter<NormalNoise.NoiseParameters> noise;
     private final OrbitCamera camera = new OrbitCamera();
@@ -62,7 +67,8 @@ public class PreviewScreen extends Screen {
         this.onDone = onDone;
         this.settings = settings;
         this.seed = WorldOptions.parseSeed(seedText).orElseGet(WorldOptions::randomSeed);
-        this.dimensions = PreviewDimension.of(context);
+        this.dimensions = PreviewDimension.of(context, tools.edits());
+        this.levels = context.selectedDimensions().dimensions().keySet().stream().map(Registries::levelStemToLevel).toList();
         this.biomes = context.worldgenLoadContext().registryOrThrow(Registries.BIOME);
         this.noise = context.worldgenLoadContext().lookupOrThrow(Registries.NOISE);
         this.radius = Mth.clamp(Minecraft.getInstance().options.renderDistance().get(), MIN_RADIUS, MAX_RADIUS);
@@ -99,12 +105,47 @@ public class PreviewScreen extends Screen {
         this.requestBuild();
     }
 
+    /** The dimensions that the preview can show. */
     public List<PreviewDimension> dimensions() {
         return this.dimensions;
     }
 
+    /** Every level of the world being created. */
+    public List<ResourceKey<Level>> levels() {
+        return this.levels;
+    }
+
     public int dimensionIndex() {
         return this.dimensionIndex;
+    }
+
+    /** The index of a dimension in {@link #dimensions()}, or -1 when the preview cannot show it. */
+    public int dimensionIndex(ResourceKey<Level> key) {
+        for (int index = 0; index < this.dimensions.size(); index++) {
+            if (this.dimensions.get(index).key().equals(key)) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /** The key of the previewed dimension, or null when the context holds no dimension that the preview can show. */
+    @Nullable
+    public ResourceKey<Level> dimensionKey() {
+        PreviewDimension dimension = this.dimension();
+        return dimension == null ? null : dimension.key();
+    }
+
+    /** Previews the dimension of {@code key}. A dimension that the preview cannot show changes nothing. */
+    public void setDimension(ResourceKey<Level> key) {
+        int index = this.dimensionIndex(key);
+        if (index >= 0) {
+            this.setDimensionIndex(index);
+        }
+    }
+
+    public OrbitCamera camera() {
+        return this.camera;
     }
 
     public void setDimensionIndex(int index) {

@@ -7,6 +7,7 @@ import imgui.ImGuiViewport;
 import imgui.ImVec4;
 import imgui.flag.ImGuiChildFlags;
 import imgui.flag.ImGuiCol;
+import imgui.flag.ImGuiHoveredFlags;
 import imgui.flag.ImGuiMouseCursor;
 import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiTreeNodeFlags;
@@ -19,7 +20,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.AeroliteClientConfig;
-import us.drullk.aerolite.client.PresetEdits;
 import us.drullk.aerolite.client.PresetSliders;
 import us.drullk.aerolite.client.PresetTools;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
@@ -39,12 +39,16 @@ import java.util.function.Function;
 /**
  * The ImGui panel on the right edge of the preview screen. It edits the settings with the steps and rules of the vanilla screen.
  * Only the bean method of {@link PreviewPanel} creates it, and only when imgui-mc is present.
+ * The sections are Preview, Shaft Placement, Shaft Surface, Clouds and Shaft Variations, in this sequence.
+ * A radio left of each dimension name and the dimension combo of the Preview section select the previewed dimension.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
     private static final String KEY = "createWorld.customize.aerolite.";
+    private static final List<String> BLOCK_LABELS = List.of("interior_block", "wall_block", "path_block");
     private static final float SPLITTER_WIDTH = 6;
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoTitleBar
             | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse
@@ -56,6 +60,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     private final int[] framebufferWidth = new int[1];
     private final int[] framebufferHeight = new int[1];
     private final int[] slider = new int[1];
+    private final ImGuiViewGizmo gizmo = new ImGuiViewGizmo();
+    /** The dimension that the add combo shows. */
+    @Nullable
+    private ResourceKey<Level> addChoice;
     @Nullable
     private PreviewScreen drawn;
     private float width;
@@ -111,6 +119,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         if (screen != this.drawn) {
             this.drawn = screen;
             this.blockFields.clear();
+            this.addChoice = null;
             this.width = screen.panelUnits();
             this.dragging = false;
         }
@@ -142,6 +151,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             ImGui.endChild();
         }
         ImGui.end();
+        this.gizmo.draw(screen.camera(), this.width);
     }
 
     /** An invisible button on the left edge. A drag moves the edge. The release saves the width and resizes the game view. */
@@ -193,6 +203,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     }
 
     private void drawContent(PreviewScreen screen) {
+        if (ImGui.collapsingHeader(text("preview.section"), ImGuiTreeNodeFlags.DefaultOpen)) {
+            this.drawPreview(screen);
+        }
+
         AeroliteSettings settings = screen.settings();
         AeroliteSettings edited = settings;
 
@@ -243,37 +257,103 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         }
 
         if (ImGui.collapsingHeader(text("shaft_variations"))) {
-            if (ImGui.checkbox(text("shafts_in_unlisted_dimensions") + "##unlisted", edited.shaftsInUnlistedDimensions())) {
-                edited = edited.withShaftsInUnlistedDimensions(!edited.shaftsInUnlistedDimensions());
-            }
-            for (ResourceKey<Level> dimension : PresetEdits.DIMENSIONS) {
-                edited = this.drawDimension(edited, dimension);
-            }
+            edited = this.drawVariations(screen, edited);
         }
 
         if (!edited.equals(settings)) {
             screen.setSettings(edited);
         }
-
-        if (ImGui.collapsingHeader(text("preview.section"), ImGuiTreeNodeFlags.DefaultOpen)) {
-            this.drawPreview(screen);
-        }
     }
 
-    private AeroliteSettings drawDimension(AeroliteSettings settings, ResourceKey<Level> dimension) {
-        String path = dimension.location().getPath();
-        ImGui.separatorText(text("dimension." + path));
+    /** One collapsible node per configured dimension, then the add row. A removal applies after the loop. */
+    private AeroliteSettings drawVariations(PreviewScreen screen, AeroliteSettings settings) {
+        AeroliteSettings edited = settings;
+        ResourceKey<Level> removed = null;
+        for (ResourceKey<Level> dimension : this.tools().edits().configuredDimensions(settings)) {
+            String id = dimension.location().toString();
+            ImGui.pushID(id);
+            boolean open = this.drawDimensionNode(screen, dimension);
+            if (this.drawRemoveDimension()) {
+                removed = dimension;
+            } else if (open) {
+                edited = this.drawDimensionRows(edited, dimension, id);
+            }
+            if (open) {
+                ImGui.treePop();
+            }
+            ImGui.popID();
+        }
+        if (removed != null) {
+            edited = this.tools().edits().withoutDimension(edited, removed);
+        }
+        return this.drawAddDimension(screen, edited);
+    }
+
+    /** Draws the radio and the node of one dimension. Returns true when the node is open. */
+    private boolean drawDimensionNode(PreviewScreen screen, ResourceKey<Level> dimension) {
+        ImGui.beginDisabled(screen.dimensionIndex(dimension) < 0);
+        if (ImGui.radioButton("##preview_dimension", dimension.equals(screen.dimensionKey()))) {
+            screen.setDimension(dimension);
+        }
+        ImGui.endDisabled();
+        if (ImGui.isItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) {
+            ImGui.setTooltip(text("preview.show_dimension"));
+        }
+        ImGui.sameLine();
+        return ImGui.treeNodeEx("##dimension", ImGuiTreeNodeFlags.DefaultOpen, format(this.tools().edits().dimensionName(dimension)));
+    }
+
+    /** A small Remove button at the right end of the node line. Returns true when it was pressed. */
+    private boolean drawRemoveDimension() {
+        String remove = text("remove_dimension");
+        float removeWidth = ImGui.calcTextSize(remove).x + 2 * ImGui.getStyle().getFramePaddingX();
+        ImGui.sameLine();
+        ImGui.setCursorPosX(ImGui.getCursorPosX() + Math.max(0, ImGui.getContentRegionAvailX() - removeWidth));
+        return ImGui.smallButton(remove + "##remove_dimension");
+    }
+
+    private AeroliteSettings drawDimensionRows(AeroliteSettings settings, ResourceKey<Level> dimension, String id) {
         AeroliteSettings edited = settings;
         List<ShaftVariation> variations = this.tools().edits().variations(edited, dimension);
         for (int index = 0; index < variations.size(); index++) {
-            ImGui.pushID(path + "/" + index);
-            edited = this.drawVariation(edited, dimension, index, path + "/" + index);
+            ImGui.pushID(index);
+            edited = this.drawVariation(edited, dimension, index, id + "/" + index);
             ImGui.popID();
             ImGui.spacing();
         }
-        if (ImGui.button(text("add_variation") + "##add_" + path)) {
+        if (ImGui.button(text("add_variation") + "##add_variation")) {
             edited = this.tools().edits().withAddedVariation(edited, dimension);
         }
+        return edited;
+    }
+
+    /** A combo of the levels without variations and an Add button. Both are off when every level has variations. */
+    private AeroliteSettings drawAddDimension(PreviewScreen screen, AeroliteSettings settings) {
+        List<ResourceKey<Level>> candidates = this.tools().edits().addableDimensions(settings, screen.levels());
+        if (this.addChoice == null || !candidates.contains(this.addChoice)) {
+            this.addChoice = candidates.isEmpty() ? null : candidates.getFirst();
+        }
+        ImGui.separator();
+        String add = text("add_dimension");
+        float addWidth = ImGui.calcTextSize(add).x + 2 * ImGui.getStyle().getFramePaddingX();
+        ImGui.beginDisabled(this.addChoice == null);
+        ImGui.setNextItemWidth(Math.max(1, ImGui.getContentRegionAvailX() - addWidth - ImGui.getStyle().getItemSpacingX()));
+        String shown = this.addChoice == null ? text("all_dimensions_configured") : this.tools().edits().dimensionName(this.addChoice).getString();
+        if (ImGui.beginCombo("##add_dimension_choice", shown)) {
+            for (ResourceKey<Level> candidate : candidates) {
+                if (ImGui.selectable(this.tools().edits().dimensionName(candidate).getString() + "##" + candidate.location(), candidate.equals(this.addChoice))) {
+                    this.addChoice = candidate;
+                }
+            }
+            ImGui.endCombo();
+        }
+        ImGui.sameLine();
+        AeroliteSettings edited = settings;
+        if (ImGui.button(add + "##add_dimension") && this.addChoice != null) {
+            edited = this.tools().edits().withAddedDimension(settings, this.addChoice);
+            this.addChoice = null;
+        }
+        ImGui.endDisabled();
         return edited;
     }
 
@@ -291,9 +371,14 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             float chosen = this.tools().sliders().bias(bias);
             edited = this.editVariation(edited, dimension, index, current -> current.withBias(chosen));
         }
-        edited = this.blockField(edited, dimension, index, fieldKey + "/interior", "interior_block", variation.interior(), ShaftVariation::withInterior);
-        edited = this.blockField(edited, dimension, index, fieldKey + "/wall", "wall_block", variation.wall(), ShaftVariation::withWall);
-        edited = this.blockField(edited, dimension, index, fieldKey + "/path", "path_block", variation.path(), ShaftVariation::withPath);
+        float labelWidth = 0;
+        for (String key : BLOCK_LABELS) {
+            labelWidth = Math.max(labelWidth, ImGui.calcTextSize(text(key)).x);
+        }
+        float fieldStart = labelWidth + ImGui.getStyle().getItemSpacingX();
+        edited = this.blockField(edited, dimension, index, fieldKey + "/interior", BLOCK_LABELS.get(0), fieldStart, variation.interior(), ShaftVariation::withInterior);
+        edited = this.blockField(edited, dimension, index, fieldKey + "/wall", BLOCK_LABELS.get(1), fieldStart, variation.wall(), ShaftVariation::withWall);
+        edited = this.blockField(edited, dimension, index, fieldKey + "/path", BLOCK_LABELS.get(2), fieldStart, variation.path(), ShaftVariation::withPath);
         boolean removable = this.tools().edits().canRemove(edited, dimension);
         ImGui.beginDisabled(!removable);
         if (ImGui.button(text("remove_variation") + "##remove")) {
@@ -307,9 +392,15 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         ShaftVariation apply(ShaftVariation variation, BlockState state);
     }
 
+    /** The label sits left of the field. The fields of one variation start at one column and take the rest of the line. */
     private AeroliteSettings blockField(AeroliteSettings settings, ResourceKey<Level> dimension, int index, String fieldKey, String labelKey,
-                                        BlockState state, BlockEdit edit) {
+                                        float fieldStart, BlockState state, BlockEdit edit) {
         ImGuiBlockField field = this.blockFields.computeIfAbsent(fieldKey, key -> new ImGuiBlockField());
+        float lineStart = ImGui.getCursorPosX();
+        ImGui.alignTextToFramePadding();
+        ImGui.text(text(labelKey));
+        ImGui.sameLine();
+        ImGui.setCursorPosX(lineStart + fieldStart);
         BlockState picked = field.draw("##" + fieldKey, KEY + labelKey, state, this.tools().blocks(), this.tools().icons());
         return picked == null ? settings : this.editVariation(settings, dimension, index, current -> edit.apply(current, picked));
     }
@@ -319,9 +410,13 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return settings.withVariation(dimension, index, edit.apply(current));
     }
 
+    /** The dimension combo and the radios of the variation section share the dimension index of the screen. */
     private void drawPreview(PreviewScreen screen) {
         List<PreviewDimension> dimensions = screen.dimensions();
         if (!dimensions.isEmpty()) {
+            ImGui.alignTextToFramePadding();
+            ImGui.text(text("preview.dimension"));
+            ImGui.sameLine();
             ImGui.setNextItemWidth(-1);
             if (ImGui.beginCombo("##dimension", dimensions.get(screen.dimensionIndex()).name().getString())) {
                 for (int index = 0; index < dimensions.size(); index++) {
@@ -355,7 +450,8 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         };
         float fraction = progress.phase() == PreviewBuilder.Phase.DONE ? 1 : progress.fraction();
         ImGui.progressBar(fraction, -1, 0, label);
-        if (screen.settings().variations(dimensions.isEmpty() ? Level.OVERWORLD : dimensions.get(screen.dimensionIndex()).key()).isEmpty()) {
+        ResourceKey<Level> previewed = screen.dimensionKey();
+        if (previewed != null && screen.settings().variations(previewed).isEmpty()) {
             ImGui.textWrapped(text("preview.no_shafts"));
         }
     }
