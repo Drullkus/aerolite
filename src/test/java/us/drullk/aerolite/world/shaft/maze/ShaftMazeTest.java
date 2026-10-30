@@ -16,12 +16,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the segments of a horizontal shaft maze.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
 class ShaftMazeTest {
 
-    private static ShaftMaze maze(long seed, List<ShaftMaze.Box> boxes) {
+    private final Ring ring = new Ring();
+    private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
+
+    private ShaftMaze maze(long seed, List<ShaftMaze.Box> boxes) {
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();
-        return new ShaftMaze(lookup, new XoroshiroRandomSource(seed).forkPositional());
+        return this.mazes.shaft(lookup, new XoroshiroRandomSource(seed).forkPositional());
     }
 
     /** The distinct segments from the first chunk to the last chunk, by first chunk. */
@@ -43,7 +47,7 @@ class ShaftMazeTest {
     @Test
     void ringBlocksRoundTrip() {
         for (int block = 0; block < Ring.BLOCKS; block++) {
-            assertEquals(block, Ring.block(Ring.first(block), Ring.second(block)));
+            assertEquals(block, this.ring.block(this.ring.first(block), this.ring.second(block)));
         }
     }
 

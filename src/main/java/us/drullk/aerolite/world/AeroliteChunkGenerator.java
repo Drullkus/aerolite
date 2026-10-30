@@ -9,8 +9,11 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import tamaized.beanification.Autowired;
+import tamaized.beanification.Configurable;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
+import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 
 import javax.annotation.Nullable;
 
@@ -18,7 +21,9 @@ import javax.annotation.Nullable;
  * The noise-based generator of the preset. It carries the settings and builds the shafts in their own chunk step.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
+@Configurable
 public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
 
     public static final MapCodec<AeroliteChunkGenerator> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -28,6 +33,10 @@ public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
     ).apply(instance, AeroliteChunkGenerator::new));
 
     private final AeroliteSettings aeroliteSettings;
+    @Autowired
+    private ShaftPainter painter;
+    @Autowired
+    private ShaftMazes mazes;
     @Nullable
     private volatile CachedLayout cachedLayout;
 
@@ -54,7 +63,7 @@ public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
 
     /** Writes the shafts, columns and junctions of one chunk. */
     public void buildShafts(ServerLevel level, ChunkAccess chunk) {
-        ShaftPainter.paint(this.layout(level), chunk);
+        this.painter.paint(this.layout(level), chunk);
     }
 
     /** The shaft layout of the level. One generator serves one dimension, so the layout rarely changes. */
@@ -65,7 +74,7 @@ public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
         int maxY = level.getMaxBuildHeight();
         CachedLayout cached = this.cachedLayout;
         if (cached == null || cached.seed != seed || !cached.dimension.equals(dimension) || cached.minY != minY || cached.maxY != maxY) {
-            cached = new CachedLayout(seed, dimension, minY, maxY, new ShaftLayout(seed, dimension, minY, maxY, this.aeroliteSettings));
+            cached = new CachedLayout(seed, dimension, minY, maxY, new ShaftLayout(this.mazes, seed, dimension, minY, maxY, this.aeroliteSettings));
             this.cachedLayout = cached;
         }
         return cached.layout;

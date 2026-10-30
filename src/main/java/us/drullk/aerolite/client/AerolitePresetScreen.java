@@ -25,24 +25,23 @@ import java.util.function.IntFunction;
  * The customize screen of the preset in the world creation menu. It edits the settings of every Aerolite dimension.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
 public class AerolitePresetScreen extends Screen {
 
     private static final int SLIDER_WIDTH = 210;
     private static final int MIN_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MIN_DECAY_SCALE);
     private static final int MAX_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MAX_DECAY_SCALE);
-    private static final int SPACING_STEP = 16;
-    private static final int SPACING_STEPS = (AeroliteSettings.MAX_SHAFT_SPACING - AeroliteSettings.MIN_SHAFT_SPACING) / SPACING_STEP;
-    /** Steps of 0.05 from 0 to 1. */
-    private static final int FRACTION_STEPS = 20;
 
     private final CreateWorldScreen parent;
+    private final PresetSliders sliders;
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
     private AeroliteSettings settings;
 
-    public AerolitePresetScreen(CreateWorldScreen parent, WorldCreationContext context) {
+    public AerolitePresetScreen(CreateWorldScreen parent, WorldCreationContext context, PresetSliders sliders) {
         super(Component.translatable("createWorld.customize.aerolite.title"));
         this.parent = parent;
+        this.sliders = sliders;
         this.settings = context.selectedDimensions().dimensions().values().stream()
                 .map(LevelStem::generator)
                 .filter(AeroliteChunkGenerator.class::isInstance)
@@ -56,24 +55,24 @@ public class AerolitePresetScreen extends Screen {
         this.layout.addTitleHeader(this.title, this.font);
         LinearLayout contents = this.layout.addToContents(LinearLayout.vertical().spacing(8));
 
-        contents.addChild(new StepSlider(FRACTION_STEPS, Math.round(this.settings.columnChance() * FRACTION_STEPS),
-                step -> Component.translatable("createWorld.customize.aerolite.column_chance", percent(step)),
-                step -> this.settings = this.settings.withColumnChance(step / (float) FRACTION_STEPS)));
+        contents.addChild(new StepSlider(PresetSliders.FRACTION_STEPS, Math.round(this.settings.columnChance() * PresetSliders.FRACTION_STEPS),
+                step -> Component.translatable("createWorld.customize.aerolite.column_chance", this.sliders.percent(step)),
+                step -> this.settings = this.settings.withColumnChance(step / (float) PresetSliders.FRACTION_STEPS)));
 
         StepSlider[] spacing = new StepSlider[2];
-        spacing[0] = new StepSlider(SPACING_STEPS, spacingStep(this.settings.minShaftSpacing()),
-                step -> Component.translatable("createWorld.customize.aerolite.min_shaft_spacing", spacing(step)),
+        spacing[0] = new StepSlider(PresetSliders.SPACING_STEPS, this.sliders.spacingStep(this.settings.minShaftSpacing()),
+                step -> Component.translatable("createWorld.customize.aerolite.min_shaft_spacing", this.sliders.spacing(step)),
                 step -> {
-                    int max = Math.max(spacing(step), this.settings.maxShaftSpacing());
-                    this.settings = this.settings.withShaftSpacing(spacing(step), max);
-                    spacing[1].setStep(spacingStep(max));
+                    int max = Math.max(this.sliders.spacing(step), this.settings.maxShaftSpacing());
+                    this.settings = this.settings.withShaftSpacing(this.sliders.spacing(step), max);
+                    spacing[1].setStep(this.sliders.spacingStep(max));
                 });
-        spacing[1] = new StepSlider(SPACING_STEPS, spacingStep(this.settings.maxShaftSpacing()),
-                step -> Component.translatable("createWorld.customize.aerolite.max_shaft_spacing", spacing(step)),
+        spacing[1] = new StepSlider(PresetSliders.SPACING_STEPS, this.sliders.spacingStep(this.settings.maxShaftSpacing()),
+                step -> Component.translatable("createWorld.customize.aerolite.max_shaft_spacing", this.sliders.spacing(step)),
                 step -> {
-                    int min = Math.min(spacing(step), this.settings.minShaftSpacing());
-                    this.settings = this.settings.withShaftSpacing(min, spacing(step));
-                    spacing[0].setStep(spacingStep(min));
+                    int min = Math.min(this.sliders.spacing(step), this.settings.minShaftSpacing());
+                    this.settings = this.settings.withShaftSpacing(min, this.sliders.spacing(step));
+                    spacing[0].setStep(this.sliders.spacingStep(min));
                 });
         contents.addChild(spacing[0]);
         contents.addChild(spacing[1]);
@@ -83,21 +82,21 @@ public class AerolitePresetScreen extends Screen {
                 step -> this.settings = this.settings.withDecayScale(1 << (MIN_SCALE_EXPONENT + step))));
         // The erosion threshold stays at least one step above the decay threshold.
         StepSlider[] thresholds = new StepSlider[2];
-        thresholds[0] = new StepSlider(FRACTION_STEPS, Math.round(this.settings.decayThreshold() * FRACTION_STEPS),
-                step -> Component.translatable("createWorld.customize.aerolite.decay_threshold", percent(step)),
+        thresholds[0] = new StepSlider(PresetSliders.FRACTION_STEPS, Math.round(this.settings.decayThreshold() * PresetSliders.FRACTION_STEPS),
+                step -> Component.translatable("createWorld.customize.aerolite.decay_threshold", this.sliders.percent(step)),
                 step -> {
-                    int decay = Math.min(step, FRACTION_STEPS - 1);
-                    int erosion = Math.max(decay + 1, Math.round(this.settings.erosionThreshold() * FRACTION_STEPS));
-                    this.settings = this.settings.withDecayThreshold(decay / (float) FRACTION_STEPS).withErosionThreshold(erosion / (float) FRACTION_STEPS);
+                    int decay = Math.min(step, PresetSliders.FRACTION_STEPS - 1);
+                    int erosion = Math.max(decay + 1, Math.round(this.settings.erosionThreshold() * PresetSliders.FRACTION_STEPS));
+                    this.settings = this.settings.withDecayThreshold(decay / (float) PresetSliders.FRACTION_STEPS).withErosionThreshold(erosion / (float) PresetSliders.FRACTION_STEPS);
                     thresholds[0].setStep(decay);
                     thresholds[1].setStep(erosion - 1);
                 });
-        thresholds[1] = new StepSlider(FRACTION_STEPS - 1, Math.round(this.settings.erosionThreshold() * FRACTION_STEPS) - 1,
-                step -> Component.translatable("createWorld.customize.aerolite.erosion_threshold", percent(step + 1)),
+        thresholds[1] = new StepSlider(PresetSliders.FRACTION_STEPS - 1, Math.round(this.settings.erosionThreshold() * PresetSliders.FRACTION_STEPS) - 1,
+                step -> Component.translatable("createWorld.customize.aerolite.erosion_threshold", this.sliders.percent(step + 1)),
                 step -> {
                     int erosion = step + 1;
-                    int decay = Math.min(erosion - 1, Math.round(this.settings.decayThreshold() * FRACTION_STEPS));
-                    this.settings = this.settings.withDecayThreshold(decay / (float) FRACTION_STEPS).withErosionThreshold(erosion / (float) FRACTION_STEPS);
+                    int decay = Math.min(erosion - 1, Math.round(this.settings.decayThreshold() * PresetSliders.FRACTION_STEPS));
+                    this.settings = this.settings.withDecayThreshold(decay / (float) PresetSliders.FRACTION_STEPS).withErosionThreshold(erosion / (float) PresetSliders.FRACTION_STEPS);
                     thresholds[0].setStep(decay);
                 });
         contents.addChild(thresholds[0]);
@@ -106,24 +105,12 @@ public class AerolitePresetScreen extends Screen {
         LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
         footer.addChild(Button.builder(CommonComponents.GUI_DONE, button -> {
             AeroliteSettings chosen = this.settings;
-            this.parent.getUiState().updateDimensions((registries, dimensions) -> withSettings(dimensions, chosen));
+            this.parent.getUiState().updateDimensions((registries, dimensions) -> this.withSettings(dimensions, chosen));
             this.onClose();
         }).build());
         footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).build());
         this.layout.visitWidgets(this::addRenderableWidget);
         this.repositionElements();
-    }
-
-    private static String percent(int step) {
-        return Math.round(100F * step / FRACTION_STEPS) + "%";
-    }
-
-    private static int spacing(int step) {
-        return AeroliteSettings.MIN_SHAFT_SPACING + SPACING_STEP * step;
-    }
-
-    private static int spacingStep(int spacing) {
-        return Math.round((spacing - AeroliteSettings.MIN_SHAFT_SPACING) / (float) SPACING_STEP);
     }
 
     @Override
@@ -136,7 +123,7 @@ public class AerolitePresetScreen extends Screen {
         this.minecraft.setScreen(this.parent);
     }
 
-    private static WorldDimensions withSettings(WorldDimensions dimensions, AeroliteSettings settings) {
+    private WorldDimensions withSettings(WorldDimensions dimensions, AeroliteSettings settings) {
         Map<ResourceKey<LevelStem>, LevelStem> stems = new LinkedHashMap<>();
         dimensions.dimensions().forEach((key, stem) -> stems.put(key, stem.generator() instanceof AeroliteChunkGenerator generator
                 ? new LevelStem(stem.type(), generator.withAeroliteSettings(settings))

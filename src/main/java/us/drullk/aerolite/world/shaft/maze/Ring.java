@@ -1,12 +1,16 @@
 package us.drullk.aerolite.world.shaft.maze;
 
+import tamaized.beanification.Component;
+
 /**
  * The maze grid around one shaft, seen as a ring of 48 blocks.
  * Block 0 is the corner at offset (-6, 6). The ring runs along the face where the second offset is 6.
  * Nodes sit on even blocks, so node {@code v} is block {@code 2v}.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
+@Component
 public final class Ring {
 
     public static final int BLOCKS = 48;
@@ -17,14 +21,11 @@ public final class Ring {
     /** The offset of the junction box face from the junction center. */
     public static final int BOX = 7;
 
-    private Ring() {
-    }
-
-    public static boolean isCorner(int node) {
+    public boolean isCorner(int node) {
         return node % FACE_NODES == 0;
     }
 
-    public static int first(int block) {
+    public int first(int block) {
         block = Math.floorMod(block, BLOCKS);
         if (block < 12) {
             return -OUTER + block;
@@ -38,7 +39,7 @@ public final class Ring {
         return -OUTER;
     }
 
-    public static int second(int block) {
+    public int second(int block) {
         block = Math.floorMod(block, BLOCKS);
         if (block < 12) {
             return OUTER;
@@ -53,7 +54,7 @@ public final class Ring {
     }
 
     /** The ring block at the offset, or -1 when the offset is not on the outer layer. */
-    public static int block(int first, int second) {
+    public int block(int first, int second) {
         if (second == OUTER && first >= -OUTER && first < OUTER) {
             return first + OUTER;
         }
@@ -70,20 +71,20 @@ public final class Ring {
     }
 
     /** The node on the face where the second offset is {@code 6 * sign}, at the first offset {@code 2k}. */
-    public static int faceNode(int sign, int k) {
+    public int faceNode(int sign, int k) {
         return block(2 * k, OUTER * sign) / 2;
     }
 
     /** The ring block between two neighbor nodes. */
-    public static int blockBetween(int node1, int node2) {
+    public int blockBetween(int node1, int node2) {
         return Math.abs(node1 - node2) == 1 ? 2 * Math.min(node1, node2) + 1 : BLOCKS - 1;
     }
 
-    public static int oddBelow(int a) {
+    public int oddBelow(int a) {
         return (a & 1) != 0 ? a : a - 1;
     }
 
-    public static int oddAbove(int a) {
+    public int oddAbove(int a) {
         return (a & 1) != 0 ? a : a + 1;
     }
 

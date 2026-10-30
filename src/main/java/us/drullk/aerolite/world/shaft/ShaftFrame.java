@@ -8,6 +8,7 @@ import net.minecraft.core.Direction;
  * A shaft coordinate is a block along the shaft axis plus a first and a second offset from the shaft center.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  *
  * @param center1 the world coordinate of the first offset origin
  * @param center2 the world coordinate of the second offset origin
@@ -21,16 +22,6 @@ public record ShaftFrame(Kind kind, int center1, int center2) {
         ALONG_Z,
         /** Along Y. The first offset is X, the second offset is Z. */
         COLUMN
-    }
-
-    public static ShaftFrame of(ShaftLayout.Shaft shaft) {
-        return shaft.axis() == ShaftLayout.Axis.X
-                ? new ShaftFrame(Kind.ALONG_X, shaft.centerY(), shaft.position())
-                : new ShaftFrame(Kind.ALONG_Z, shaft.centerY(), shaft.position());
-    }
-
-    public static ShaftFrame of(ShaftLayout.Column column) {
-        return new ShaftFrame(Kind.COLUMN, column.x(), column.z());
     }
 
     public BlockPos at(int along, int first, int second) {

@@ -8,36 +8,35 @@ import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import tamaized.beanification.Component;
+import tamaized.beanification.PostConstruct;
 import us.drullk.aerolite.Aerolite;
 
 /**
  * The registry entries and data keys of the preset.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
+@Component
 public final class AeroliteWorldgen {
 
-    private static final DeferredRegister<MapCodec<? extends ChunkGenerator>> CHUNK_GENERATORS = DeferredRegister.create(Registries.CHUNK_GENERATOR, Aerolite.MODID);
+    public static final ResourceKey<WorldPreset> PRESET = ResourceKey.create(Registries.WORLD_PRESET, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "aerolite"));
 
-    public static final DeferredHolder<MapCodec<? extends ChunkGenerator>, MapCodec<AeroliteChunkGenerator>> AEROLITE_GENERATOR = CHUNK_GENERATORS.register("aerolite", () -> AeroliteChunkGenerator.CODEC);
+    public static final ResourceKey<NoiseGeneratorSettings> OVERWORLD_NOISE = ResourceKey.create(Registries.NOISE_SETTINGS, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "overworld"));
+    public static final ResourceKey<NoiseGeneratorSettings> NETHER_NOISE = ResourceKey.create(Registries.NOISE_SETTINGS, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "nether"));
+    public static final ResourceKey<NoiseGeneratorSettings> END_NOISE = ResourceKey.create(Registries.NOISE_SETTINGS, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "end"));
 
-    public static final ResourceKey<WorldPreset> PRESET = ResourceKey.create(Registries.WORLD_PRESET, id("aerolite"));
+    private final DeferredRegister<MapCodec<? extends ChunkGenerator>> chunkGenerators = DeferredRegister.create(Registries.CHUNK_GENERATOR, Aerolite.MODID);
 
-    public static final ResourceKey<NoiseGeneratorSettings> OVERWORLD_NOISE = ResourceKey.create(Registries.NOISE_SETTINGS, id("overworld"));
-    public static final ResourceKey<NoiseGeneratorSettings> NETHER_NOISE = ResourceKey.create(Registries.NOISE_SETTINGS, id("nether"));
-    public static final ResourceKey<NoiseGeneratorSettings> END_NOISE = ResourceKey.create(Registries.NOISE_SETTINGS, id("end"));
-
-    private AeroliteWorldgen() {
+    public AeroliteWorldgen() {
+        this.chunkGenerators.register("aerolite", () -> AeroliteChunkGenerator.CODEC);
     }
 
-    public static void register(IEventBus modEventBus) {
-        CHUNK_GENERATORS.register(modEventBus);
-    }
-
-    private static ResourceLocation id(String path) {
-        return ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, path);
+    @PostConstruct
+    public void register(IEventBus modEventBus) {
+        this.chunkGenerators.register(modEventBus);
     }
 
 }

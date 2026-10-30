@@ -13,13 +13,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the segments of a column maze.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
 class ColumnMazeTest {
 
-    private static ShaftMaze column(long seed, int minY, int maxY, List<ColumnJunction> junctions) {
+    private final Ring ring = new Ring();
+    private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
+
+    private ShaftMaze column(long seed, int minY, int maxY, List<ColumnJunction> junctions) {
         List<ShaftMaze.Box> boxes = junctions.stream().map(ColumnJunction::box).toList();
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();
-        return new ShaftMaze(lookup, new XoroshiroRandomSource(seed).forkPositional(), Math.floorDiv(minY, 16), Math.floorDiv(maxY - 1, 16));
+        return this.mazes.bounded(lookup, new XoroshiroRandomSource(seed).forkPositional(), Math.floorDiv(minY, 16), Math.floorDiv(maxY - 1, 16));
     }
 
     private static List<ShaftMaze.Segment> segments(ShaftMaze maze) {
@@ -76,15 +80,16 @@ class ColumnMazeTest {
 
     @Test
     void crossingNodesFaceThePatch() {
+        ShaftMaze maze = this.column(0, 0, 256, List.of());
         ShaftMaze.Box alongX = new ColumnJunction(0, 1, true).box();
         ShaftMaze.Box alongZ = new ColumnJunction(0, -1, false).box();
         for (int i = -2; i <= 2; i++) {
-            int x = alongX.crossingNode(i) * 2;
-            assertEquals(2 * i, Ring.first(x));
-            assertEquals(Ring.OUTER, Ring.second(x));
-            int z = alongZ.crossingNode(i) * 2;
-            assertEquals(-Ring.OUTER, Ring.first(z));
-            assertEquals(2 * i, Ring.second(z));
+            int x = maze.crossingNode(alongX, i) * 2;
+            assertEquals(2 * i, this.ring.first(x));
+            assertEquals(Ring.OUTER, this.ring.second(x));
+            int z = maze.crossingNode(alongZ, i) * 2;
+            assertEquals(-Ring.OUTER, this.ring.first(z));
+            assertEquals(2 * i, this.ring.second(z));
         }
     }
 

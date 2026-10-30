@@ -2,6 +2,8 @@ package us.drullk.aerolite.world.shaft;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import tamaized.beanification.Autowired;
+import tamaized.beanification.Component;
 import us.drullk.aerolite.world.shaft.maze.MazeEdge;
 import us.drullk.aerolite.world.shaft.maze.MazeNode;
 import us.drullk.aerolite.world.shaft.maze.Ring;
@@ -20,8 +22,10 @@ import java.util.stream.Collectors;
  * Turns maze nodes and tree edges into maze path blocks.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
-final class MazeCarver {
+@Component
+public final class MazeCarver {
 
     /**
      * One maze path block.
@@ -49,21 +53,26 @@ final class MazeCarver {
         }
     }
 
-    private MazeCarver() {
+    private final Ring ring;
+    private final ShaftFrames frames;
+
+    public MazeCarver(@Autowired Ring ring, @Autowired ShaftFrames frames) {
+        this.ring = ring;
+        this.frames = frames;
     }
 
-    static Carve block(ShaftFrame frame, int along, int block) {
-        int first = Ring.first(block);
-        int second = Ring.second(block);
-        return new Carve(frame.at(along, first, second), frame.at(along, clampInterior(first), clampInterior(second)), null);
+    Carve block(ShaftFrame frame, int along, int block) {
+        int first = this.ring.first(block);
+        int second = this.ring.second(block);
+        return new Carve(frame.at(along, first, second), frame.at(along, this.clampInterior(first), this.clampInterior(second)), null);
     }
 
-    private static int clampInterior(int offset) {
+    private int clampInterior(int offset) {
         return Math.max(-Ring.OUTER + 1, Math.min(Ring.OUTER - 1, offset));
     }
 
     /** Carves the ruling nodes of the rulings. A corner node carves only when an edge holds it. */
-    static void rulings(ShaftFrame frame, int[] rulings, List<MazeEdge> edges, Consumer<Carve> out) {
+    void rulings(ShaftFrame frame, int[] rulings, List<MazeEdge> edges, Consumer<Carve> out) {
         Set<MazeNode> present = new HashSet<>();
         for (MazeEdge edge : edges) {
             present.add(edge.a());
@@ -71,48 +80,48 @@ final class MazeCarver {
         }
         for (int along : rulings) {
             for (int v = 0; v < Ring.NODES; v++) {
-                if (!Ring.isCorner(v) || present.contains(new MazeNode.Ruling(along, v))) {
-                    out.accept(block(frame, along, 2 * v));
+                if (!this.ring.isCorner(v) || present.contains(new MazeNode.Ruling(along, v))) {
+                    out.accept(this.block(frame, along, 2 * v));
                 }
             }
         }
     }
 
-    static void rulingEdge(ShaftFrame frame, MazeNode.Ruling a, MazeNode.Ruling b, Consumer<Carve> out) {
+    void rulingEdge(ShaftFrame frame, MazeNode.Ruling a, MazeNode.Ruling b, Consumer<Carve> out) {
         if (a.along() == b.along()) {
-            out.accept(block(frame, a.along(), Ring.blockBetween(a.node(), b.node())));
+            out.accept(this.block(frame, a.along(), this.ring.blockBetween(a.node(), b.node())));
         } else {
-            out.accept(block(frame, Math.min(a.along(), b.along()) + 1, 2 * a.node()));
+            out.accept(this.block(frame, Math.min(a.along(), b.along()) + 1, 2 * a.node()));
         }
     }
 
     /** Carves the edges and patch nodes of one horizontal shaft segment. */
-    static void shaftSegment(ShaftFrame frame, ShaftMaze.Segment segment, Consumer<Carve> out) {
-        segment(frame, segment, box -> new PatchFace(frame, box.sign(), box.center()), out);
+    void shaftSegment(ShaftFrame frame, ShaftMaze.Segment segment, Consumer<Carve> out) {
+        this.segment(frame, segment, box -> new PatchFace(frame, box.sign(), box.center()), out);
     }
 
     /** Carves the edges and column patch nodes of one column segment. */
-    static void columnSegment(ShaftLayout.Column column, ShaftMaze.Segment segment, Consumer<Carve> out) {
-        segment(ShaftFrame.of(column), segment, box -> columnPatchFace(column, box), out);
+    void columnSegment(ShaftLayout.Column column, ShaftMaze.Segment segment, Consumer<Carve> out) {
+        this.segment(this.frames.of(column), segment, box -> this.columnPatchFace(column, box), out);
     }
 
-    private static void segment(ShaftFrame frame, ShaftMaze.Segment segment, Function<ShaftMaze.Box, PatchFace> faceOf, Consumer<Carve> out) {
+    private void segment(ShaftFrame frame, ShaftMaze.Segment segment, Function<ShaftMaze.Box, PatchFace> faceOf, Consumer<Carve> out) {
         Map<Integer, PatchFace> faces = segment.boxes().stream().collect(Collectors.toMap(ShaftMaze.Box::center, faceOf));
         for (PatchFace face : faces.values()) {
-            patchNodes(face, out);
+            this.patchNodes(face, out);
         }
-        rulings(frame, segment.rulings(), segment.edges(), out);
-        edges(frame, segment.edges(), faces::get, out);
+        this.rulings(frame, segment.rulings(), segment.edges(), out);
+        this.edges(frame, segment.edges(), faces::get, out);
     }
 
     /** The column patch face of a junction box, in the frame of its horizontal shaft. */
-    static PatchFace columnPatchFace(ShaftLayout.Column column, ShaftMaze.Box box) {
+    PatchFace columnPatchFace(ShaftLayout.Column column, ShaftMaze.Box box) {
         return box.patching() == ShaftMaze.Patching.COLUMN_ALONG_X
                 ? new PatchFace(new ShaftFrame(ShaftFrame.Kind.ALONG_X, box.center(), column.z()), box.sign(), column.x())
                 : new PatchFace(new ShaftFrame(ShaftFrame.Kind.ALONG_Z, box.center(), column.x()), box.sign(), column.z());
     }
 
-    private static void patchNodes(PatchFace face, Consumer<Carve> out) {
+    private void patchNodes(PatchFace face, Consumer<Carve> out) {
         for (int i = -3; i <= 3; i++) {
             for (int j = -3; j <= 3; j++) {
                 out.accept(face.node(i, j));
@@ -126,16 +135,16 @@ final class MazeCarver {
      * @param frame the frame of the rulings
      * @param faces the patch face of each box, by box center
      */
-    private static void edges(ShaftFrame frame, List<MazeEdge> edges, Function<Integer, PatchFace> faces, Consumer<Carve> out) {
+    private void edges(ShaftFrame frame, List<MazeEdge> edges, Function<Integer, PatchFace> faces, Consumer<Carve> out) {
         for (MazeEdge edge : edges) {
             if (edge.a() instanceof MazeNode.Ruling a && edge.b() instanceof MazeNode.Ruling b) {
-                rulingEdge(frame, a, b, out);
+                this.rulingEdge(frame, a, b, out);
             } else if (edge.a() instanceof MazeNode.Patch a && edge.b() instanceof MazeNode.Patch b) {
                 out.accept(faces.apply(a.owner()).carve(faces.apply(a.owner()).center() + a.i() + b.i(), a.j() + b.j()));
             } else {
                 MazeNode.Patch patch = (MazeNode.Patch) (edge.a() instanceof MazeNode.Patch ? edge.a() : edge.b());
                 MazeNode.Ruling ruling = (MazeNode.Ruling) (edge.a() instanceof MazeNode.Ruling ? edge.a() : edge.b());
-                crossing(frame, faces.apply(patch.owner()), patch, ruling, out);
+                this.crossing(frame, faces.apply(patch.owner()), patch, ruling, out);
             }
         }
     }
@@ -144,7 +153,7 @@ final class MazeCarver {
      * Carves a crossing from a patch border node onto the nearest ruling.
      * It runs along the outer layer of the ruling's shaft, then steps up onto the box face.
      */
-    private static void crossing(ShaftFrame frame, PatchFace face, MazeNode.Patch patch, MazeNode.Ruling ruling, Consumer<Carve> out) {
+    private void crossing(ShaftFrame frame, PatchFace face, MazeNode.Patch patch, MazeNode.Ruling ruling, Consumer<Carve> out) {
         out.accept(face.node(patch.i(), patch.j()));
         boolean column = frame.kind() == ShaftFrame.Kind.COLUMN;
         int boxCenter = column ? face.frame().center1() : face.center();
@@ -153,12 +162,12 @@ final class MazeCarver {
         int ringBlock = 2 * ruling.node();
         if (ruling.along() < boxCenter) {
             for (int along = ruling.along() + 1; along < boxCenter - Ring.BOX; along++) {
-                out.accept(block(frame, along, ringBlock));
+                out.accept(this.block(frame, along, ringBlock));
             }
             out.accept(column ? face.carve(faceAlong, -Ring.BOX) : face.carve(boxCenter - Ring.BOX, faceFirst));
         } else {
             for (int along = boxCenter + Ring.BOX + 1; along < ruling.along(); along++) {
-                out.accept(block(frame, along, ringBlock));
+                out.accept(this.block(frame, along, ringBlock));
             }
             out.accept(column ? face.carve(faceAlong, Ring.BOX) : face.carve(boxCenter + Ring.BOX, faceFirst));
         }

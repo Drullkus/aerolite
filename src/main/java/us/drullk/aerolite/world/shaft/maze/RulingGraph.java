@@ -11,14 +11,17 @@ import java.util.List;
  * Ring edges join neighbor nodes of one ruling. Axis edges join two rulings two blocks apart.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
 final class RulingGraph {
 
     final MazeGraph graph = new MazeGraph();
+    private final Ring ring;
     private final List<MazeNode> names = new ArrayList<>();
     private final Int2IntMap firstNodeOfRuling = new Int2IntOpenHashMap();
 
-    RulingGraph(int[] rulings) {
+    RulingGraph(Ring ring, int[] rulings) {
+        this.ring = ring;
         for (int along : rulings) {
             this.firstNodeOfRuling.put(along, this.graph.size());
             for (int v = 0; v < Ring.NODES; v++) {
@@ -28,7 +31,7 @@ final class RulingGraph {
         for (int along : rulings) {
             for (int v = 0; v < Ring.NODES; v++) {
                 this.graph.addEdge(this.node(along, v), this.node(along, (v + 1) % Ring.NODES));
-                if (this.firstNodeOfRuling.containsKey(along + 2) && !Ring.isCorner(v)) {
+                if (this.firstNodeOfRuling.containsKey(along + 2) && !this.ring.isCorner(v)) {
                     this.graph.addEdge(this.node(along, v), this.node(along + 2, v));
                 }
             }
@@ -57,7 +60,7 @@ final class RulingGraph {
     int addVirtual(int along) {
         int virtual = this.addVirtual();
         for (int v = 0; v < Ring.NODES; v++) {
-            if (!Ring.isCorner(v)) {
+            if (!this.ring.isCorner(v)) {
                 this.graph.addEdge(virtual, this.node(along, v));
             }
         }
@@ -74,19 +77,19 @@ final class RulingGraph {
         }
         for (int i = -3; i <= 3; i++) {
             for (int j = -3; j <= 3; j++) {
-                int n = patchNode(first, i, j);
+                int n = this.patchNode(first, i, j);
                 if (i < 3) {
-                    this.graph.addEdge(n, patchNode(first, i + 1, j));
+                    this.graph.addEdge(n, this.patchNode(first, i + 1, j));
                 }
                 if (j < 3) {
-                    this.graph.addEdge(n, patchNode(first, i, j + 1));
+                    this.graph.addEdge(n, this.patchNode(first, i, j + 1));
                 }
             }
         }
         return first;
     }
 
-    static int patchNode(int first, int i, int j) {
+    int patchNode(int first, int i, int j) {
         return first + (i + 3) * 7 + (j + 3);
     }
 

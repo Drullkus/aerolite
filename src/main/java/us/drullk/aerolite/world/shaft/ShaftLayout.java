@@ -5,6 +5,7 @@ import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
+import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,6 +17,7 @@ import java.util.Optional;
  * The placement of shafts, columns and junctions in one dimension. Every query is a pure function of the seed.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
 public final class ShaftLayout {
 
@@ -73,6 +75,7 @@ public final class ShaftLayout {
         }
     }
 
+    private final ShaftMazes mazes;
     private final AeroliteSettings settings;
     private final int minY;
     private final int maxY;
@@ -89,7 +92,8 @@ public final class ShaftLayout {
      * @param salt  a name that makes the layout of each dimension differ
      * @param maxY  the top build limit, exclusive
      */
-    public ShaftLayout(long seed, String salt, int minY, int maxY, AeroliteSettings settings) {
+    public ShaftLayout(ShaftMazes mazes, long seed, String salt, int minY, int maxY, AeroliteSettings settings) {
+        this.mazes = mazes;
         this.settings = settings;
         this.minY = minY;
         this.maxY = maxY;
@@ -194,14 +198,14 @@ public final class ShaftLayout {
         // Each end leaves room for the shortest shear band and the margin to the box.
         int lowestBox = junctions.getFirst().center() - Ring.BOX;
         int highestBox = junctions.getLast().center() + Ring.BOX;
-        int bottomEnd = between(random, this.minY, Math.max(this.minY, lowestBox - SHEAR_MARGIN - MIN_SHEAR));
-        int topEnd = between(random, Math.min(this.maxY, highestBox + 1 + SHEAR_MARGIN + MIN_SHEAR), this.maxY);
-        int bottomShear = Math.min(between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, lowestBox - SHEAR_MARGIN - bottomEnd));
-        int topShear = Math.min(between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, topEnd - (highestBox + 1) - SHEAR_MARGIN));
+        int bottomEnd = this.between(random, this.minY, Math.max(this.minY, lowestBox - SHEAR_MARGIN - MIN_SHEAR));
+        int topEnd = this.between(random, Math.min(this.maxY, highestBox + 1 + SHEAR_MARGIN + MIN_SHEAR), this.maxY);
+        int bottomShear = Math.min(this.between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, lowestBox - SHEAR_MARGIN - bottomEnd));
+        int topShear = Math.min(this.between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, topEnd - (highestBox + 1) - SHEAR_MARGIN));
         return Optional.of(new Column(xShaft.get(), zShaft.get(), xShaftSign, zShaftSign, List.copyOf(junctions), bottomEnd, topEnd, bottomShear, topShear));
     }
 
-    private static int between(RandomSource random, int min, int max) {
+    private int between(RandomSource random, int min, int max) {
         return min + random.nextInt(max - min + 1);
     }
 
@@ -225,14 +229,14 @@ public final class ShaftLayout {
                         ? new ShaftMaze.Box(column.x(), column.xShaftSign())
                         : new ShaftMaze.Box(column.z(), column.zShaftSign()))
                 .toList();
-        return new ShaftMaze(boxes, this.shaftMazeRandom.fork(shaft.axis().ordinal(), shaft.cell(), 0));
+        return this.mazes.shaft(boxes, this.shaftMazeRandom.fork(shaft.axis().ordinal(), shaft.cell(), 0));
     }
 
     /** The maze of one column. Its chunks are the chunk sections from the bottom build limit to the top build limit. */
     public ShaftMaze columnMaze(Column column) {
         List<ShaftMaze.Box> boxes = column.junctions().stream().map(ColumnJunction::box).toList();
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();
-        return new ShaftMaze(
+        return this.mazes.bounded(
                 lookup,
                 this.columnMazeRandom.fork(column.zShaft().cell(), column.xShaft().cell(), 0),
                 Math.floorDiv(this.minY, ShaftMaze.CHUNK),

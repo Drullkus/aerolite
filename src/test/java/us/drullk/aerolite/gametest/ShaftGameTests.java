@@ -22,6 +22,7 @@ import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import tamaized.beanification.Autowired;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteSettings;
@@ -30,6 +31,7 @@ import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
+import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 import us.drullk.aerolite.world.status.AeroliteChunkStatuses;
 
 import java.util.HashMap;
@@ -40,17 +42,28 @@ import java.util.Map;
  * GameTests of the shafts chunk step and the blocks it writes.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
 public final class ShaftGameTests {
+
+    // GameTest methods are static. Beanification fills these fields.
+    @Autowired
+    private static AeroliteChunkStatuses statuses;
+    @Autowired
+    private static ShaftMazes mazes;
+    @Autowired
+    private static ShaftPainter painter;
+    @Autowired
+    private static Ring ring;
 
     private ShaftGameTests() {
     }
 
     @GameTest(template = "empty")
     public static void shaftsStepSitsBetweenCarversAndFeatures(GameTestHelper helper) {
-        ChunkStatus shafts = AeroliteChunkStatuses.shafts();
+        ChunkStatus shafts = statuses.shafts();
         helper.assertTrue(shafts.getParent() == ChunkStatus.CARVERS, "The shafts status does not follow the carvers status");
         helper.assertTrue(ChunkStatus.FEATURES.getParent() == shafts, "The features status does not follow the shafts status");
         helper.assertTrue(ChunkPyramid.GENERATION_PYRAMID.getStepTo(shafts).targetStatus() == shafts, "The generation pyramid has no shafts step");
@@ -64,7 +77,7 @@ public final class ShaftGameTests {
     public static void painterBuildsAShaftCrossSection(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(1).withErosionThreshold(1);
-        ShaftLayout layout = new ShaftLayout(42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout layout = new ShaftLayout(mazes, 42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
         int chunkZ = 0;
         while (!layout.columnsOn(shaft, 16 * chunkZ - 16, 16 * chunkZ + 32).isEmpty()) {
@@ -72,7 +85,7 @@ public final class ShaftGameTests {
         }
         ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(shaft.position()), chunkZ);
         ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
-        ShaftPainter.paint(layout, chunk);
+        painter.paint(layout, chunk);
 
         int x = shaft.position();
         int y = shaft.centerY();
@@ -80,8 +93,8 @@ public final class ShaftGameTests {
         for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
             helper.assertTrue(chunk.getBlockState(new BlockPos(x, y, z)) == settings.interiorBlock(), "The shaft core is not the interior block");
             for (int block = 0; block < Ring.BLOCKS; block++) {
-                int dy = Ring.first(block);
-                int dx = Ring.second(block);
+                int dy = ring.first(block);
+                int dx = ring.second(block);
                 if (SectionPos.blockToSectionCoord(x + dx) != pos.x) {
                     continue;
                 }
@@ -105,7 +118,7 @@ public final class ShaftGameTests {
     public static void erosionKeepsTheCore(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
-        ShaftLayout layout = new ShaftLayout(42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout layout = new ShaftLayout(mazes, 42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
         int eroded = 0;
         for (int chunkZ = 0; chunkZ < 6; chunkZ++) {
@@ -114,7 +127,7 @@ public final class ShaftGameTests {
             }
             ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(shaft.position()), chunkZ);
             ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
-            ShaftPainter.paint(layout, chunk);
+            painter.paint(layout, chunk);
             for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
                 for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
                     for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
@@ -140,7 +153,7 @@ public final class ShaftGameTests {
     public static void erosionKeepsTheShaftCoresThroughJunctionBoxes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
-        ShaftLayout layout = new ShaftLayout(42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout layout = new ShaftLayout(mazes, 42, "test", level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Column column = null;
         for (int cell = 0; column == null; cell++) {
             for (int other = 0; column == null && other < 40; other++) {
@@ -176,7 +189,7 @@ public final class ShaftGameTests {
         ChunkPos chunkPos = new ChunkPos(pos);
         ProtoChunk chunk = chunks.computeIfAbsent(chunkPos.toLong(), key -> {
             ProtoChunk painted = new ProtoChunk(chunkPos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
-            ShaftPainter.paint(layout, painted);
+            painter.paint(layout, painted);
             return painted;
         });
         return chunk.getBlockState(pos);

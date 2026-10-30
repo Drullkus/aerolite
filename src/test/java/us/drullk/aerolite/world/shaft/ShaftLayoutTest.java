@@ -3,7 +3,9 @@ package us.drullk.aerolite.world.shaft;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
+import us.drullk.aerolite.world.shaft.maze.MazeEdges;
 import us.drullk.aerolite.world.shaft.maze.Ring;
+import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 
 import java.util.Arrays;
 import java.util.List;
@@ -17,14 +19,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the placement of shafts and columns.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  */
 class ShaftLayoutTest {
 
     private static final int MIN_Y = -64;
     private static final int MAX_Y = 320;
 
-    private static ShaftLayout layout(long seed, int minSpacing, int maxSpacing) {
-        return new ShaftLayout(seed, "minecraft:overworld", MIN_Y, MAX_Y, AeroliteSettings.DEFAULT.withShaftSpacing(minSpacing, maxSpacing));
+    private final Ring ring = new Ring();
+    private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
+
+    private ShaftLayout layout(long seed, int minSpacing, int maxSpacing) {
+        return new ShaftLayout(this.mazes, seed, "minecraft:overworld", MIN_Y, MAX_Y, AeroliteSettings.DEFAULT.withShaftSpacing(minSpacing, maxSpacing));
     }
 
     @Test
@@ -105,7 +111,7 @@ class ShaftLayoutTest {
     @Test
     void columnShareMatchesTheChanceOnEachShaft() {
         AeroliteSettings settings = AeroliteSettings.DEFAULT.withShaftSpacing(32, 80).withColumnChance(0.9F);
-        ShaftLayout layout = new ShaftLayout(-777248163424996722L, "minecraft:overworld", MIN_Y, MAX_Y, settings);
+        ShaftLayout layout = new ShaftLayout(this.mazes, -777248163424996722L, "minecraft:overworld", MIN_Y, MAX_Y, settings);
         List<ShaftLayout.Shaft> crossings = layout.shafts(ShaftLayout.Axis.X, -6000, 6000);
         for (ShaftLayout.Shaft shaft : layout.shafts(ShaftLayout.Axis.Z, -1500, 1500)) {
             int eligible = 0;
