@@ -83,14 +83,27 @@ Build setup:
 Rules:
 
 - Call `BeanContext.init(MODID)` in a static block of the `@Mod` class.
+- Prefer a `@Component` to a static method. Put logic and state in components.
+- Do not write a static field that holds state.
+- Constants, codecs, registry keys and mixin members stay static.
+- Make each component a public class with a public constructor. Beanification creates components through `Class.getConstructors()`.
+- Write event listeners as instance methods of a component. A `@PostConstruct` method adds them to the bus.
+- Give a component that only the client uses `dist = Dist.CLIENT`.
+- A record cannot hold an `@Autowired` field. Put the logic that needs a component in the class that holds the component.
+- Code that runs before `BeanContext.init` cannot use a component. The chunk status mixins run in the vanilla bootstrap.
 - Declare each compat feature as an interface.
 - Give each interface a `@Bean` static method that checks `ModList` and returns one implementation.
 - Return a no-op implementation when the mod is absent.
 - Do not annotate an optional-mod implementation with `@Component`. Create it only in the `@Bean` method.
 - Use `@Configurable` and `@Autowired` fields in blocks, items and block entities.
+- Use `@Configurable` and `@Autowired` fields in other long-lived objects that the game creates, such as the chunk generator.
+- An object that worldgen creates per chunk or per segment takes its components through its constructor.
+- `BeanContext.injectInto` is synchronized and scans the mod annotations on each call. So a `@Configurable` object costs a global lock at each construction.
 - Do not use an `@Autowired` field in a constructor. Injection occurs at the end of the constructor.
 - Use constructor injection when a constructor needs a bean.
 - In JUnit tests, extend with `MockitoFixer` and `MockitoRunner` from `tamaized.beanification.junit`. Use Mockito `@Mock` fields.
+- A JUnit test of pure logic creates real components with `new`.
+- GameTest methods are static. A GameTest class gets its components through static `@Autowired` fields.
 - Do not use `BeanContextJunitExtension` or `@MockBean`. JUnit runs in the game's module layer, and that extension is in a split package.
 
 ### WorldEdit
