@@ -357,6 +357,14 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The constant `FONT_SCALE` in `ImGuiPreviewPanel` sets the panel scale.
 - imgui-mc sets the ImGui main font scale from the GUI scale before each frame.
 - The panel sets the main font scale to `FONT_SCALE` while it draws and restores it after.
+- The panel draws with its own font, a copy of the imgui-mc default font.
+- FreeType rasterizes the panel font as one-bit glyphs with mono hinting.
+- The imgui-java binding cannot give one font its own loader. So the panel font sets FreeType as the loader of the whole atlas.
+- The other fonts of the atlas keep their antialiased glyphs.
+- The imgui-mc renderer for 1.21.1 bakes each font once at its load size. It scales the glyphs to the drawn size.
+- The panel font loads at its drawn size times the framebuffer scale. So each glyph texel covers one framebuffer pixel.
+- A change of the framebuffer scale rebuilds the font atlas.
+- `ImGuiPanelFont` adds the panel font on each font event of imgui-mc.
 - Each popup icon renders at the framebuffer pixel size of its row, rounded up to a multiple of 16.
 - A change of that pixel size renders the icon atlas again.
 

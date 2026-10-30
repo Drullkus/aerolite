@@ -47,6 +47,7 @@ import java.util.function.Function;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_21-56_ad766c27-abc7-4f8b-ae6a-53b92f85435c.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -58,7 +59,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse
             | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoDocking;
     /** The font scale of the panel, its popups and the view gizmo. This is the one place to dial the panel scale. */
-    private static final float FONT_SCALE = 1F;
+    private static final float FONT_SCALE = 1.5F;
+    /** The size of the panel text before the font scale, in ImGui units. */
+    private static final float FONT_SIZE = 13F;
 
     private final Map<String, ImGuiBlockField> blockFields = new HashMap<>();
     private final int[] windowWidth = new int[1];
@@ -67,6 +70,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     private final int[] framebufferHeight = new int[1];
     private final int[] slider = new int[1];
     private final ImGuiViewGizmo gizmo = new ImGuiViewGizmo();
+    private final ImGuiPanelFont font = new ImGuiPanelFont(FONT_SIZE * FONT_SCALE);
     /** The ImGui default style. It exists after the first drawn frame, when the ImGui natives are loaded. */
     @Nullable
     private ImGuiStyle defaults;
@@ -93,9 +97,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return Objects.requireNonNull(this.tools, "The panel draws only for an open preview screen");
     }
 
-    /** Creates the panel and adds its draw hooks to the imgui-mc events. */
+    /** Creates the panel and adds its font and draw hooks to the imgui-mc events. */
     public static ImGuiPreviewPanel create() {
         ImGuiPreviewPanel panel = new ImGuiPreviewPanel();
+        ImGuiMCEvents.INSTANCE.onRegisterImGuiFonts((atlas, defaultFont, fontScale) -> panel.font.register(atlas));
         ImGuiMCEvents.INSTANCE.preRenderImGuiEvent(panel::drawPre);
         ImGuiMCEvents.INSTANCE.postRenderImGuiEvent(panel::fixFramebufferScale);
         return panel;
@@ -128,13 +133,14 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             return;
         }
         this.fixFramebufferScale();
+        this.font.matchScale(ImGui.getIO().getDisplayFramebufferScaleX());
         ImGuiStyle style = ImGui.getStyle();
         this.resetStyle(style);
         // imgui-mc sets the main font scale from the GUI scale before each frame.
         float sharedScale = style.getFontScaleMain();
         style.setFontScaleMain(FONT_SCALE);
-        // A size of 0 keeps the unscaled base size. The push applies the new scale.
-        ImGui.pushFont(ImGui.getFont(), 0);
+        // The push applies the new scale.
+        ImGui.pushFont(this.font.get(), FONT_SIZE);
         try {
             this.drawScreen(screen);
         } finally {
