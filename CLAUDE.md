@@ -358,6 +358,9 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The panel sets the main font scale to `FONT_SCALE` while it draws and restores it after.
 - Each popup icon renders at the framebuffer pixel size of its row, rounded up to a multiple of 16.
 - A change of that pixel size renders the icon atlas again.
+- Veil writes its own ImGui style in its pre-render and post-render hooks, before and after each frame.
+- The panel resets the style to the ImGui default dark theme and the ImGui default sizes while it draws.
+- The default sizes come from a default `ImGuiStyle` instance. No size value is hard coded.
 
 ## Shafts
 

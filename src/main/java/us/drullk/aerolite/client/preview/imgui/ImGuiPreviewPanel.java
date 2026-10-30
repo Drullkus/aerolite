@@ -67,6 +67,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     private final int[] framebufferHeight = new int[1];
     private final int[] slider = new int[1];
     private final ImGuiViewGizmo gizmo = new ImGuiViewGizmo();
+    /** The ImGui default style. It exists after the first drawn frame, when the ImGui natives are loaded. */
+    @Nullable
+    private ImGuiStyle defaults;
     private final ImString seedField = new ImString(SEED_CAPACITY);
     /** The seed text that the seed field last took from the screen or gave to it. */
     @Nullable
@@ -125,8 +128,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             return;
         }
         this.fixFramebufferScale();
-        // imgui-mc sets the main font scale from the GUI scale before each frame.
         ImGuiStyle style = ImGui.getStyle();
+        this.resetStyle(style);
+        // imgui-mc sets the main font scale from the GUI scale before each frame.
         float sharedScale = style.getFontScaleMain();
         style.setFontScaleMain(FONT_SCALE);
         // A size of 0 keeps the unscaled base size. The push applies the new scale.
@@ -137,6 +141,41 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             ImGui.popFont();
             style.setFontScaleMain(sharedScale);
         }
+    }
+
+    /**
+     * Gives the style the ImGui default colors and sizes. Veil writes its own style in its pre-render and post-render hooks,
+     * so the panel resets the style each frame. ImGui bakes the colors at submission, so the Veil windows keep the Veil style.
+     */
+    private void resetStyle(ImGuiStyle style) {
+        if (this.defaults == null) {
+            this.defaults = new ImGuiStyle();
+        }
+        ImGuiStyle defaults = this.defaults;
+        ImGui.styleColorsDark(style);
+        style.setWindowPadding(defaults.getWindowPaddingX(), defaults.getWindowPaddingY());
+        style.setFramePadding(defaults.getFramePaddingX(), defaults.getFramePaddingY());
+        style.setCellPadding(defaults.getCellPaddingX(), defaults.getCellPaddingY());
+        style.setItemSpacing(defaults.getItemSpacingX(), defaults.getItemSpacingY());
+        style.setItemInnerSpacing(defaults.getItemInnerSpacingX(), defaults.getItemInnerSpacingY());
+        style.setTouchExtraPadding(defaults.getTouchExtraPaddingX(), defaults.getTouchExtraPaddingY());
+        style.setIndentSpacing(defaults.getIndentSpacing());
+        style.setScrollbarSize(defaults.getScrollbarSize());
+        style.setGrabMinSize(defaults.getGrabMinSize());
+        style.setWindowBorderSize(defaults.getWindowBorderSize());
+        style.setChildBorderSize(defaults.getChildBorderSize());
+        style.setPopupBorderSize(defaults.getPopupBorderSize());
+        style.setFrameBorderSize(defaults.getFrameBorderSize());
+        style.setTabBorderSize(defaults.getTabBorderSize());
+        style.setWindowRounding(defaults.getWindowRounding());
+        style.setChildRounding(defaults.getChildRounding());
+        style.setFrameRounding(defaults.getFrameRounding());
+        style.setPopupRounding(defaults.getPopupRounding());
+        style.setScrollbarRounding(defaults.getScrollbarRounding());
+        style.setGrabRounding(defaults.getGrabRounding());
+        style.setLogSliderDeadzone(defaults.getLogSliderDeadzone());
+        style.setTabRounding(defaults.getTabRounding());
+        style.setWindowMenuButtonPosition(defaults.getWindowMenuButtonPosition());
     }
 
     private void drawScreen(PreviewScreen screen) {
