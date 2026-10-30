@@ -25,6 +25,10 @@ Every scene takes the bias P and the rule of originshift.py. A patch
 crossing and a patch edge along the shaft axis are axis edges. A patch edge
 across the shaft axis is a ring edge. On a column the axis is Y.
 
+Every scene also takes the start tree and the scaled steps of originshift.py.
+A curve start runs over each block of rulings that axis edges join. The
+patch nodes and the virtual nodes join through the union-find pass.
+
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
 Written by Claude Code; conversation transcript:
@@ -39,28 +43,36 @@ import random
 
 from originshift import (
     AXIS,
+    BFS_START,
     BLOCKS_AROUND,
     CLASS_RULE,
     DEFAULT_BIAS,
     DEFAULT_RULE,
+    DEFAULT_STEPS,
     DEGREE_RULE,
     NODES_PER_CHUNK,
     RING,
     RING_EDGE,
+    STARTS,
     Bias,
     Graph,
     bias_suffix,
     bias_value,
+    check_scaled_steps,
     check_weighted_wilson,
     build_layout,
     build_segment,
     is_corner,
     label_rows,
+    label_scale,
     prune_corner_leaves,
     ring_offset,
     sample,
     seg_rng,
     segment_kind,
+    start_only_panels,
+    start_panels,
+    start_suffix,
     write_png,
 )
 
@@ -183,6 +195,7 @@ class Scene:
                 n = g.add_node()
                 index[(x, v)] = n
                 names[n] = (x, v)
+        g.rulings = [[index[(x, v)] for v in range(RING)] for x in rulings]
         for x in rulings:
             for v in range(RING):
                 g.add_edge(index[(x, v)], index[(x, (v + 1) % RING)], RING_EDGE)
@@ -486,6 +499,7 @@ class ClusterScene:
                 n = g.add_node()
                 index[(x, v)] = n
                 names[n] = (x, v)
+        g.rulings = [[index[(x, v)] for v in range(RING)] for x in rulings]
         for x in rulings:
             for v in range(RING):
                 g.add_edge(index[(x, v)], index[(x, (v + 1) % RING)], RING_EDGE)
@@ -571,6 +585,8 @@ class ColumnScene:
                 clusters.append([lo, hi])
         self.edges = []
         self.rulings = []
+        # Kept and total curve edges of a curve start.
+        self.curve = [0, 0]
         covered = set()
         for lo, hi in clusters:
             lo, hi = max(lo, self.s_lo), min(hi, self.s_hi)
@@ -592,6 +608,7 @@ class ColumnScene:
                 n = g.add_node()
                 index[(y, v)] = n
                 names[n] = (y, v)
+        g.rulings = [[index[(y, v)] for v in range(RING)] for y in rulings]
         for y in rulings:
             for v in range(RING):
                 g.add_edge(index[(y, v)], index[(y, (v + 1) % RING)], RING_EDGE)
@@ -619,7 +636,11 @@ class ColumnScene:
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(right, index[(rulings[-1], v)], AXIS)
-        parent = sample(g, rng, self.sampler, self.spn, self.bias)
+        trace = {}
+        parent = sample(g, rng, self.sampler, self.spn, self.bias, trace)
+        if "curve" in trace:
+            self.curve[0] += trace["curve"][0]
+            self.curve[1] += trace["curve"][1]
         edges = []
         for a, b in tree_edges(g, parent, names):
             if a[1] is None:
@@ -688,6 +709,13 @@ def column_scene(seed, sampler, steps_per_node, bias):
     return ColumnScene(seed, [-56, 56], [1, 1], -64, 320, sampler, steps_per_node, bias)
 
 
+def side_by_side(path, panels):
+    """Put panels of equal height side by side with a white gap."""
+    gap = bytes(GAP_COLOR * COLUMN_GAP)
+    rows = [gap.join(bytes(panel[y]) for panel in panels) for y in range(len(panels[0]))]
+    write_png(path, len(rows[0]) // 3, len(rows), rows)
+
+
 def render_column_compare(path, seed, steps_per_node, p, scale):
     """Put the column band of the class rule and the degree rule side by side, each under its label strip."""
     panels = []
@@ -696,10 +724,38 @@ def render_column_compare(path, seed, steps_per_node, p, scale):
         print(f"{rule} column tree:", check_tree(scene))
         band = column_band_rows(scene, scale)
         panels.append(label_rows(label, len(band[0]) // 3) + band)
-    gap = bytes(GAP_COLOR * COLUMN_GAP)
-    rows = [bytes(panels[0][y]) + gap + bytes(panels[1][y]) for y in range(len(panels[0]))]
-    write_png(path, len(rows[0]) // 3, len(rows), rows)
+    side_by_side(path, panels)
 
+
+def column_band_name(sampler, bias, steps_per_node):
+    """Wilson's algorithm adds _wilson, so its band keeps its own file."""
+    tag = "_wilson" if sampler == "wilson" else ""
+    return f"column_band{tag}{bias_suffix(sampler, bias)}{start_suffix(sampler, bias, steps_per_node)}.png"
+
+
+def render_column_starts(out_dir, name, seed, panels, scale, band_scale):
+    """Put the column band of each panel side by side, each under its label strip. Write each band at band_scale too."""
+    width = BLOCKS_AROUND * scale
+    glyphs = label_scale([label for label, _, _, _ in panels], width)
+    images = []
+    for label, sampler, bias, spn in panels:
+        scene = column_scene(seed, sampler, spn, bias)
+        band_name = column_band_name(sampler, bias, spn)
+        report_column(label, scene)
+        render_column_band(scene, os.path.join(out_dir, band_name), band_scale)
+        print("wrote", band_name)
+        images.append(label_rows(label, width, glyphs) + column_band_rows(scene, scale))
+    side_by_side(os.path.join(out_dir, name), images)
+    print("wrote", name)
+
+
+def report_column(label, scene):
+    """Print the tree check and, for a curve start, the share of curve edges that the start keeps."""
+    line = f"{label}: {check_tree(scene)}"
+    kept, total = scene.curve
+    if total:
+        line += f", curve edges kept {kept} of {total} ({kept / total:.3f})"
+    print(line)
 
 
 def column_stats(seed, count, sampler, spn, bias):
@@ -825,9 +881,11 @@ def main():
     ap.add_argument("--cx", type=int, default=203)
     ap.add_argument("--cy", type=int, default=70)
     ap.add_argument("--sampler", choices=("originshift", "wilson"), default="originshift")
-    ap.add_argument("--steps-per-node", type=int, default=16)
+    ap.add_argument("--steps-per-node", type=int, default=DEFAULT_STEPS)
     ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="axis chance of the class rule or axis edge weight of the degree rule")
     ap.add_argument("--rule", choices=(CLASS_RULE, DEGREE_RULE), default=DEFAULT_RULE, help="the bias rule of the walker step")
+    ap.add_argument("--start", choices=STARTS, default=BFS_START, help="the start tree of Origin Shift")
+    ap.add_argument("--scaled-steps", action="store_true", help="divide the Origin Shift steps per node by min(P, 1 - P)")
     ap.add_argument("--reach", type=int, default=22, help="blocks of shaft and column on each side of the junction")
     ap.add_argument("--scale", type=int, default=9, help="pixels per block edge")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "images"))
@@ -837,9 +895,13 @@ def main():
     ap.add_argument("--column-band", action="store_true", help="render the unwrapped surface of one segmented column and exit")
     ap.add_argument("--count", type=int, default=40)
     ap.add_argument("--compare", action="store_true", help="render the column band of the class rule and the degree rule side by side and exit")
+    ap.add_argument("--compare-starts", action="store_true", help="with --column-band, render the column band of each start tree side by side and exit")
     args = ap.parse_args()
-    bias = Bias(args.bias, args.rule)
-    check_weighted_wilson(ap, args.rule == DEGREE_RULE and args.sampler == "wilson", args.bias)
+    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps)
+    if args.compare_starts and not (args.column_band and args.rule == DEGREE_RULE):
+        ap.error("--compare-starts needs --column-band and --rule degree")
+    check_weighted_wilson(ap, args.compare_starts or (args.rule == DEGREE_RULE and args.sampler == "wilson"), args.bias)
+    check_scaled_steps(ap, args.scaled_steps or args.compare_starts, args.bias)
     if args.cut_stats:
 
         cut_stats(args.seed, args.count, args.sampler, args.steps_per_node, bias)
@@ -856,12 +918,17 @@ def main():
         render_column_compare(os.path.join(args.out, name), args.seed, args.steps_per_node, args.bias, 4)
         print("wrote", name)
         return
-    suffix = bias_suffix(args.sampler, bias)
+    if args.compare_starts:
+        os.makedirs(args.out, exist_ok=True)
+        render_column_starts(args.out, f"compare_starts_column_bias{args.bias:g}.png", args.seed, start_panels(args.bias), 5, 4)
+        render_column_starts(args.out, f"compare_starts_only_bias{args.bias:g}.png", args.seed, start_only_panels(args.bias), 5, 4)
+        return
+    suffix = bias_suffix(args.sampler, bias) + start_suffix(args.sampler, bias, args.steps_per_node)
     if args.column_band:
         os.makedirs(args.out, exist_ok=True)
         scene = column_scene(args.seed, args.sampler, args.steps_per_node, bias)
-        print("column tree:", check_tree(scene))
-        name = f"column_band{suffix}.png"
+        report_column("column tree", scene)
+        name = column_band_name(args.sampler, bias, args.steps_per_node)
         render_column_band(scene, os.path.join(args.out, name), 4)
         print("wrote", name)
         return

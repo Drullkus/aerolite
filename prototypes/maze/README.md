@@ -11,7 +11,7 @@ This folder holds the standalone maze prototype for the shaft surface. It needs 
 - A corner node carves only when it passes a path from one face to the other. A corner leaf and its edge stay wall. So a two-block margin runs along every corner, with a notch wherever a path crosses it.
 - Every block between two nodes is an edge. An edge in the tree is a maze path. Every other block is a maze wall.
 - The program cuts the cylinder into segments. Each segment is a pure function of the seed and its index.
-- Origin Shift samples one spanning tree per segment. The start tree is the breadth-first tree from a seeded root.
+- Origin Shift samples one spanning tree per segment. The default start tree is the breadth-first tree from a seeded root. See [Start trees](#start-trees).
 - Wilson's algorithm is the reference sampler. With the degree rule, both converge to the same spanning tree distribution. See [Bias](#bias).
 - A virtual node touches the interior nodes of the facing ruling, never its corners.
 
@@ -54,6 +54,60 @@ The option `--rule` picks the bias rule. The rules are `class` and `degree`. The
 - Wilson's algorithm with weighted steps samples the weighted spanning tree distribution exactly. It is the reference for the degree rule.
 - At P = 0 or P = 1, the weighted walk cannot reach every node. Then Origin Shift does not mix, and the loop-erased walk never ends.
 - So Wilson's algorithm with the degree rule refuses P = 0 and P = 1. `--compare` refuses them too.
+
+## Start trees
+
+Origin Shift starts from a start tree. Under a strong bias, the walker seldom takes an edge of the disfavored class. So parts of the start tree survive the steps. At P = 0.9, the breadth-first start tree leaves ribs in the column band. A rib is a block of stacked ring paths in the middle of a segment.
+
+The option `--start` picks the start tree. The default is `bfs`.
+
+| Start | Start tree |
+|---|---|
+| `bfs` | The breadth-first tree from the seeded root. |
+| `uniform` | A uniform spanning tree. Wilson's algorithm with uniform steps samples it from the segment random. |
+| `serpentine` | One path that snakes along the axis. It runs along one ring position, steps one ring position on the turn ruling, and runs back along the next ring position. |
+| `hilbert` | A generalized Hilbert curve over the rectangle of 24 ring positions by the rulings of the segment. |
+
+- The serpentine starts at ring position 1. It runs along each ring position that is not a corner.
+- The serpentine crosses a corner ring position with two ring edges on the turn ruling.
+- A corner node that the serpentine does not visit hangs as a leaf on a ring edge.
+- The Hilbert curve is the "gilbert" recursion of Jakub Červený. It fills a rectangle of any size.
+- The seam of the Hilbert rectangle is at the corner ring position 0.
+- A curve start keeps only the curve edges that the graph has. The graph has no axis edge at a corner. The rectangle has no edge across its seam.
+- A union-find pass over the graph edges joins the curve pieces into one tree. Then it adds the virtual nodes and the patch nodes.
+- A virtual node joins the start tree by one edge.
+- In `junction.py`, a curve start runs over each block of rulings that axis edges join. A junction box cuts the rulings of its junction segment into two blocks.
+- The flag `--scaled-steps` divides the steps per node by min(P, 1 - P) and rounds the result.
+- With `--scaled-steps`, 16 steps per node become 160 at P = 0.9 and at P = 0.1. They become 32 at P = 0.5.
+- `--scaled-steps` refuses P = 0 and P = 1.
+- `--start` and `--scaled-steps` apply only to `--sampler originshift`. Wilson's algorithm has no start tree.
+- The `bfs` start takes the same random values as before `--start` existed. So the `bfs` images do not change.
+
+The five approaches against the ribs are:
+
+| Approach | Options |
+|---|---|
+| A | `--sampler wilson --rule degree`. Wilson's algorithm with weighted steps is the sampler. |
+| B | `--start uniform` |
+| C | `--start serpentine` |
+| D | `--start hilbert` |
+| E | `--scaled-steps`. The `bfs` start stays. |
+
+- In approach A, the bias slider of the mod runs from 5% to 95%.
+- The prototype accepts every bias strictly between 0 and 1 for Wilson's algorithm with the degree rule.
+
+### Residue
+
+- The residue is the share of the final tree edges that are also start tree edges.
+- `--stats` prints the residue of each row.
+- The `base` value is the mean overlap of two independent Wilson trees of the same segment graph. The Wilson row shows it as its residue.
+- The `-base` column is the residue minus `base`.
+- The `mixed` column is the mean overlap of the start tree with an independent Wilson tree of the same segment graph. A fully mixed Origin Shift reaches `mixed`.
+- The `-mixed` column is the residue minus `mixed`. A positive value is the part of the start tree that survives the steps.
+- `base` and `mixed` differ, because a start tree is not a sample of the weighted spanning tree distribution. A start tree with many edges of the disfavored class has a low `mixed`.
+- At 0 steps per node, the residue is 1.
+- For a curve start, `--stats` also prints the share of the curve edges that the start keeps.
+- The Wilson trees take the weighted steps of the degree rule. With the class rule, they take uniform steps.
 
 ## Layouts
 
@@ -207,6 +261,54 @@ python3 prototypes/maze/junction.py --column-stats --count 200 --rule degree --b
 
 Every scene of `junction.py` accepts `--bias P` and `--rule`. This includes `--cluster-stats`, `--column-stats` and `--cut-stats`.
 
+Every scene of both programs also accepts `--start` and `--scaled-steps`.
+
+Render the column bands of the five approaches side by side, and the four start trees with no step:
+
+```bash
+python3 prototypes/maze/junction.py --column-band --bias 0.9 --rule degree --compare-starts
+python3 prototypes/maze/junction.py --column-band --bias 0.1 --rule degree --compare-starts
+```
+
+Render the connector bands of the five approaches as stacked rows:
+
+```bash
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --bias 0.9 --rule degree --compare-starts
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --bias 0.1 --rule degree --compare-starts
+```
+
+Render the Hilbert start tree of the column with no Origin Shift step:
+
+```bash
+python3 prototypes/maze/junction.py --column-band --bias 0.9 --rule degree --start hilbert --steps-per-node 0
+```
+
+Print the statistics and the residue of one start tree, and of the scaled steps:
+
+```bash
+python3 prototypes/maze/originshift.py --stats --rule degree --bias 0.9 --start hilbert
+python3 prototypes/maze/originshift.py --stats --rule degree --bias 0.9 --scaled-steps
+```
+
+With `--scaled-steps`, `--stats` scales each step count of `--stats-steps`. The default step counts become 10, 40, 160 and 640 at P = 0.9. So that run takes longer than the run without `--scaled-steps`.
+
+Print the statistics of every start tree that the comparison uses:
+
+```bash
+python3 prototypes/maze/originshift.py --stats --rule degree --bias 0.9 --start serpentine --stats-steps 16,64 --stats-count 400
+python3 prototypes/maze/originshift.py --stats --rule degree --bias 0.9 --scaled-steps --stats-steps 16 --stats-count 400
+```
+
+Check that the shaft and the column stay one tree with one start tree:
+
+```bash
+python3 prototypes/maze/junction.py --cluster-stats --count 300 --rule degree --bias 0.9 --start hilbert
+python3 prototypes/maze/junction.py --column-stats --count 100 --rule degree --bias 0.9 --start hilbert
+python3 prototypes/maze/junction.py --column-stats --count 100 --rule degree --bias 0.9 --scaled-steps
+```
+
+`--compare-starts` needs `--rule degree`. In `junction.py`, it also needs `--column-band`.
+
 Measure the stranded components of the cut model:
 
 ```bash
@@ -233,9 +335,24 @@ The images are in `images/`.
 - `compare_column_bias<P>.png` puts two column bands side by side. A label strip sits above each band.
 - The left band is "class P". The right band is "degree P". Both are Origin Shift bands.
 - The labels use a 5x8 bitmap font in `originshift.py`.
+- A start other than `bfs` adds `_<start>` after the rule suffix, for example `column_band_bias0.9_degree_serpentine.png`.
+- `--scaled-steps` adds `_scaled`, for example `column_band_bias0.9_degree_scaled.png`.
+- `--steps-per-node 0` adds `_start0`, for example `column_band_bias0.9_degree_hilbert_start0.png`. That image shows the start tree only.
+- A step count other than 0 and 16 adds `_steps<n>`, for example `band_connector_originshift_bias0.9_degree_steps64.png`.
+- Wilson's algorithm gets none of these suffixes.
+- A column band of Wilson's algorithm adds `_wilson` after `column_band`, for example `column_band_wilson_bias0.9_degree.png`.
+- `compare_starts_bias<P>.png` stacks six connector bands at one bias. A label strip sits above each band.
+- From top to bottom, the labels are "bfs 16", "uniform 16", "serpentine 16", "hilbert 16", "bfs scaled" and "wilson".
+- "wilson" is Wilson's algorithm with weighted steps. The other five are Origin Shift bands with the degree rule.
+- `compare_starts_column_bias<P>.png` puts six column bands side by side, with the same labels from left to right.
+- `compare_starts_only_bias<P>.png` puts the four start trees of the column side by side, with no Origin Shift step.
+- From left to right, its labels are "bfs start", "uniform start", "serpentine start" and "hilbert start".
+- The column comparisons use 5 pixels per block.
+- `--compare-starts` also writes each band of a comparison under its own file name.
 - The folder holds the bands, closeups and graph views for P = 0.1, 0.25, 0.5, 0.75 and 0.9 with seed 1 and 24 chunks.
 - The folder holds the junction scene with seed 1 at X 203 and Y 70, and the column band, for P = 0.1, 0.5 and 0.9.
 - The folder holds the degree rule bands, closeups, graph views, junction scenes and column bands for P = 0.1, 0.5 and 0.9, with the same seed and place.
 - The folder holds `compare_bias<P>.png` and `compare_column_bias<P>.png` for P = 0.1, 0.5 and 0.9, with seed 1 and 24 chunks.
+- The folder holds `compare_starts_bias<P>.png`, `compare_starts_column_bias<P>.png`, `compare_starts_only_bias<P>.png` and their bands for P = 0.1 and 0.9, with seed 1 and 24 chunks.
 
 - `seed3/` holds one junction with seed 3, rendered before the bias option existed.

@@ -29,6 +29,17 @@ The bias P and the rule set the Origin Shift step. Two rules exist:
 Wilson's algorithm takes the weighted steps of the degree rule. It ignores
 the bias of the class rule.
 
+Origin Shift starts from one of four start trees:
+
+- bfs: the breadth-first tree of the root.
+- uniform: a uniform spanning tree from Wilson's algorithm with uniform steps.
+- serpentine: one path that snakes along the axis, one ring position per run.
+- hilbert: a generalized Hilbert curve over the ring-by-ruling rectangle.
+
+A curve start keeps the curve edges that the graph has. A union-find pass
+over the graph edges joins the pieces, then adds the virtual and patch nodes.
+The scaled steps divide the steps per node by min(P, 1 - P).
+
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_44feb929-a98e-4826-8aa2-5d56973d077a.md
 Written by Claude Code; conversation transcript:
@@ -61,8 +72,16 @@ CLASS_RULE = "class"
 DEGREE_RULE = "degree"
 DEFAULT_RULE = CLASS_RULE
 
+BFS_START = "bfs"
+UNIFORM_START = "uniform"
+SERPENTINE_START = "serpentine"
+HILBERT_START = "hilbert"
+STARTS = (BFS_START, UNIFORM_START, SERPENTINE_START, HILBERT_START)
+DEFAULT_STEPS = 16
+
 # p is the axis chance of the class rule or the axis edge weight of the degree rule.
-Bias = namedtuple("Bias", ("p", "rule"))
+# start and scaled apply to Origin Shift only.
+Bias = namedtuple("Bias", ("p", "rule", "start", "scaled"), defaults=(BFS_START, False))
 
 
 def is_corner(v):
@@ -85,12 +104,14 @@ class Graph:
     """Undirected graph with adjacency lists that keep insertion sequence.
 
     adj holds every neighbor. axis and ring hold the neighbors of one edge class.
+    rulings holds the RING node ids of each ruling, in axis sequence.
     """
 
     def __init__(self):
         self.adj = []
         self.axis = []
         self.ring = []
+        self.rulings = []
 
     def add_node(self):
         self.adj.append([])
@@ -111,6 +132,7 @@ def segment_graph(length, with_left, with_right):
     g = Graph()
     for _ in range(length * RING):
         g.add_node()
+    g.rulings = [[u * RING + v for v in range(RING)] for u in range(length)]
     for u in range(length):
         for v in range(RING):
             node = u * RING + v
@@ -167,9 +189,163 @@ def biased_step(g, rng, node, bias):
     return class_step(g, rng, node, bias.p)
 
 
-def origin_shift(g, rng, steps, bias):
+def tree_edges_of(parent):
+    """Undirected edge set of a parent array."""
+    return {(min(n, p), max(n, p)) for n, p in enumerate(parent) if p >= 0}
+
+
+def orient(n, edges, root):
+    """Parent array of a spanning tree, pointing toward root."""
+    adj = [[] for _ in range(n)]
+    for a, b in edges:
+        adj[a].append(b)
+        adj[b].append(a)
+    parent = [-2] * n
+    parent[root] = -1
+    queue = [root]
+    for node in queue:
+        for m in adj[node]:
+            if parent[m] == -2:
+                parent[m] = node
+                queue.append(m)
+    return parent
+
+
+def ruling_runs(g):
+    """Split the rulings of g into runs that axis edges join. Ring position 1 is never a corner."""
+    runs = []
+    for r, ruling in enumerate(g.rulings):
+        if runs and ruling[1] in g.axis[g.rulings[r - 1][1]]:
+            runs[-1].append(ruling)
+        else:
+            runs.append([ruling])
+    return runs
+
+
+def serpentine_cells(n):
+    """Snake over RING x n cells (v, r). A corner column takes one cell on the turn ruling."""
+    cells = []
+    up = True
+    r = 0
+    for v in range(1, RING):
+        if is_corner(v):
+            cells.append((v, r))
+            continue
+        span = range(n) if up else range(n - 1, -1, -1)
+        cells.extend((v, s) for s in span)
+        r = span[-1]
+        up = not up
+    return cells
+
+
+def _sgn(a):
+    return (a > 0) - (a < 0)
+
+
+def _half(a):
+    """Half of a, rounded toward zero."""
+    return a // 2 if a >= 0 else -(-a // 2)
+
+
+def _gilbert(out, x, y, ax, ay, bx, by):
+    """Gilbert recursion of Jakub Cerveny. (ax, ay) is the major axis, (bx, by) the minor axis."""
+    w = abs(ax + ay)
+    h = abs(bx + by)
+    dax, day = _sgn(ax), _sgn(ay)
+    dbx, dby = _sgn(bx), _sgn(by)
+    if h == 1:
+        for _ in range(w):
+            out.append((x, y))
+            x, y = x + dax, y + day
+        return
+    if w == 1:
+        for _ in range(h):
+            out.append((x, y))
+            x, y = x + dbx, y + dby
+        return
+    ax2, ay2 = _half(ax), _half(ay)
+    bx2, by2 = _half(bx), _half(by)
+    w2 = abs(ax2 + ay2)
+    h2 = abs(bx2 + by2)
+    if 2 * w > 3 * h:
+        if w2 % 2 and w > 2:
+            ax2, ay2 = ax2 + dax, ay2 + day
+        _gilbert(out, x, y, ax2, ay2, bx, by)
+        _gilbert(out, x + ax2, y + ay2, ax - ax2, ay - ay2, bx, by)
+    else:
+        if h2 % 2 and h > 2:
+            bx2, by2 = bx2 + dbx, by2 + dby
+        _gilbert(out, x, y, bx2, by2, ax2, ay2)
+        _gilbert(out, x + bx2, y + by2, ax, ay, bx - bx2, by - by2)
+        _gilbert(out, x + (ax - dax) + (bx2 - dbx), y + (ay - day) + (by2 - dby),
+                 -bx2, -by2, -(ax - ax2), -(ay - ay2))
+
+
+def gilbert_cells(n):
+    """Generalized Hilbert curve over RING x n cells (v, r). The ring seam is at the corner column 0."""
+    out = []
+    if RING >= n:
+        _gilbert(out, 0, 0, RING, 0, 0, n)
+    else:
+        _gilbert(out, 0, 0, 0, n, RING, 0)
+    return out
+
+
+def curve_start(g, root, curve, trace):
+    """Keep the curve edges that g has, then join the rest by a union-find pass over the graph edges."""
+    kept = []
+    total = 0
+    for run in ruling_runs(g):
+        cells = curve(len(run))
+        for (v1, r1), (v2, r2) in zip(cells, cells[1:]):
+            a, b = run[r1][v1], run[r2][v2]
+            total += 1
+            if b in g.adj[a]:
+                kept.append((a, b))
+    if trace is not None:
+        trace["curve"] = (len(kept), total)
+    n = len(g.adj)
+    on_grid = [False] * n
+    for ruling in g.rulings:
+        for node in ruling:
+            on_grid[node] = True
+    graph_edges = [(a, b) for a in range(n) for b in g.adj[a] if a < b]
+    grid_edges = [e for e in graph_edges if on_grid[e[0]] and on_grid[e[1]]]
+    other_edges = [e for e in graph_edges if not (on_grid[e[0]] and on_grid[e[1]])]
+    uf = list(range(n))
+
+    def find(a):
+        while uf[a] != a:
+            uf[a] = uf[uf[a]]
+            a = uf[a]
+        return a
+
+    edges = []
+    for a, b in kept + grid_edges + other_edges:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            uf[ra] = rb
+            edges.append((a, b))
+    return orient(n, edges, root)
+
+
+def start_tree(g, rng, root, start, trace=None):
+    """Origin Shift start tree, rooted at root."""
+    if start == UNIFORM_START:
+        uniform = wilson(g, rng, Bias(DEFAULT_BIAS, CLASS_RULE))
+        return orient(len(g.adj), tree_edges_of(uniform), root)
+    if start == SERPENTINE_START:
+        return curve_start(g, root, serpentine_cells, trace)
+    if start == HILBERT_START:
+        return curve_start(g, root, gilbert_cells, trace)
+    return bfs_tree(g, root)
+
+
+def origin_shift(g, rng, steps, bias, trace=None):
     root = rng.randrange(len(g.adj))
-    parent = bfs_tree(g, root)
+    parent = start_tree(g, rng, root, bias.start, trace)
+    if trace is not None:
+        trace["start"] = list(parent)
     for _ in range(steps):
         nxt = biased_step(g, rng, root, bias)
         parent[root] = nxt
@@ -211,11 +387,29 @@ def prune_corner_leaves(edges, is_corner_node):
             if not (is_corner_node(a) and degree[a] == 1) and not (is_corner_node(b) and degree[b] == 1)]
 
 
-def sample(g, rng, sampler, steps_per_node, bias):
-    """Wilson's algorithm ignores the bias of the class rule. The class rule has no edge weights."""
+def scaled_steps(steps_per_node, p):
+    """Steps per node divided by the weight of the disfavored edge class."""
+    return round(steps_per_node / min(p, 1.0 - p))
+
+
+def effective_steps(steps_per_node, bias):
+    return scaled_steps(steps_per_node, bias.p) if bias.scaled else steps_per_node
+
+
+def sample(g, rng, sampler, steps_per_node, bias, trace=None):
+    """Wilson's algorithm ignores the bias of the class rule. The class rule has no edge weights.
+
+    trace, when given, receives the start tree of Origin Shift.
+    """
     if sampler == "wilson":
         return wilson(g, rng, bias)
-    return origin_shift(g, rng, steps_per_node * len(g.adj), bias)
+    return origin_shift(g, rng, effective_steps(steps_per_node, bias) * len(g.adj), bias, trace)
+
+
+def residue(start, final):
+    """Share of the final tree edges that are also start tree edges."""
+    final_edges = tree_edges_of(final)
+    return len(final_edges & tree_edges_of(start)) / len(final_edges)
 
 
 def steps_value(text):
@@ -238,6 +432,26 @@ def check_weighted_wilson(ap, uses_weighted_wilson, p):
         ap.error("Wilson's algorithm with the degree rule needs a bias strictly between 0 and 1")
 
 
+def check_scaled_steps(ap, scaled, p):
+    """At p = 0 or 1 the scaled step count is infinite."""
+    if scaled and not 0.0 < p < 1.0:
+        ap.error("--scaled-steps needs a bias strictly between 0 and 1")
+
+
+def start_suffix(sampler, bias, steps_per_node):
+    """File name suffix of the start tree, the scaled steps and the step count. Wilson's algorithm gets none."""
+    if sampler == "wilson":
+        return ""
+    out = "" if bias.start == BFS_START else "_" + bias.start
+    if bias.scaled:
+        out += "_scaled"
+    if steps_per_node == 0:
+        out += "_start0"
+    elif steps_per_node != DEFAULT_STEPS:
+        out += f"_steps{steps_per_node}"
+    return out
+
+
 def bias_suffix(sampler, bias):
     """File name suffix. The class rule gets none at the default bias or with Wilson's algorithm."""
     if bias.rule == CLASS_RULE:
@@ -256,14 +470,23 @@ class Segment:
         self.edges = []
         self.left_cross = []
         self.right_cross = []
+        # start and residue are None for Wilson's algorithm. curve is None unless a curve start.
+        self.start = None
+        self.residue = None
+        self.curve = None
 
 
 def build_segment(kind, length, rng, sampler, steps_per_node, bias):
     with_left = kind == "connector"
     with_right = kind in ("connector", "forest")
     g, left, right = segment_graph(length, with_left, with_right)
-    parent = sample(g, rng, sampler, steps_per_node, bias)
+    trace = {}
+    parent = sample(g, rng, sampler, steps_per_node, bias, trace)
     seg = Segment(length)
+    if "start" in trace:
+        seg.start = trace["start"]
+        seg.residue = residue(trace["start"], parent)
+    seg.curve = trace.get("curve")
     real = length * RING
     for node in range(len(g.adj)):
         p = parent[node]
@@ -385,18 +608,22 @@ def render_band(grid, path, scale):
 # A 5x8 bitmap font. Row 6 is the baseline. Row 7 holds the descender.
 GLYPHS = """
 a .....|.....|.###.|....#|.####|#...#|.####|.....
+b #....|#....|####.|#...#|#...#|#...#|####.|.....
 c .....|.....|.####|#....|#....|#....|.####|.....
 d ....#|....#|.####|#...#|#...#|#...#|.####|.....
 e .....|.....|.###.|#...#|#####|#....|.###.|.....
 f ..##.|.#...|####.|.#...|.#...|.#...|.#...|.....
 g .....|.....|.####|#...#|#...#|.####|....#|.###.
+h #....|#....|#.##.|##..#|#...#|#...#|#...#|.....
 i ..#..|.....|.##..|..#..|..#..|..#..|.###.|.....
 l .##..|..#..|..#..|..#..|..#..|..#..|.###.|.....
 m .....|.....|##.#.|#.#.#|#.#.#|#.#.#|#.#.#|.....
 n .....|.....|#.##.|##..#|#...#|#...#|#...#|.....
 o .....|.....|.###.|#...#|#...#|#...#|.###.|.....
+p .....|.....|####.|#...#|#...#|####.|#....|#....
 r .....|.....|#.##.|##..#|#....|#....|#....|.....
 s .....|.....|.####|#....|.###.|....#|####.|.....
+t .#...|.#...|####.|.#...|.#...|.#..#|..##.|.....
 u .....|.....|#...#|#...#|#...#|#..##|.##.#|.....
 w .....|.....|#...#|#...#|#.#.#|#.#.#|.#.#.|.....
 0 .###.|#...#|#..##|#.#.#|##..#|#...#|.###.|.....
@@ -439,6 +666,44 @@ def label_rows(text, width, max_scale=3):
                     for xx in range(x0, min(width, x0 + scale)):
                         rows[yy][3 * xx:3 * xx + 3] = bytes(LABEL_INK)
     return rows
+
+
+def label_scale(texts, width, max_scale=3):
+    """The largest glyph scale up to max_scale at which every text fits the width."""
+    advance = GLYPH_W + 1
+    return max(1, min([max_scale] + [(width - 2 * LABEL_PAD) // (len(t) * advance - 1) for t in texts]))
+
+
+def start_panels(p):
+    """Label, sampler, bias and steps per node of each panel of the start comparison."""
+    panels = [(f"{start} {DEFAULT_STEPS}", "originshift", Bias(p, DEGREE_RULE, start), DEFAULT_STEPS) for start in STARTS]
+    panels.append(("bfs scaled", "originshift", Bias(p, DEGREE_RULE, BFS_START, True), DEFAULT_STEPS))
+    panels.append(("wilson", "wilson", Bias(p, DEGREE_RULE), DEFAULT_STEPS))
+    return panels
+
+
+def start_only_panels(p):
+    """The four start trees with no Origin Shift step."""
+    return [(f"{start} start", "originshift", Bias(p, DEGREE_RULE, start), 0) for start in STARTS]
+
+
+def render_compare_starts(out_dir, seed, chunks, length, p, scale):
+    """Stack the connector band of each start panel, each under its label strip. Write each band too."""
+    rows = []
+    panels = start_panels(p)
+    for label, sampler, bias, spn in panels:
+        segs = build_layout("connector", seed, chunks, length, sampler, spn, bias)
+        grid = paint_band(segs)
+        name = f"band_connector_{sampler}{bias_suffix(sampler, bias)}{start_suffix(sampler, bias, spn)}.png"
+        render_band(grid, os.path.join(out_dir, name), scale)
+        print("wrote", name)
+        band = band_rows(grid, scale)
+        width = len(band[0]) // 3
+        rows += label_rows(label, width, label_scale([t for t, _, _, _ in panels], width))
+        rows += band
+    name = f"compare_starts_bias{p:g}.png"
+    write_png(os.path.join(out_dir, name), len(rows[0]) // 3, len(rows), rows)
+    print("wrote", name)
 
 
 def compare_panels(p):
@@ -484,19 +749,39 @@ def corner_pass_fraction(seg):
     return len(present) / (seg.length * RING // FACE_NODES)
 
 
+def wilson_residue(seed, kind, length, count, bias):
+    """Mean overlap of two independent Wilson trees of one segment graph. A fully mixed sampler reaches it."""
+    g, _, _ = segment_graph(length, kind == "connector", kind in ("connector", "forest"))
+    total = 0.0
+    for k in range(count):
+        rng = seg_rng(seed, f"stats-{kind}-baseline", k)
+        total += residue(wilson(g, rng, bias), wilson(g, rng, bias))
+    return total / count
+
+
 def stats(seed, length, count, bias, steps_list):
     if bias.rule == DEGREE_RULE:
         print(f"bias {bias.p:g}, rule degree. Wilson's algorithm takes the same weighted steps.")
     else:
         print(f"bias {bias.p:g}, rule class. Wilson's algorithm ignores the bias.")
-    print("layout      sampler      steps/node  dead ends  corner pass  left cross  right cross")
+    scaled = ", scaled steps" if bias.scaled else ""
+    print(f"start {bias.start}{scaled}.")
+    print("residue: share of the final tree edges that are also start tree edges.")
+    print("base: overlap of two independent Wilson trees. The Wilson row shows it as its residue.")
+    print("mixed: overlap of an independent Wilson tree with the same start tree. A fully mixed Origin Shift reaches it.")
+    print("layout      sampler      steps/node  dead ends  corner pass  left cross  right cross  residue   -base   mixed  -mixed")
     runs = [("wilson", 0)] + [("originshift", spn) for spn in steps_list]
+    curves = {}
     for kind in ("tree", "connector", "forest"):
+        baseline = wilson_residue(seed, kind, length, count, bias)
+        g, _, _ = segment_graph(length, kind == "connector", kind in ("connector", "forest"))
         for sampler, spn in runs:
             ends = []
             passes = []
             lefts = []
             rights = []
+            residues = []
+            mixed = []
             for k in range(count):
                 rng = seg_rng(seed, f"stats-{kind}-{sampler}-{spn}", k)
                 seg = build_segment(kind, length, rng, sampler, spn, bias)
@@ -504,7 +789,20 @@ def stats(seed, length, count, bias, steps_list):
                 passes.append(corner_pass_fraction(seg))
                 lefts.append(len(seg.left_cross))
                 rights.append(len(seg.right_cross))
-            print(f"{kind:<11} {sampler:<12} {spn:>10}  {sum(ends)/count:>9.3f}  {sum(passes)/count:>11.3f}  {sum(lefts)/count:>10.2f}  {sum(rights)/count:>11.2f}")
+                residues.append(baseline if seg.residue is None else seg.residue)
+                if seg.start is None:
+                    mixed.append(baseline)
+                else:
+                    mixed.append(residue(seg.start, wilson(g, seg_rng(seed, f"stats-{kind}-mixed-{spn}", k), bias)))
+                if seg.curve is not None:
+                    kept, total = curves.get(kind, (0, 0))
+                    curves[kind] = (kept + seg.curve[0], total + seg.curve[1])
+            shown = effective_steps(spn, bias) if sampler == "originshift" else spn
+            mean_residue = sum(residues) / count
+            mean_mixed = sum(mixed) / count
+            print(f"{kind:<11} {sampler:<12} {shown:>10}  {sum(ends)/count:>9.3f}  {sum(passes)/count:>11.3f}  {sum(lefts)/count:>10.2f}  {sum(rights)/count:>11.2f}  {mean_residue:>7.3f}  {mean_residue - baseline:>+6.3f}  {mean_mixed:>6.3f}  {mean_residue - mean_mixed:>+6.3f}")
+    for kind, (kept, total) in curves.items():
+        print(f"{kind}: the start keeps {kept} of {total} curve edges ({kept / total:.3f}).")
 
 
 def svg_graph_view(path, seed, length, sampler, steps_per_node, bias):
@@ -579,18 +877,24 @@ def main():
     ap.add_argument("--chunks", type=int, default=24, help="segments per band")
     ap.add_argument("--length", type=int, default=NODES_PER_CHUNK, help="rulings per segment")
     ap.add_argument("--sampler", choices=("originshift", "wilson"), default="originshift")
-    ap.add_argument("--steps-per-node", type=int, default=16)
+    ap.add_argument("--steps-per-node", type=int, default=DEFAULT_STEPS)
     ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="axis chance of the class rule or axis edge weight of the degree rule")
     ap.add_argument("--rule", choices=(CLASS_RULE, DEGREE_RULE), default=DEFAULT_RULE, help="the bias rule of the walker step")
+    ap.add_argument("--start", choices=STARTS, default=BFS_START, help="the start tree of Origin Shift")
+    ap.add_argument("--scaled-steps", action="store_true", help="divide the Origin Shift steps per node by min(P, 1 - P)")
     ap.add_argument("--scale", type=int, default=4, help="pixels per block")
     ap.add_argument("--out", default=os.path.join(os.path.dirname(__file__), "images"))
     ap.add_argument("--stats", action="store_true", help="print sampler statistics and exit")
     ap.add_argument("--stats-steps", type=steps_value, default=(1, 4, 16, 64), help="comma-separated Origin Shift steps per node for --stats")
     ap.add_argument("--stats-count", type=int, default=200, help="segments per row for --stats")
     ap.add_argument("--compare", action="store_true", help="render the connector band of the four samplers at one bias and exit")
+    ap.add_argument("--compare-starts", action="store_true", help="render the connector band of each start tree at one bias and exit")
     args = ap.parse_args()
-    bias = Bias(args.bias, args.rule)
-    check_weighted_wilson(ap, args.compare or (args.rule == DEGREE_RULE and (args.stats or args.sampler == "wilson")), args.bias)
+    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps)
+    if args.compare_starts and args.rule != DEGREE_RULE:
+        ap.error("--compare-starts needs --rule degree")
+    check_weighted_wilson(ap, args.compare or args.compare_starts or (args.rule == DEGREE_RULE and (args.stats or args.sampler == "wilson")), args.bias)
+    check_scaled_steps(ap, args.scaled_steps or args.compare_starts, args.bias)
     if args.stats:
 
         stats(args.seed, args.length, args.stats_count, bias, args.stats_steps)
@@ -601,7 +905,11 @@ def main():
         render_compare(os.path.join(args.out, name), args.seed, args.chunks, args.length, args.steps_per_node, args.bias, args.scale)
         print("wrote", name)
         return
-    suffix = bias_suffix(args.sampler, bias)
+    if args.compare_starts:
+        os.makedirs(args.out, exist_ok=True)
+        render_compare_starts(args.out, args.seed, args.chunks, args.length, args.bias, args.scale)
+        return
+    suffix = bias_suffix(args.sampler, bias) + start_suffix(args.sampler, bias, args.steps_per_node)
     closeup = os.path.join(args.out, "closeup")
     os.makedirs(closeup, exist_ok=True)
     for layout in ("oneroot", "forest", "connector"):
