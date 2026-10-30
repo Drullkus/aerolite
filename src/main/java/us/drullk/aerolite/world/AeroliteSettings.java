@@ -51,12 +51,12 @@ public record AeroliteSettings(
     public static final int MAX_CLOUD_HEIGHT = 320;
 
     public static final AeroliteSettings DEFAULT = new AeroliteSettings(
-            128,
-            384,
-            0.25F,
-            256,
+            48,
+            80,
+            0.3F,
+            64,
+            0.35F,
             0.5F,
-            0.7F,
             -32,
             ImmutableMap.of(
                     Level.OVERWORLD, ShaftVariation.defaultList(Level.OVERWORLD),

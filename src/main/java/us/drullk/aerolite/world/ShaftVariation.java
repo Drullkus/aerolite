@@ -30,14 +30,38 @@ public record ShaftVariation(int weight, float bias, BlockState interior, BlockS
     public static final float MAX_BIAS = 0.95F;
     public static final float UNIFORM_BIAS = 0.5F;
 
-    public static final ShaftVariation STONE = new ShaftVariation(7, UNIFORM_BIAS,
+    public static final ShaftVariation STONE = new ShaftVariation(16, UNIFORM_BIAS,
             Blocks.STONE.defaultBlockState(), Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState());
-    public static final ShaftVariation TRIAL_CHAMBER = new ShaftVariation(1, UNIFORM_BIAS,
-            Blocks.TUFF.defaultBlockState(), Blocks.TUFF_BRICKS.defaultBlockState(), Blocks.OXIDIZED_COPPER.defaultBlockState());
-    public static final ShaftVariation NETHER = new ShaftVariation(1, UNIFORM_BIAS,
+    public static final ShaftVariation MOSSY = new ShaftVariation(4, UNIFORM_BIAS,
+            Blocks.MOSSY_COBBLESTONE.defaultBlockState(), Blocks.MOSSY_STONE_BRICKS.defaultBlockState(), Blocks.MOSS_BLOCK.defaultBlockState());
+    public static final ShaftVariation TUFF = new ShaftVariation(4, 0.7f,
+            Blocks.TUFF.defaultBlockState(), Blocks.TUFF_BRICKS.defaultBlockState(), Blocks.POLISHED_TUFF.defaultBlockState());
+    public static final ShaftVariation DEEPSLATE = new ShaftVariation(2, 0.3f,
+            Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
+    public static final ShaftVariation COPPER = new ShaftVariation(1, 0.8f,
+            Blocks.OXIDIZED_COPPER.defaultBlockState(), Blocks.OXIDIZED_CUT_COPPER.defaultBlockState(), Blocks.OXIDIZED_COPPER_BULB.defaultBlockState());
+    public static final ShaftVariation MUD = new ShaftVariation(1, UNIFORM_BIAS,
+            Blocks.PACKED_MUD.defaultBlockState(), Blocks.MUD_BRICKS.defaultBlockState(), Blocks.MOSS_BLOCK.defaultBlockState());
+    public static final ShaftVariation ANDESITE = new ShaftVariation(1, UNIFORM_BIAS,
+            Blocks.ANDESITE.defaultBlockState(), Blocks.POLISHED_ANDESITE.defaultBlockState(), Blocks.POLISHED_DIORITE.defaultBlockState());
+    public static final ShaftVariation DIORITE = new ShaftVariation(1, UNIFORM_BIAS,
+            Blocks.DIORITE.defaultBlockState(), Blocks.POLISHED_DIORITE.defaultBlockState(), Blocks.POLISHED_GRANITE.defaultBlockState());
+    public static final ShaftVariation GRANITE = new ShaftVariation(1, UNIFORM_BIAS,
+            Blocks.GRANITE.defaultBlockState(), Blocks.POLISHED_GRANITE.defaultBlockState(), Blocks.POLISHED_ANDESITE.defaultBlockState());
+
+    public static final ShaftVariation NETHER = new ShaftVariation(16, 0.25f,
             Blocks.NETHERRACK.defaultBlockState(), Blocks.NETHER_BRICKS.defaultBlockState(), Blocks.RED_NETHER_BRICKS.defaultBlockState());
-    public static final ShaftVariation END = new ShaftVariation(1, UNIFORM_BIAS,
+    public static final ShaftVariation BLACKSTONE = new ShaftVariation(9, UNIFORM_BIAS,
+            Blocks.BLACKSTONE.defaultBlockState(), Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState(), Blocks.POLISHED_BLACKSTONE.defaultBlockState());
+    public static final ShaftVariation SOUL = new ShaftVariation(5, 0.6f,
+            Blocks.SOUL_SOIL.defaultBlockState(), Blocks.SOUL_SAND.defaultBlockState(), Blocks.WARPED_WART_BLOCK.defaultBlockState());
+    public static final ShaftVariation QUARTZ = new ShaftVariation(1, 0.8f,
+            Blocks.SMOOTH_QUARTZ.defaultBlockState(), Blocks.QUARTZ_BRICKS.defaultBlockState(), Blocks.QUARTZ_BLOCK.defaultBlockState());
+
+    public static final ShaftVariation END = new ShaftVariation(9, MAX_BIAS,
             Blocks.END_STONE.defaultBlockState(), Blocks.END_STONE_BRICKS.defaultBlockState(), Blocks.PURPUR_BLOCK.defaultBlockState());
+    public static final ShaftVariation PURPUR = new ShaftVariation(1, MIN_BIAS,
+            Blocks.OBSIDIAN.defaultBlockState(), Blocks.PURPUR_BLOCK.defaultBlockState(), Blocks.CRYING_OBSIDIAN.defaultBlockState());
 
     /** A bias outside the slider range clamps to the range. */
     private static final Codec<Float> BIAS_CODEC = Codec.FLOAT.xmap(ShaftVariation::clampBias, bias -> bias);
@@ -53,13 +77,13 @@ public record ShaftVariation(int weight, float bias, BlockState interior, BlockS
     /** The default variation list of a dimension. A dimension other than the three vanilla ones gets stone with weight 1. */
     public static List<ShaftVariation> defaultList(ResourceKey<Level> dimension) {
         if (Level.OVERWORLD.equals(dimension)) {
-            return List.of(STONE, TRIAL_CHAMBER);
+            return List.of(STONE, MOSSY, TUFF, DEEPSLATE, COPPER, MUD, ANDESITE, DIORITE, GRANITE);
         }
         if (Level.NETHER.equals(dimension)) {
-            return List.of(NETHER);
+            return List.of(NETHER, BLACKSTONE, SOUL, QUARTZ);
         }
         if (Level.END.equals(dimension)) {
-            return List.of(END);
+            return List.of(END, PURPUR);
         }
         return List.of(STONE.withWeight(1));
     }

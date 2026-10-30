@@ -29,6 +29,7 @@ import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.TestSettings;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
@@ -48,6 +49,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_18-08_4c0300c8-1a76-4b8e-86b0-0cb9daa7d32a.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -122,7 +124,7 @@ public final class ShaftGameTests {
     @GameTest(template = "empty")
     public static void erosionKeepsTheCore(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
+        AeroliteSettings settings = TestSettings.SETTINGS.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
         ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
         int eroded = 0;
@@ -158,7 +160,7 @@ public final class ShaftGameTests {
     @GameTest(template = "empty")
     public static void erosionKeepsTheShaftCoresThroughJunctionBoxes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
+        AeroliteSettings settings = TestSettings.SETTINGS.withDecayThreshold(0).withErosionThreshold(AeroliteSettings.THRESHOLD_STEP).withDecayScale(32);
         ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         ShaftLayout.Column column = null;
         for (int cell = 0; column == null; cell++) {
@@ -226,8 +228,8 @@ public final class ShaftGameTests {
     private static AeroliteSettings twoVariations() {
         ShaftVariation deepslate = new ShaftVariation(1, 0.8F,
                 Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
-        return AeroliteSettings.DEFAULT.withDecayThreshold(1).withErosionThreshold(1)
-                .withDimension(Level.OVERWORLD, List.of(ShaftVariation.STONE.withWeight(1), deepslate));
+        return TestSettings.SETTINGS.withDecayThreshold(1).withErosionThreshold(1)
+                .withDimension(Level.OVERWORLD, List.of(TestSettings.STONE.withWeight(1), deepslate));
     }
 
     @GameTest(template = "empty")
@@ -270,8 +272,9 @@ public final class ShaftGameTests {
     public static void unlistedDimensionGetsNoShafts(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
-        AeroliteChunkGenerator listed = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
-        AeroliteSettings netherOnly = listed.aeroliteSettings().withoutDimension(Level.OVERWORLD).withoutDimension(Level.END);
+        AeroliteChunkGenerator presetGenerator = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
+        AeroliteChunkGenerator listed = presetGenerator.withAeroliteSettings(TestSettings.SETTINGS);
+        AeroliteSettings netherOnly = TestSettings.SETTINGS.withoutDimension(Level.OVERWORLD).withoutDimension(Level.END);
         helper.assertTrue(netherOnly.variations().keySet().equals(Set.of(Level.NETHER)), "The settings hold a dimension other than the Nether");
         AeroliteChunkGenerator generator = listed.withAeroliteSettings(netherOnly);
         ShaftLayout listedLayout = listed.layout(level);

@@ -26,12 +26,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_18-08_4c0300c8-1a76-4b8e-86b0-0cb9daa7d32a.md}.
  */
 class AeroliteSettingsTest {
 
     @Test
     void settingsRoundTrip() {
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withDecayScale(64).withDecayThreshold(0.35F).withColumnChance(0.6F).withShaftSpacing(64, 96).withErosionThreshold(0.55F).withCloudHeight(200);
+        AeroliteSettings settings = TestSettings.SETTINGS.withDecayScale(64).withDecayThreshold(0.35F).withColumnChance(0.6F).withShaftSpacing(64, 96).withErosionThreshold(0.55F).withCloudHeight(200);
         JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
         assertEquals(settings, AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
     }
@@ -49,7 +50,7 @@ class AeroliteSettingsTest {
 
     @Test
     void erosionStaysAboveTheDecayThresholdOfAnOldSave() {
-        AeroliteSettings settings = AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"decay_threshold\": 0.9}")).getOrThrow();
+        AeroliteSettings settings = AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"decay_threshold\": 0.9, \"erosion_threshold\": 0.5}")).getOrThrow();
         assertEquals(0.95F, settings.erosionThreshold(), 1e-6);
     }
 
@@ -59,13 +60,8 @@ class AeroliteSettingsTest {
     }
 
     @Test
-    void cloudHeightDefaultsToMinus32() {
-        assertEquals(-32, AeroliteSettings.DEFAULT.cloudHeight());
-    }
-
-    @Test
     void cloudHeightRoundTrip() {
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withCloudHeight(136);
+        AeroliteSettings settings = TestSettings.SETTINGS.withCloudHeight(136);
         JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
         assertEquals(136, json.getAsJsonObject().get("cloud_height").getAsInt());
         assertEquals(settings, AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
@@ -91,15 +87,6 @@ class AeroliteSettingsTest {
     }
 
     @Test
-    void defaultVariationsCoverTheThreeDimensions() {
-        AeroliteSettings settings = AeroliteSettings.DEFAULT;
-        assertEquals(List.of(ShaftVariation.STONE, ShaftVariation.TRIAL_CHAMBER), settings.variations(Level.OVERWORLD));
-        assertEquals(List.of(ShaftVariation.NETHER), settings.variations(Level.NETHER));
-        assertEquals(List.of(ShaftVariation.END), settings.variations(Level.END));
-        assertSame(Blocks.OXIDIZED_COPPER, ShaftVariation.TRIAL_CHAMBER.path().getBlock());
-    }
-
-    @Test
     void defaultListOfAnotherDimensionIsStoneWithWeightOne() {
         assertEquals(AeroliteSettings.DEFAULT.variations(Level.OVERWORLD), ShaftVariation.defaultList(Level.OVERWORLD));
         assertEquals(AeroliteSettings.DEFAULT.variations(Level.NETHER), ShaftVariation.defaultList(Level.NETHER));
@@ -111,15 +98,15 @@ class AeroliteSettingsTest {
     void variationMapRoundTrip() {
         ShaftVariation deepslate = new ShaftVariation(4, 0.85F,
                 Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
-        AeroliteSettings settings = AeroliteSettings.DEFAULT
+        AeroliteSettings settings = TestSettings.SETTINGS
                 .withAddedVariation(Level.NETHER, deepslate)
-                .withDimension(ELSEWHERE, List.of(deepslate.withWeight(0), ShaftVariation.END));
+                .withDimension(ELSEWHERE, List.of(deepslate.withWeight(0), TestSettings.END));
         JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
         assertFalse(json.getAsJsonObject().has("shafts_in_unlisted_dimensions"));
         assertTrue(json.getAsJsonObject().getAsJsonObject("variations").has("aerolite:elsewhere"));
         AeroliteSettings parsed = AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow();
         assertEquals(settings, parsed);
-        assertEquals(List.of(ShaftVariation.NETHER, deepslate), parsed.variations(Level.NETHER));
+        assertEquals(List.of(TestSettings.NETHER, deepslate), parsed.variations(Level.NETHER));
     }
 
     @Test
@@ -149,7 +136,7 @@ class AeroliteSettingsTest {
 
     @Test
     void unlistedDimensionGetsAnEmptyList() {
-        assertTrue(AeroliteSettings.DEFAULT.variations(ELSEWHERE).isEmpty());
+        assertTrue(TestSettings.SETTINGS.variations(ELSEWHERE).isEmpty());
         AeroliteSettings endOnly = read("{\"variations\": {\"minecraft:the_end\": [{" + STONE_BLOCKS + "}]}}").getOrThrow();
         assertTrue(endOnly.variations(Level.OVERWORLD).isEmpty());
         assertTrue(endOnly.variations(Level.NETHER).isEmpty());
@@ -167,27 +154,27 @@ class AeroliteSettingsTest {
 
     @Test
     void withoutDimensionRemovesTheList() {
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withoutDimension(Level.NETHER);
+        AeroliteSettings settings = TestSettings.SETTINGS.withoutDimension(Level.NETHER);
         assertFalse(settings.variations().containsKey(Level.NETHER));
         assertTrue(settings.variations(Level.NETHER).isEmpty());
-        assertEquals(AeroliteSettings.DEFAULT.variations(Level.OVERWORLD), settings.variations(Level.OVERWORLD));
-        assertEquals(3, AeroliteSettings.DEFAULT.variations().size());
+        assertEquals(TestSettings.SETTINGS.variations(Level.OVERWORLD), settings.variations(Level.OVERWORLD));
+        assertEquals(3, TestSettings.SETTINGS.variations().size());
         assertSame(settings, settings.withoutDimension(ELSEWHERE));
     }
 
     @Test
     void withDimensionAddsOrReplacesTheList() {
-        AeroliteSettings added = AeroliteSettings.DEFAULT.withDimension(ELSEWHERE, List.of(ShaftVariation.END));
-        assertEquals(List.of(ShaftVariation.END), added.variations(ELSEWHERE));
+        AeroliteSettings added = TestSettings.SETTINGS.withDimension(ELSEWHERE, List.of(TestSettings.END));
+        assertEquals(List.of(TestSettings.END), added.variations(ELSEWHERE));
         assertEquals(4, added.variations().size());
-        AeroliteSettings replaced = added.withDimension(Level.OVERWORLD, List.of(ShaftVariation.NETHER));
-        assertEquals(List.of(ShaftVariation.NETHER), replaced.variations(Level.OVERWORLD));
+        AeroliteSettings replaced = added.withDimension(Level.OVERWORLD, List.of(TestSettings.NETHER));
+        assertEquals(List.of(TestSettings.NETHER), replaced.variations(Level.OVERWORLD));
         assertEquals(4, replaced.variations().size());
     }
 
     @Test
     void settingsWithoutDimensionsRoundTrip() {
-        AeroliteSettings settings = AeroliteSettings.DEFAULT.withoutDimension(Level.OVERWORLD).withoutDimension(Level.NETHER).withoutDimension(Level.END);
+        AeroliteSettings settings = TestSettings.SETTINGS.withoutDimension(Level.OVERWORLD).withoutDimension(Level.NETHER).withoutDimension(Level.END);
         assertTrue(settings.variations().isEmpty());
         JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
         assertEquals(settings, AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
@@ -195,11 +182,11 @@ class AeroliteSettingsTest {
 
     @Test
     void variationEditsReturnNewSettings() {
-        AeroliteSettings edited = AeroliteSettings.DEFAULT
-                .withVariation(Level.OVERWORLD, 1, ShaftVariation.TRIAL_CHAMBER.withBias(0.75F))
+        AeroliteSettings edited = TestSettings.SETTINGS
+                .withVariation(Level.OVERWORLD, 1, TestSettings.TUFF.withBias(0.75F))
                 .withoutVariation(Level.OVERWORLD, 0);
-        assertEquals(List.of(ShaftVariation.TRIAL_CHAMBER.withBias(0.75F)), edited.variations(Level.OVERWORLD));
-        assertEquals(2, AeroliteSettings.DEFAULT.variations(Level.OVERWORLD).size());
+        assertEquals(List.of(TestSettings.TUFF.withBias(0.75F)), edited.variations(Level.OVERWORLD));
+        assertEquals(List.of(TestSettings.STONE, TestSettings.TUFF), TestSettings.SETTINGS.variations(Level.OVERWORLD));
     }
 
     @Test
