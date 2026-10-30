@@ -1,43 +1,36 @@
 package us.drullk.aerolite.client;
 
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.commands.arguments.blocks.BlockStateParser;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lwjgl.glfw.GLFW;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
  * A text field for one block state. It parses a block id or a block state string.
  * While it has focus and text, a dropdown lists the blocks whose id or name holds the text.
  * The screen draws the dropdown and sends clicks to it, so the dropdown covers the rows below.
+ * The parse and the search are in {@link BlockSearch}.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  */
 public class BlockField extends EditBox {
 
-    public static final int MAX_SUGGESTIONS = 8;
     private static final int ENTRY_HEIGHT = 18;
     private static final int DROPDOWN_WIDTH = 160;
     private static final int INVALID_COLOR = 0xFFFF5555;
     private static final int BACKGROUND_COLOR = 0xF0101010;
     private static final int HIGHLIGHT_COLOR = 0xFF404060;
     private static final int OUTLINE_COLOR = 0xFFA0A0A0;
-    private static final String DEFAULT_NAMESPACE = ResourceLocation.DEFAULT_NAMESPACE + ":";
 
+    private final BlockSearch search;
     private final Consumer<BlockState> onChange;
     private final List<Block> suggestions = new ArrayList<>();
     private BlockState state;
@@ -47,34 +40,15 @@ public class BlockField extends EditBox {
     /** True while the field writes its own text, so the text change opens no dropdown. */
     private boolean writing;
 
-    public BlockField(Font font, BlockState state, Component name, Consumer<BlockState> onChange) {
+    public BlockField(Font font, BlockSearch search, BlockState state, Component name, Consumer<BlockState> onChange) {
         super(font, SettingsList.ROW_WIDTH, 20, name);
+        this.search = search;
         this.state = state;
         this.onChange = onChange;
         this.setMaxLength(256);
         this.setHint(name);
-        this.writeText(this.text(state));
+        this.writeText(search.text(state));
         this.setResponder(this::onTextChange);
-    }
-
-    /** The text of a state: the block id without the default namespace, with the properties when they differ from the default. */
-    private String text(BlockState state) {
-        String text = state == state.getBlock().defaultBlockState()
-                ? BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString()
-                : BlockStateParser.serialize(state);
-        return text.startsWith(DEFAULT_NAMESPACE) ? text.substring(DEFAULT_NAMESPACE.length()) : text;
-    }
-
-    /** The state of a text, or null when the text is no block state or names air. */
-    @Nullable
-    private BlockState parse(String text) {
-        StringReader reader = new StringReader(text.trim());
-        try {
-            BlockState parsed = BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK.asLookup(), reader, false).blockState();
-            return reader.canRead() || parsed.isAir() ? null : parsed;
-        } catch (CommandSyntaxException exception) {
-            return null;
-        }
     }
 
     public BlockState state() {
@@ -88,7 +62,7 @@ public class BlockField extends EditBox {
     }
 
     private void onTextChange(String text) {
-        BlockState parsed = this.parse(text);
+        BlockState parsed = this.search.parse(text);
         this.valid = parsed != null;
         if (parsed != null && parsed != this.state) {
             this.state = parsed;
@@ -103,23 +77,7 @@ public class BlockField extends EditBox {
     private void updateSuggestions(String text) {
         this.suggestions.clear();
         this.highlighted = 0;
-        int properties = text.indexOf('[');
-        String query = (properties < 0 ? text : text.substring(0, properties)).trim().toLowerCase(Locale.ROOT);
-        if (query.isEmpty()) {
-            return;
-        }
-        for (Block block : BuiltInRegistries.BLOCK) {
-            if (block.defaultBlockState().isAir()) {
-                continue;
-            }
-            String id = BuiltInRegistries.BLOCK.getKey(block).toString();
-            if (id.contains(query) || block.getName().getString().toLowerCase(Locale.ROOT).contains(query)) {
-                this.suggestions.add(block);
-                if (this.suggestions.size() == MAX_SUGGESTIONS) {
-                    return;
-                }
-            }
-        }
+        this.suggestions.addAll(this.search.search(text));
     }
 
     /** True when the dropdown shows. */
@@ -133,7 +91,7 @@ public class BlockField extends EditBox {
 
     private void pick(Block block) {
         BlockState picked = block.defaultBlockState();
-        this.writeText(this.text(picked));
+        this.writeText(this.search.text(picked));
         this.dropdownOpen = false;
     }
 

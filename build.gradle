@@ -80,6 +80,14 @@ repositories {
     }
 
     maven {
+        name 'ryanhcode Maven' // imgui-mc
+        url 'https://maven.ryanhcode.dev/releases/'
+        content {
+            includeGroup 'foundry.imguimc'
+        }
+    }
+
+    maven {
         name 'EngineHub Maven' // WorldEdit
         url 'https://maven.enginehub.org/repo/'
         content {
@@ -292,6 +300,14 @@ dependencies {
 
     implementation "foundry.veil:veil-neoforge-${minecraft_version}:${veil_version}"
 
+    // imgui-mc hosts ImGui for Veil. It is optional. The preview and the F12 panel need it.
+    def imguimc = "foundry.imguimc:imguimc-neoforge-${minecraft_version}:${imguimc_version}"
+    compileOnly imguimc
+    // The mod jar holds the ImGui binding and natives as jar-in-jar libraries.
+    localRuntime(imguimc) {
+        transitive = false
+    }
+
     // The dev runs load WorldEdit. The code does not reference it.
     localRuntime("com.sk89q.worldedit:worldedit-neoforge-mc${worldedit_minecraft_version}:${worldedit_version}") {
         transitive = false
@@ -321,6 +337,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
             mod_license            : mod_license,
             mod_version            : mod_version,
             veil_version           : veil_version,
+            imguimc_version        : imguimc_version,
     ]
     inputs.properties replaceProperties
     expand replaceProperties

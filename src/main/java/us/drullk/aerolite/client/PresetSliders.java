@@ -25,6 +25,28 @@ public final class PresetSliders {
     public static final int BIAS_STEPS = Math.round((ShaftVariation.MAX_BIAS - ShaftVariation.MIN_BIAS) * FRACTION_STEPS);
     /** The bias step of a uniform maze. */
     public static final int UNIFORM_BIAS_STEP = Math.round((ShaftVariation.UNIFORM_BIAS - ShaftVariation.MIN_BIAS) * FRACTION_STEPS);
+    public static final int MIN_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MIN_DECAY_SCALE);
+    public static final int MAX_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MAX_DECAY_SCALE);
+    /** One step per power of two from the smallest to the largest decay scale. */
+    public static final int DECAY_SCALE_STEPS = MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT;
+    /** The erosion slider skips the 0% step, so its steps run from 1 to {@link #FRACTION_STEPS}. */
+    public static final int EROSION_STEPS = FRACTION_STEPS - 1;
+
+    public int fractionStep(float fraction) {
+        return Math.round(fraction * FRACTION_STEPS);
+    }
+
+    public float fraction(int step) {
+        return step / (float) FRACTION_STEPS;
+    }
+
+    public int decayScale(int step) {
+        return 1 << (MIN_SCALE_EXPONENT + step);
+    }
+
+    public int decayScaleStep(int scale) {
+        return Mth.log2(scale) - MIN_SCALE_EXPONENT;
+    }
 
     public String percent(int step) {
         return Math.round(100F * step / FRACTION_STEPS) + "%";
@@ -57,6 +79,12 @@ public final class PresetSliders {
     /** The percent of a bias step, from 5% to 95%. */
     public String biasPercent(int step) {
         return this.percent(step + Math.round(ShaftVariation.MIN_BIAS * FRACTION_STEPS));
+    }
+
+    /** The bias label of a step, with the ringwise, uniform or lengthwise suffix. */
+    public net.minecraft.network.chat.Component biasLabel(int step) {
+        String suffix = step < UNIFORM_BIAS_STEP ? "ringwise" : step == UNIFORM_BIAS_STEP ? "uniform" : "lengthwise";
+        return net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.maze_bias." + suffix, this.biasPercent(step));
     }
 
 }

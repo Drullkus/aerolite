@@ -40,7 +40,9 @@ Date: 2026-10-29. Status: revision 4. Wave 1 done. C2 dispatched with weighted W
 
 ## Findings that shape the work
 
-- Veil 4.5.2 does not host ImGui. It calls the separate mod imgui-mc (`foundry.imguimc:imguimc-neoforge-1.21.1:2.0.0`). `VeilRenderSystem.hasImGui()` tells if it is present. The jar is in the Gradle cache but not in the build.
+- Veil 4.5.2 does not host ImGui. It calls the separate mod imgui-mc (`foundry.imguimc:imguimc-neoforge-1.21.1`, maven `https://maven.ryanhcode.dev/releases/`). `VeilRenderSystem.hasImGui()` tells if it is present.
+- imgui-mc 2.0.0 shows a black window on this Mac from the first frame, with or without the Aerolite preview code: the frame reaches the back buffer and never the front buffer. imgui-mc 2.0.5 presents correctly. The build uses 2.0.5. Found on 2026-10-29 after package D.
+- A client check that only looks for exceptions and a timeout cannot see a black window. A pixel read of the front buffer can.
 - imgui-mc multiplies the ImGui font scale by the Minecraft GUI scale on every frame. It takes the display size from `glfwGetWindowSize` and the framebuffer scale from the main render target width divided by the window width. A reduced main target therefore shrinks the ImGui framebuffer scale. Package D corrects the scale in the ImGui pre-render hook.
 - In 1.21.1 the client reads the cloud height from `DimensionSpecialEffects#getCloudHeight`, found by the `effects` id of the dimension type. The client has no generator settings. Hence the packet.
 - Minecraft blits the main target with the width that `Window#getWidth` reports. With a reduced width the right strip of the window keeps stale pixels. The opaque ImGui panel covers that strip.
@@ -179,7 +181,7 @@ Hand-off: `git cherry-pick -n main..claude/shaft-variations`.
 Branch `claude/preview`. It starts from main after C2 is applied.
 
 Dependency:
-- `build.gradle`: `compileOnly` and `localRuntime` for `foundry.imguimc:imguimc-neoforge-1.21.1:2.0.0`. Add `includeGroup 'foundry.imguimc'` to the maven that serves it, with a comment. Run the dependency check with `--refresh-dependencies`.
+- `build.gradle`: `compileOnly` and `localRuntime` for `foundry.imguimc:imguimc-neoforge-1.21.1` at the version in `gradle.properties`, 2.0.5 or later. Add `includeGroup 'foundry.imguimc'` to the maven that serves it, with a comment. Run the dependency check with `--refresh-dependencies`.
 - `neoforge.mods.toml`: optional dependency on `imguimc`, side CLIENT.
 - Every ImGui class sits behind `VeilRenderSystem.hasImGui()`. The Preview button shows only when it is true.
 

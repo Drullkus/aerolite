@@ -28,10 +28,18 @@ config="${mod_id}.mixins.json"
     ordering="NONE"
     side="BOTH"
 
-# Veil renders the tree block and hosts the ImGui panel
+# Veil renders the tree block
 [[dependencies.${mod_id}]]
     modId="veil"
     type="required"
     versionRange="[${veil_version},)"
     ordering="NONE"
     side="BOTH"
+
+# imgui-mc hosts ImGui for Veil. The preview and the ImGui panel need it.
+[[dependencies.${mod_id}]]
+    modId="imguimc"
+    type="optional"
+    versionRange="[${imguimc_version},)"
+    ordering="NONE"
+    side="CLIENT"

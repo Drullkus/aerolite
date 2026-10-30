@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 import org.lwjgl.glfw.GLFW;
+import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftVariation;
@@ -36,6 +37,7 @@ import java.util.function.UnaryOperator;
 /**
  * The customize screen of the preset in the world creation menu. It edits the settings of every Aerolite dimension.
  * An add or a remove of a variation rebuilds the list entries. A slider or a block field edits its value in place.
+ * The Preview button shows only when ImGui loaded. The preview edits a copy of the settings.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -44,13 +46,11 @@ import java.util.function.UnaryOperator;
  */
 public class AerolitePresetScreen extends Screen {
 
-    private static final int MIN_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MIN_DECAY_SCALE);
-    private static final int MAX_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MAX_DECAY_SCALE);
-    /** The dimensions that the variation section edits, in screen sequence. */
-    private static final List<ResourceKey<Level>> DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
-
     private final CreateWorldScreen parent;
+    private final WorldCreationContext context;
+    private final PresetTools tools;
     private final PresetSliders sliders;
+    private final PresetEdits edits;
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
     @Nullable
     private SettingsList list;
@@ -59,10 +59,13 @@ public class AerolitePresetScreen extends Screen {
     /** True when an add or a remove waits for the list rebuild of the next tick. */
     private boolean rebuildPending;
 
-    public AerolitePresetScreen(CreateWorldScreen parent, WorldCreationContext context, PresetSliders sliders) {
+    public AerolitePresetScreen(CreateWorldScreen parent, WorldCreationContext context, PresetTools tools) {
         super(Component.translatable("createWorld.customize.aerolite.title"));
         this.parent = parent;
-        this.sliders = sliders;
+        this.context = context;
+        this.tools = tools;
+        this.sliders = tools.sliders();
+        this.edits = tools.edits();
         this.settings = context.selectedDimensions().dimensions().values().stream()
                 .map(LevelStem::generator)
                 .filter(AeroliteChunkGenerator.class::isInstance)
@@ -84,58 +87,62 @@ public class AerolitePresetScreen extends Screen {
             this.parent.getUiState().updateDimensions((registries, dimensions) -> this.withSettings(dimensions, chosen));
             this.onClose();
         }).build());
+        if (this.tools.panel().available()) {
+            footer.addChild(Button.builder(Component.translatable("createWorld.customize.aerolite.preview"), button -> this.openPreview()).build());
+        }
         footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).build());
         this.layout.visitWidgets(this::addRenderableWidget);
         this.repositionElements();
+    }
+
+    /** Opens the preview with a copy of the settings. Done in the preview sends the settings back. */
+    private void openPreview() {
+        new PreviewScreen(this, this.context, this.tools, this.settings, this.parent.getUiState().getSeed(), chosen -> {
+            this.settings = chosen;
+            this.rebuildPending = true;
+        }).open();
     }
 
     /** Adds every section of the settings to the list. */
     private void populate(SettingsList list) {
         this.blockFields.clear();
         list.addHeader(Component.translatable("createWorld.customize.aerolite.shaft_placement"));
-        list.addRow(new StepSlider(PresetSliders.FRACTION_STEPS, Math.round(this.settings.columnChance() * PresetSliders.FRACTION_STEPS),
+        list.addRow(new StepSlider(PresetSliders.FRACTION_STEPS, this.sliders.fractionStep(this.settings.columnChance()),
                 step -> Component.translatable("createWorld.customize.aerolite.column_chance", this.sliders.percent(step)),
-                step -> this.settings = this.settings.withColumnChance(step / (float) PresetSliders.FRACTION_STEPS)));
+                step -> this.settings = this.settings.withColumnChance(this.sliders.fraction(step))));
 
         StepSlider[] spacing = new StepSlider[2];
         spacing[0] = new StepSlider(PresetSliders.SPACING_STEPS, this.sliders.spacingStep(this.settings.minShaftSpacing()),
                 step -> Component.translatable("createWorld.customize.aerolite.min_shaft_spacing", this.sliders.spacing(step)),
                 step -> {
-                    int max = Math.max(this.sliders.spacing(step), this.settings.maxShaftSpacing());
-                    this.settings = this.settings.withShaftSpacing(this.sliders.spacing(step), max);
-                    spacing[1].setStep(this.sliders.spacingStep(max));
+                    this.settings = this.edits.withMinSpacingStep(this.settings, step);
+                    spacing[1].setStep(this.sliders.spacingStep(this.settings.maxShaftSpacing()));
                 });
         spacing[1] = new StepSlider(PresetSliders.SPACING_STEPS, this.sliders.spacingStep(this.settings.maxShaftSpacing()),
                 step -> Component.translatable("createWorld.customize.aerolite.max_shaft_spacing", this.sliders.spacing(step)),
                 step -> {
-                    int min = Math.min(this.sliders.spacing(step), this.settings.minShaftSpacing());
-                    this.settings = this.settings.withShaftSpacing(min, this.sliders.spacing(step));
-                    spacing[0].setStep(this.sliders.spacingStep(min));
+                    this.settings = this.edits.withMaxSpacingStep(this.settings, step);
+                    spacing[0].setStep(this.sliders.spacingStep(this.settings.minShaftSpacing()));
                 });
         list.addRow(spacing);
 
         list.addHeader(Component.translatable("createWorld.customize.aerolite.shaft_surface"));
-        list.addRow(new StepSlider(MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT, Mth.log2(this.settings.decayScale()) - MIN_SCALE_EXPONENT,
-                step -> Component.translatable("createWorld.customize.aerolite.decay_scale", 1 << (MIN_SCALE_EXPONENT + step)),
-                step -> this.settings = this.settings.withDecayScale(1 << (MIN_SCALE_EXPONENT + step))));
-        // The erosion threshold stays at least one step above the decay threshold.
+        list.addRow(new StepSlider(PresetSliders.DECAY_SCALE_STEPS, this.sliders.decayScaleStep(this.settings.decayScale()),
+                step -> Component.translatable("createWorld.customize.aerolite.decay_scale", this.sliders.decayScale(step)),
+                step -> this.settings = this.settings.withDecayScale(this.sliders.decayScale(step))));
         StepSlider[] thresholds = new StepSlider[2];
-        thresholds[0] = new StepSlider(PresetSliders.FRACTION_STEPS, Math.round(this.settings.decayThreshold() * PresetSliders.FRACTION_STEPS),
+        thresholds[0] = new StepSlider(PresetSliders.FRACTION_STEPS, this.edits.decayStep(this.settings),
                 step -> Component.translatable("createWorld.customize.aerolite.decay_threshold", this.sliders.percent(step)),
                 step -> {
-                    int decay = Math.min(step, PresetSliders.FRACTION_STEPS - 1);
-                    int erosion = Math.max(decay + 1, Math.round(this.settings.erosionThreshold() * PresetSliders.FRACTION_STEPS));
-                    this.settings = this.settings.withDecayThreshold(decay / (float) PresetSliders.FRACTION_STEPS).withErosionThreshold(erosion / (float) PresetSliders.FRACTION_STEPS);
-                    thresholds[0].setStep(decay);
-                    thresholds[1].setStep(erosion - 1);
+                    this.settings = this.edits.withDecayStep(this.settings, step);
+                    thresholds[0].setStep(this.edits.decayStep(this.settings));
+                    thresholds[1].setStep(this.edits.erosionStep(this.settings) - 1);
                 });
-        thresholds[1] = new StepSlider(PresetSliders.FRACTION_STEPS - 1, Math.round(this.settings.erosionThreshold() * PresetSliders.FRACTION_STEPS) - 1,
+        thresholds[1] = new StepSlider(PresetSliders.EROSION_STEPS, this.edits.erosionStep(this.settings) - 1,
                 step -> Component.translatable("createWorld.customize.aerolite.erosion_threshold", this.sliders.percent(step + 1)),
                 step -> {
-                    int erosion = step + 1;
-                    int decay = Math.min(erosion - 1, Math.round(this.settings.decayThreshold() * PresetSliders.FRACTION_STEPS));
-                    this.settings = this.settings.withDecayThreshold(decay / (float) PresetSliders.FRACTION_STEPS).withErosionThreshold(erosion / (float) PresetSliders.FRACTION_STEPS);
-                    thresholds[0].setStep(decay);
+                    this.settings = this.edits.withErosionStep(this.settings, step + 1);
+                    thresholds[0].setStep(this.edits.decayStep(this.settings));
                 });
         list.addRow(thresholds);
 
@@ -148,7 +155,7 @@ public class AerolitePresetScreen extends Screen {
         list.addRow(CycleButton.onOffBuilder(this.settings.shaftsInUnlistedDimensions()).create(0, 0, SettingsList.ROW_WIDTH, 20,
                 Component.translatable("createWorld.customize.aerolite.shafts_in_unlisted_dimensions"),
                 (button, value) -> this.settings = this.settings.withShaftsInUnlistedDimensions(value)));
-        for (ResourceKey<Level> dimension : DIMENSIONS) {
+        for (ResourceKey<Level> dimension : PresetEdits.DIMENSIONS) {
             this.addDimension(list, dimension);
         }
     }
@@ -156,36 +163,27 @@ public class AerolitePresetScreen extends Screen {
     /** Adds the header, the variation rows and the Add button of one dimension. */
     private void addDimension(SettingsList list, ResourceKey<Level> dimension) {
         list.addHeader(Component.translatable("createWorld.customize.aerolite.dimension." + dimension.location().getPath()));
-        List<ShaftVariation> variations = this.settings.variations().getOrDefault(dimension, List.of());
+        List<ShaftVariation> variations = this.edits.variations(this.settings, dimension);
         for (int index = 0; index < variations.size(); index++) {
-            this.addVariation(list, dimension, index, variations.get(index), variations.size());
+            this.addVariation(list, dimension, index, variations.get(index));
         }
         list.addRow(Button.builder(Component.translatable("createWorld.customize.aerolite.add_variation"), button -> {
-            List<ShaftVariation> current = this.settings.variations().getOrDefault(dimension, List.of());
-            ShaftVariation copy = current.isEmpty() ? this.defaultVariation(dimension) : current.getFirst();
-            this.settings = this.settings.withAddedVariation(dimension, copy);
+            this.settings = this.edits.withAddedVariation(this.settings, dimension);
             this.rebuildPending = true;
         }).build());
     }
 
-    private ShaftVariation defaultVariation(ResourceKey<Level> dimension) {
-        List<ShaftVariation> defaults = AeroliteSettings.DEFAULT.variations().get(dimension);
-        return defaults == null || defaults.isEmpty() ? ShaftVariation.STONE : defaults.getFirst();
-    }
-
     /** Adds the slider row, the block row and the Remove row of one variation. */
-    private void addVariation(SettingsList list, ResourceKey<Level> dimension, int index, ShaftVariation variation, int count) {
+    private void addVariation(SettingsList list, ResourceKey<Level> dimension, int index, ShaftVariation variation) {
         StepSlider[] weight = new StepSlider[1];
         weight[0] = new StepSlider(ShaftVariation.MAX_WEIGHT, variation.weight(),
                 step -> Component.translatable("createWorld.customize.aerolite.weight", step),
                 step -> {
-                    // A dimension keeps at least one variation with a positive weight.
-                    int chosen = step == 0 && !this.otherWeightIsPositive(dimension, index) ? 1 : step;
-                    this.editVariation(dimension, index, current -> current.withWeight(chosen));
-                    weight[0].setStep(chosen);
+                    this.settings = this.edits.withWeight(this.settings, dimension, index, step);
+                    weight[0].setStep(this.edits.variations(this.settings, dimension).get(index).weight());
                 });
         StepSlider bias = new StepSlider(PresetSliders.BIAS_STEPS, this.sliders.biasStep(variation.bias()),
-                step -> Component.translatable("createWorld.customize.aerolite.maze_bias", this.biasLabel(step)),
+                step -> Component.translatable("createWorld.customize.aerolite.maze_bias", this.sliders.biasLabel(step)),
                 step -> this.editVariation(dimension, index, current -> current.withBias(this.sliders.bias(step))));
         list.addRow(weight[0], bias);
 
@@ -199,35 +197,16 @@ public class AerolitePresetScreen extends Screen {
         );
 
         Button remove = Button.builder(Component.translatable("createWorld.customize.aerolite.remove_variation"), button -> {
-            this.settings = this.settings.withoutVariation(dimension, index);
-            List<ShaftVariation> rest = this.settings.variations().get(dimension);
-            if (rest.stream().noneMatch(other -> other.weight() > 0)) {
-                this.settings = this.settings.withVariation(dimension, 0, rest.getFirst().withWeight(1));
-            }
+            this.settings = this.edits.withoutVariation(this.settings, dimension, index);
             this.rebuildPending = true;
         }).build();
-        remove.active = count > 1;
+        remove.active = this.edits.canRemove(this.settings, dimension);
         list.addRow(remove);
-    }
-
-    private boolean otherWeightIsPositive(ResourceKey<Level> dimension, int index) {
-        List<ShaftVariation> variations = this.settings.variations().get(dimension);
-        for (int other = 0; other < variations.size(); other++) {
-            if (other != index && variations.get(other).weight() > 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private Component biasLabel(int step) {
-        String suffix = step < PresetSliders.UNIFORM_BIAS_STEP ? "ringwise" : step == PresetSliders.UNIFORM_BIAS_STEP ? "uniform" : "lengthwise";
-        return Component.translatable("createWorld.customize.aerolite.maze_bias." + suffix, this.sliders.biasPercent(step));
     }
 
     private BlockField blockField(BlockState state, String key, Consumer<BlockState> onChange) {
         Component name = Component.translatable(key);
-        BlockField field = new BlockField(this.font, state, name, onChange);
+        BlockField field = new BlockField(this.font, this.tools.blocks(), state, name, onChange);
         field.setTooltip(Tooltip.create(name));
         this.blockFields.add(field);
         return field;

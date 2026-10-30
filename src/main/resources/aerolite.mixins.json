@@ -7,6 +7,9 @@
     "ChunkPyramidMixin",
     "ChunkStatusMixin"
   ],
+  "client": [
+    "WindowMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

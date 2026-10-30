@@ -7,8 +7,13 @@ import net.neoforged.neoforge.client.event.RegisterPresetEditorsEvent;
 import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import tamaized.beanification.PostConstruct;
+import us.drullk.aerolite.client.preview.ItemIconAtlas;
+import us.drullk.aerolite.client.preview.PreviewPanel;
+import us.drullk.aerolite.client.preview.PreviewViewport;
 import us.drullk.aerolite.network.CloudHeightSync;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.shaft.ShaftPainter;
+import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 
 /**
  * Client events of Aerolite.
@@ -20,12 +25,15 @@ import us.drullk.aerolite.world.AeroliteWorldgen;
 @Component(dist = Dist.CLIENT)
 public final class AeroliteClient {
 
-    private final PresetSliders sliders;
+    private final PresetTools tools;
     private final CloudHeightHolder cloudHeight;
     private final CloudHeightSync cloudHeightSync;
 
-    public AeroliteClient(@Autowired PresetSliders sliders, @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync) {
-        this.sliders = sliders;
+    public AeroliteClient(@Autowired PresetSliders sliders, @Autowired PresetEdits edits, @Autowired BlockSearch blocks,
+                          @Autowired ShaftPainter painter, @Autowired ShaftMazes mazes, @Autowired PreviewPanel panel,
+                          @Autowired PreviewViewport viewport, @Autowired AeroliteClientConfig config, @Autowired ItemIconAtlas icons,
+                          @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync) {
+        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons);
         this.cloudHeight = cloudHeight;
         this.cloudHeightSync = cloudHeightSync;
     }
@@ -43,7 +51,7 @@ public final class AeroliteClient {
 
     /** The customize button of the world creation menu opens the preset screen when the preset is active. */
     private void registerPresetEditors(RegisterPresetEditorsEvent event) {
-        event.register(AeroliteWorldgen.PRESET, (parent, context) -> new AerolitePresetScreen(parent, context, this.sliders));
+        event.register(AeroliteWorldgen.PRESET, (parent, context) -> new AerolitePresetScreen(parent, context, this.tools));
     }
 
 }

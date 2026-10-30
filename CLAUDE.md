@@ -67,6 +67,7 @@ The source still contains the MDK template (`com.example.examplemod`, mod ID `ex
 
 - Beanification: dependency injection. See [Dependency injection](#dependency-injection).
 - Veil: the ImGui panel and custom block and entity rendering. See [Veil](#veil).
+- imgui-mc: hosts ImGui for Veil. It is optional. See [imgui-mc](#imgui-mc).
 - WorldEdit: an editor for the dev runs. See [WorldEdit](#worldedit).
 
 ### Dependency injection
@@ -120,6 +121,16 @@ Rules:
 - Put `worldedit-core` in `additionalRuntimeClasspath`. Then the game layer loads the core as a library.
 - Exclude Guava, Gson, fastutil and Log4j from the core. Minecraft pins their versions, and the WorldEdit versions fail to resolve.
 
+### imgui-mc
+
+- imgui-mc (mod ID `imguimc`) hosts ImGui. Veil 4.5 does not host ImGui by itself.
+- The preview and the F12 panel need imgui-mc.
+- imgui-mc is an optional client dependency in `neoforge.mods.toml`.
+- The build has imgui-mc in `compileOnly` and in `localRuntime` with `transitive = false`. The version is in `gradle.properties`.
+- The mod jar of imgui-mc holds the ImGui binding and its natives as jar-in-jar libraries.
+- Only classes in `us.drullk.aerolite.client.preview.imgui` reference ImGui or imgui-mc types.
+- The bean method of `PreviewPanel` creates the ImGui panel only when imgui-mc is loaded. Else it returns a no-op panel.
+
 ### Veil
 
 - Use Veil for the ImGui panel.
@@ -131,6 +142,11 @@ Rules:
 - Use APIs, events and capabilities first.
 - Write a mixin only when no API, event or capability can do the task.
 - Add a comment to each mixin. The comment tells why no API can do the task.
+- The chunk status mixins add the shafts status, because no API adds a chunk status.
+- `WindowMixin` is a client mixin on `Window`. No API changes the window size that the game reports.
+- While the preview is open, `WindowMixin` reports the window width without the panel width.
+- `WindowMixin` reduces `getWidth` in framebuffer pixels, `getScreenWidth` in screen coordinates and `getGuiScaledWidth` in GUI units.
+- A mixin gets no bean injection. `WindowMixin` calls `BeanContext.inject` after it finds an open preview screen.
 
 ## Package annotations
 
@@ -282,6 +298,28 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - An Add button after the rows of each dimension appends a copy of the first variation.
 - An add or a remove rebuilds the list and keeps the scroll position.
 - The other settings have no slider yet. They live in the generator settings with their defaults.
+
+### Preview
+
+- The footer of the Aerolite screen has a Preview button between Done and Cancel.
+- The Preview button shows only when ImGui loaded.
+- The Preview button opens the preview screen with a copy of the settings.
+- Done in the preview sends the copy back to the Aerolite screen. Cancel drops the copy.
+- The preview shows the shafts of a square region of chunks around the origin.
+- The preview paints the shafts with the shaft step code into scratch proto chunks. The vanilla block renderer bakes the blocks.
+- An ImGui panel covers the right edge of the window. The game view fills the part left of the panel.
+- A splitter on the left edge of the panel sets the panel width, from 240 to 600 ImGui units.
+- The panel has the sections of the Aerolite screen, with the same slider steps and the same rules.
+- A block field in the panel lists up to 8 matching blocks with their item icons.
+- The Preview section of the panel has a dimension dropdown: Overworld, Nether, End. The Overworld comes first.
+- The dimension gives the build height, the biome source, the variations, the sky and the fog of the preview.
+- The seed is the seed text of the world creation screen. An empty text gives a random seed.
+- The panel shows the seed. The Reseed button picks a new random seed.
+- The radius slider runs from 2 to 32 chunks in steps of 1.
+- The radius starts at the render distance option of the client.
+- Every change starts a rebuild on a worker thread after 300 ms. A progress bar shows the baked sections.
+- The fog follows the terrain fog of the dimension, with the radius as the render distance. The fog grows from the region center.
+- A drag in the game view turns the camera around the region center. The scroll wheel zooms.
 
 ## Shafts
 
@@ -470,6 +508,9 @@ Use two config files:
 
 - Server config (synced to clients): one switch per structure set that turns center placement on or off.
 - Client config: the ImGui panel (visible on start, panel width) and the tree block render (hue saturation, hue brightness, a switch for the Veil render path).
+- The client config holds only the panel width now. The other client values come with their features.
+- The panel width is in ImGui units, from 240 to 600. The default is 360.
+- The splitter of the preview panel writes the panel width on release.
 
 Tree growth is not a config value. It is the game rule `walkerTreeGrowChance`.
 
