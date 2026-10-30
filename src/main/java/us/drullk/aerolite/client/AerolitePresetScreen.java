@@ -48,6 +48,8 @@ import java.util.function.UnaryOperator;
  */
 public class AerolitePresetScreen extends Screen {
 
+    /** Three footer buttons at the vanilla width run off a narrow window. */
+    private static final int FOOTER_BUTTON_WIDTH = Button.DEFAULT_WIDTH / 2;
     private final CreateWorldScreen parent;
     private final WorldCreationContext context;
     private final PresetTools tools;
@@ -93,11 +95,11 @@ public class AerolitePresetScreen extends Screen {
             AeroliteSettings chosen = this.settings;
             this.parent.getUiState().updateDimensions((registries, dimensions) -> this.withSettings(dimensions, chosen));
             this.onClose();
-        }).build());
+        }).width(FOOTER_BUTTON_WIDTH).build());
         if (this.tools.panel().available()) {
-            footer.addChild(Button.builder(Component.translatable("createWorld.customize.aerolite.preview"), button -> this.openPreview()).build());
+            footer.addChild(Button.builder(Component.translatable("createWorld.customize.aerolite.preview"), button -> this.openPreview()).width(FOOTER_BUTTON_WIDTH).build());
         }
-        footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).build());
+        footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).width(FOOTER_BUTTON_WIDTH).build());
         this.layout.visitWidgets(this::addRenderableWidget);
         this.repositionElements();
     }
