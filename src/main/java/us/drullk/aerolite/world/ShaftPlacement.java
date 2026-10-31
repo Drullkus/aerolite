@@ -8,7 +8,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 /**
  * The placement of the shafts and columns of one dimension.
  *
- * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  *
  * @param minShaftSpacing the smallest center distance of two neighbor horizontal shafts on one axis
  * @param maxShaftSpacing the largest center distance of two neighbor horizontal shafts on one axis

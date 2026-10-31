@@ -32,7 +32,7 @@ import java.util.function.UnaryOperator;
  * The tab Shaft Variations holds the variation rows and the Add Variation button.
  * Done sends the copy back to the preset screen. Cancel and Escape drop it.
  *
- * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  */
 public class DimensionSettingsScreen extends Screen {
 

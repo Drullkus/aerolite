@@ -13,7 +13,7 @@ import java.util.function.UnaryOperator;
 /**
  * The shaft settings of one dimension: the placement and the variations.
  *
- * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  *
  * @param placement  the placement of the shafts and columns
  * @param variations the variations that each shaft and column picks from by weight

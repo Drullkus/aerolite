@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
  * A 20x20 button that draws the join arrow of the vanilla server list, with the highlighted arrow on hover.
  * The sprite draws at its own size of 32 pixels, so each texel stays one GUI pixel.
  *
- * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  */
 public class ArrowButton extends Button {
 

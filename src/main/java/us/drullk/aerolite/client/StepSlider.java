@@ -11,7 +11,7 @@ import java.util.function.IntFunction;
 /**
  * A slider over a fixed count of steps. Each step maps to one setting value. The list row sets its width.
  *
- * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  */
 public final class StepSlider extends AbstractSliderButton {
 
