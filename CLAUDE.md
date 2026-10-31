@@ -304,6 +304,13 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The minus button is 20x20. It removes the dimension and its settings.
 - An add or a remove of a dimension rebuilds the list and keeps the scroll position.
 - A return from the dimension screen or the preview rebuilds the list.
+- The header keeps its centered title. A Copy button and a Paste button sit at the right end of the header row, in that sequence.
+- Each header button is 20 high and fits its text. A gap of 4 separates them. The Paste button ends 8 units from the right window edge.
+- The tooltip of Copy is "Copy to Clipboard". The tooltip of Paste is "Paste from Clipboard".
+- Copy writes the settings to the system clipboard as one line of JSON. Only the settings codec knows the fields.
+- Paste parses the clipboard at once. A good parse replaces the settings and rebuilds the list.
+- A bad parse shows a system toast with the title "Paste failed" and the parse error. The settings stay.
+- The dimension screen has no Copy button and no Paste button.
 
 ### Dimension screen
 
@@ -381,6 +388,10 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - A change of the seed field text starts a rebuild. An empty field keeps the last seed.
 - The Reseed button picks a new random seed. The field shows its decimal number.
 - Done in the preview writes the seed text to the seed field of the world creation screen. Cancel drops it.
+- A Copy button and a Paste button sit on one line after the seed row. They have the tooltips of the header buttons.
+- Copy in the panel writes the preview copy of the settings to the clipboard.
+- Paste in the panel replaces the preview copy and starts a rebuild. A bad parse shows the toast of the Aerolite screen.
+- The toast draws left of the panel, because the window reports the reduced width.
 - The radius slider runs from 2 to 32 chunks in steps of 1.
 - The radius starts at the render distance option of the client.
 - A change of the settings, the seed, the dimension or the radius starts a full rebuild on a worker thread after 300 ms.

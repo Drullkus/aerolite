@@ -1,8 +1,13 @@
 package us.drullk.aerolite.client;
 
+import com.mojang.serialization.DataResult;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.layouts.FrameLayout;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
+import net.minecraft.client.gui.layouts.LayoutSettings;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
@@ -30,6 +35,8 @@ import java.util.Map;
  * The arrow opens the {@link DimensionSettingsScreen} of the dimension. The minus button removes the dimension.
  * An add or a remove rebuilds the list entries. A return from a dimension screen or the preview also rebuilds them.
  * The Preview button shows only when ImGui loaded. The preview edits a copy of the settings.
+ * The Copy and Paste buttons at the right end of the header move the settings through the system clipboard.
+ * A good paste replaces the settings and rebuilds the list. A bad paste shows a toast and keeps the settings.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -43,11 +50,18 @@ public class AerolitePresetScreen extends Screen {
 
     /** Three footer buttons at the vanilla width run off a narrow window. */
     private static final int FOOTER_BUTTON_WIDTH = Button.DEFAULT_WIDTH / 2;
+    /** The space on each side of the text of a header button. */
+    private static final int HEADER_BUTTON_PADDING = 8;
+    private static final int HEADER_BUTTON_HEIGHT = 20;
+    private static final int HEADER_BUTTON_GAP = 4;
+    private static final int HEADER_RIGHT_MARGIN = 8;
     private final CreateWorldScreen parent;
     private final WorldCreationContext context;
     private final PresetTools tools;
     private final PresetEdits edits;
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
+    /** The header row at the full window width. It holds the centered title and the clipboard buttons. */
+    private final FrameLayout header = new FrameLayout();
     @Nullable
     private SettingsList list;
     private AeroliteSettings settings;
@@ -75,7 +89,12 @@ public class AerolitePresetScreen extends Screen {
 
     @Override
     protected void init() {
-        this.layout.addTitleHeader(this.title, this.font);
+        this.header.addChild(new StringWidget(this.title, this.font), LayoutSettings::alignHorizontallyCenter);
+        LinearLayout clipboard = this.header.addChild(LinearLayout.horizontal().spacing(HEADER_BUTTON_GAP),
+                settings -> settings.alignHorizontallyRight().paddingRight(HEADER_RIGHT_MARGIN));
+        clipboard.addChild(this.headerButton("copy", button -> this.tools.json().copy(this.settings)));
+        clipboard.addChild(this.headerButton("paste", button -> this.paste()));
+        this.layout.addToHeader(this.header);
         SettingsList list = this.layout.addToContents(new SettingsList(this.minecraft, this.width, this.layout));
         this.list = list;
         this.populate(list);
@@ -92,6 +111,25 @@ public class AerolitePresetScreen extends Screen {
         footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).width(FOOTER_BUTTON_WIDTH).build());
         this.layout.visitWidgets(this::addRenderableWidget);
         this.repositionElements();
+    }
+
+    /** A header button of the height 20 that fits its text. Its tooltip has the key of the button plus {@code _tooltip}. */
+    private Button headerButton(String key, Button.OnPress onPress) {
+        Component message = Component.translatable("createWorld.customize.aerolite." + key);
+        return Button.builder(message, onPress)
+                .size(this.font.width(message) + 2 * HEADER_BUTTON_PADDING, HEADER_BUTTON_HEIGHT)
+                .tooltip(Tooltip.create(Component.translatable("createWorld.customize.aerolite." + key + "_tooltip")))
+                .build();
+    }
+
+    /** Replaces the settings with the clipboard settings. A bad parse shows a toast and keeps the settings. */
+    private void paste() {
+        DataResult<AeroliteSettings> pasted = this.tools.json().paste();
+        pasted.ifSuccess(chosen -> {
+            this.settings = chosen;
+            this.addChoice = null;
+            this.rebuildPending = true;
+        }).ifError(error -> this.tools.json().showPasteFailed(error.message()));
     }
 
     /** Opens the preview with a copy of the settings. Done in the preview sends the settings and the seed text back. */
@@ -222,6 +260,7 @@ public class AerolitePresetScreen extends Screen {
 
     @Override
     protected void repositionElements() {
+        this.header.setMinDimensions(this.width, this.layout.getHeaderHeight());
         this.layout.arrangeElements();
         if (this.list != null) {
             this.list.updateSize(this.width, this.layout);

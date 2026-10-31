@@ -21,6 +21,7 @@ import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class AeroliteClient {
@@ -32,8 +33,8 @@ public final class AeroliteClient {
     public AeroliteClient(@Autowired PresetSliders sliders, @Autowired PresetEdits edits, @Autowired BlockSearch blocks,
                           @Autowired ShaftPainter painter, @Autowired ShaftMazes mazes, @Autowired PreviewPanel panel,
                           @Autowired PreviewViewport viewport, @Autowired AeroliteClientConfig config, @Autowired ItemIconAtlas icons,
-                          @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync) {
-        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons);
+                          @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync, @Autowired SettingsJson json) {
+        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json);
         this.cloudHeight = cloudHeight;
         this.cloudHeightSync = cloudHeightSync;
     }

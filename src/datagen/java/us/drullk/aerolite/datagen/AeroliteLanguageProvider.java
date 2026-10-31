@@ -57,6 +57,11 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.add_variation", "Add Variation");
         this.add("createWorld.customize.aerolite.remove_variation", "Remove Variation");
         this.add("createWorld.customize.aerolite.preview", "Preview");
+        this.add("createWorld.customize.aerolite.copy", "Copy");
+        this.add("createWorld.customize.aerolite.paste", "Paste");
+        this.add("createWorld.customize.aerolite.copy_tooltip", "Copy to Clipboard");
+        this.add("createWorld.customize.aerolite.paste_tooltip", "Paste from Clipboard");
+        this.add("createWorld.customize.aerolite.paste_failed", "Paste failed");
         this.add("createWorld.customize.aerolite.preview.title", "Aerolite Preview");
         this.add("createWorld.customize.aerolite.preview.section", "Preview");
         this.add("createWorld.customize.aerolite.preview.seed", "Seed");

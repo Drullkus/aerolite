@@ -535,6 +535,22 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             screen.reseed();
         }
 
+        if (ImGui.button(text("copy") + "##copy")) {
+            this.tools().json().copy(screen.settings());
+        }
+        if (ImGui.isItemHovered()) {
+            ImGui.setTooltip(text("copy_tooltip"));
+        }
+        ImGui.sameLine();
+        if (ImGui.button(text("paste") + "##paste")) {
+            this.tools().json().paste()
+                    .ifSuccess(screen::setSettings)
+                    .ifError(error -> this.tools().json().showPasteFailed(error.message()));
+        }
+        if (ImGui.isItemHovered()) {
+            ImGui.setTooltip(text("paste_tooltip"));
+        }
+
         int radius = this.stepSlider("##radius", screen.radius() - PreviewScreen.MIN_RADIUS, PreviewScreen.MAX_RADIUS - PreviewScreen.MIN_RADIUS,
                 text("preview.radius", screen.radius()));
         if (radius >= 0) {
