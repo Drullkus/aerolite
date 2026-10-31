@@ -484,6 +484,8 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The Add Variation button appends a copy of the first variation.
 - A dimension without a variation gets `aerolite:stone` with weight 1 from Add Variation.
 - An add or a remove of a variation rebuilds the tab and keeps the scroll position.
+- The rebuild of the variation rows waits for the next tick of the dimension screen.
+- While the rebuild waits, the variation rows ignore input.
 - The dimension screen and the panel have no cloud height slider. The cloud height stays a field of the holder settings.
 
 ### Preview
@@ -509,6 +511,8 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - Each variation row of the panel shows the sliders in the menu sequence: weight, maze bias, decay scale, decay threshold, erosion threshold.
 - The block fields follow the sliders. The Export button, the Import button and the Remove button follow on one line.
 - Export and Import in the panel act like Export and Import of the dimension screen, with the same tooltips.
+- The panel applies a variation removal after its row loop. So each row of the frame reads its own index.
+- Each ImGui end call of the panel runs in a `finally` block. So an exception leaves no ImGui window open.
 - A good import in the panel replaces the variation in the preview copy and starts a rebuild.
 - A radio button left of each dimension name selects the previewed dimension.
 - The radio buttons and the dimension dropdown of the Preview section always show the same dimension.

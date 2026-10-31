@@ -26,6 +26,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 final class ImGuiBlockField {
 
@@ -118,32 +119,36 @@ final class ImGuiBlockField {
         ImGui.setNextWindowPos(left, top);
         ImGui.setNextWindowSize(width, height);
         BlockState result = null;
-        if (ImGui.begin(id + "_matches", LIST_FLAGS)) {
-            // The panel comes to the front on a click in the field. The list stays over it.
-            imgui.internal.ImGui.bringWindowToDisplayFront(imgui.internal.ImGui.getCurrentWindow());
-            for (Block block : this.matches) {
-                ItemIconAtlas.Cell cell = icons.cell(block.asItem());
-                if (cell != null && icons.target() != null) {
-                    ImGuiMC.image(ImGuiMC.getColorTexture(icons.target()), row, row, cell.u0(), cell.v0(), cell.u1(), cell.v1());
-                } else {
-                    ImGui.dummy(row, row);
-                }
-                ImGui.sameLine();
-                String blockText = search.text(block.defaultBlockState());
-                if (ImGui.selectable(block.getName().getString() + "##" + blockText)) {
-                    this.text.set(blockText);
-                    BlockState parsed = search.parse(this.text.get());
-                    this.valid = parsed != null;
-                    if (parsed != null) {
-                        this.shown = parsed;
-                        result = parsed;
+        boolean shownList = ImGui.begin(id + "_matches", LIST_FLAGS);
+        try {
+            if (shownList) {
+                // The panel comes to the front on a click in the field. The list stays over it.
+                imgui.internal.ImGui.bringWindowToDisplayFront(imgui.internal.ImGui.getCurrentWindow());
+                for (Block block : this.matches) {
+                    ItemIconAtlas.Cell cell = icons.cell(block.asItem());
+                    if (cell != null && icons.target() != null) {
+                        ImGuiMC.image(ImGuiMC.getColorTexture(icons.target()), row, row, cell.u0(), cell.v0(), cell.u1(), cell.v1());
+                    } else {
+                        ImGui.dummy(row, row);
                     }
-                    this.open = false;
+                    ImGui.sameLine();
+                    String blockText = search.text(block.defaultBlockState());
+                    if (ImGui.selectable(block.getName().getString() + "##" + blockText)) {
+                        this.text.set(blockText);
+                        BlockState parsed = search.parse(this.text.get());
+                        this.valid = parsed != null;
+                        if (parsed != null) {
+                            this.shown = parsed;
+                            result = parsed;
+                        }
+                        this.open = false;
+                    }
                 }
+                this.listInUse = ImGui.isWindowFocused() || ImGui.isWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
             }
-            this.listInUse = ImGui.isWindowFocused() || ImGui.isWindowHovered(ImGuiHoveredFlags.AllowWhenBlockedByActiveItem);
+        } finally {
+            ImGui.end();
         }
-        ImGui.end();
         if (!this.open) {
             this.listInUse = false;
         }

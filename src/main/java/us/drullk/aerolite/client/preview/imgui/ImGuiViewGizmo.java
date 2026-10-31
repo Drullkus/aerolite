@@ -16,6 +16,7 @@ import java.util.Arrays;
  * A click on a face turns the camera to look at that face.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 final class ImGuiViewGizmo {
 
@@ -47,16 +48,19 @@ final class ImGuiViewGizmo {
         ImGui.pushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
         boolean open = ImGui.begin("##aerolite_view_gizmo", WINDOW_FLAGS);
         ImGui.popStyleVar(2);
-        if (open) {
-            ImGuizmo.setDrawList();
-            camera.view().get(this.view);
-            System.arraycopy(this.view, 0, this.drawn, 0, this.view.length);
-            ImGuizmo.viewManipulate(this.view, camera.distance(), left, top, SIZE, SIZE, BACKGROUND);
-            if (!Arrays.equals(this.view, this.drawn)) {
-                this.apply(camera);
+        try {
+            if (open) {
+                ImGuizmo.setDrawList();
+                camera.view().get(this.view);
+                System.arraycopy(this.view, 0, this.drawn, 0, this.view.length);
+                ImGuizmo.viewManipulate(this.view, camera.distance(), left, top, SIZE, SIZE, BACKGROUND);
+                if (!Arrays.equals(this.view, this.drawn)) {
+                    this.apply(camera);
+                }
             }
+        } finally {
+            ImGui.end();
         }
-        ImGui.end();
     }
 
     /** The third row of a view matrix points from the orbit center to the camera. */

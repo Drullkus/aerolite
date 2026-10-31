@@ -236,15 +236,22 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         boolean open = ImGui.begin("##aerolite_preview", WINDOW_FLAGS);
         ImGui.popStyleVar(3);
         ImGui.popStyleColor();
-        if (open) {
-            this.drawSplitter(screen, viewport.getPosX() + windowWidth, windowHeight);
-            ImGui.setCursorPos(SPLITTER_WIDTH, 0);
-            if (ImGui.beginChild("##aerolite_preview_content", this.width - SPLITTER_WIDTH, windowHeight, ImGuiChildFlags.AlwaysUseWindowPadding)) {
-                this.drawContent(screen);
+        try {
+            if (open) {
+                this.drawSplitter(screen, viewport.getPosX() + windowWidth, windowHeight);
+                ImGui.setCursorPos(SPLITTER_WIDTH, 0);
+                boolean child = ImGui.beginChild("##aerolite_preview_content", this.width - SPLITTER_WIDTH, windowHeight, ImGuiChildFlags.AlwaysUseWindowPadding);
+                try {
+                    if (child) {
+                        this.drawContent(screen);
+                    }
+                } finally {
+                    ImGui.endChild();
+                }
             }
-            ImGui.endChild();
+        } finally {
+            ImGui.end();
         }
-        ImGui.end();
         this.gizmo.draw(screen.camera(), this.width);
     }
 
@@ -316,14 +323,17 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         for (ResourceKey<Level> dimension : this.tools().edits().configuredDimensions(settings)) {
             String id = dimension.location().toString();
             ImGui.pushID(id);
-            float right = ImGui.getCursorPosX() + ImGui.getContentRegionAvailX();
-            boolean open = this.drawDimensionNode(screen, dimension);
-            if (this.drawRemoveDimension(right)) {
-                removed = dimension;
-            } else if (open) {
-                edited = this.drawDimensionRows(edited, dimension, id);
+            try {
+                float right = ImGui.getCursorPosX() + ImGui.getContentRegionAvailX();
+                boolean open = this.drawDimensionNode(screen, dimension);
+                if (this.drawRemoveDimension(right)) {
+                    removed = dimension;
+                } else if (open) {
+                    edited = this.drawDimensionRows(edited, dimension, id);
+                }
+            } finally {
+                ImGui.popID();
             }
-            ImGui.popID();
         }
         if (removed != null) {
             edited = this.tools().edits().withoutDimension(edited, removed);
@@ -337,10 +347,13 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
      */
     private boolean drawDimensionNode(PreviewScreen screen, ResourceKey<Level> dimension) {
         ImGui.beginDisabled(screen.dimensionIndex(dimension) < 0);
-        if (ImGui.radioButton("##preview_dimension", dimension.equals(screen.dimensionKey()))) {
-            screen.setDimension(dimension);
+        try {
+            if (ImGui.radioButton("##preview_dimension", dimension.equals(screen.dimensionKey()))) {
+                screen.setDimension(dimension);
+            }
+        } finally {
+            ImGui.endDisabled();
         }
-        ImGui.endDisabled();
         if (ImGui.isItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) {
             ImGui.setTooltip(text("preview.show_dimension"));
         }
@@ -358,27 +371,55 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return ImGui.smallButton(remove + "##remove_dimension");
     }
 
-    /** The groups Shaft Placement and Shaft Variations of one dimension. Both start open. */
+    /**
+     * The groups Shaft Placement and Shaft Variations of one dimension. Both start open.
+     * Each row edit keeps the variation count. A removal applies after the loop, so every row reads its own index.
+     */
     private AeroliteSettings drawDimensionRows(AeroliteSettings settings, ResourceKey<Level> dimension, String id) {
         AeroliteSettings edited = settings;
         if (ImGui.treeNodeEx("##shaft_placement", ImGuiTreeNodeFlags.DefaultOpen, text("shaft_placement"))) {
-            edited = this.drawPlacement(edited, dimension);
-            ImGui.treePop();
+            try {
+                edited = this.drawPlacement(edited, dimension);
+            } finally {
+                ImGui.treePop();
+            }
         }
         if (ImGui.treeNodeEx("##shaft_variations", ImGuiTreeNodeFlags.DefaultOpen, text("shaft_variations"))) {
-            List<ShaftVariation> variations = this.tools().edits().variations(edited, dimension);
-            for (int index = 0; index < variations.size(); index++) {
-                ImGui.pushID(index);
-                edited = this.drawVariation(edited, dimension, index, id + "/" + index);
-                ImGui.popID();
-                ImGui.spacing();
+            try {
+                int count = this.tools().edits().variations(edited, dimension).size();
+                int removed = -1;
+                for (int index = 0; index < count; index++) {
+                    ImGui.pushID(index);
+                    try {
+                        edited = this.drawVariation(edited, dimension, index, id + "/" + index);
+                        ImGui.sameLine();
+                        if (this.drawRemoveVariation(edited, dimension)) {
+                            removed = index;
+                        }
+                    } finally {
+                        ImGui.popID();
+                    }
+                    ImGui.spacing();
+                }
+                if (removed >= 0) {
+                    edited = this.tools().edits().withoutVariation(edited, dimension, removed);
+                }
+                if (ImGui.button(text("add_variation") + "##add_variation")) {
+                    edited = this.tools().edits().withAddedVariation(edited, dimension);
+                }
+            } finally {
+                ImGui.treePop();
             }
-            if (ImGui.button(text("add_variation") + "##add_variation")) {
-                edited = this.tools().edits().withAddedVariation(edited, dimension);
-            }
-            ImGui.treePop();
         }
         return edited;
+    }
+
+    /** The Remove button of one variation. It is off for the last variation. Returns true when it was pressed. */
+    private boolean drawRemoveVariation(AeroliteSettings settings, ResourceKey<Level> dimension) {
+        ImGui.beginDisabled(!this.tools().edits().canRemove(settings, dimension));
+        boolean pressed = ImGui.button(text("remove_variation") + "##remove");
+        ImGui.endDisabled();
+        return pressed;
     }
 
     /** The column chance and the two spacing sliders. */
@@ -423,39 +464,48 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         float spacing = ImGui.getStyle().getItemSpacingX();
         float comboWidth = Math.max(1, (ImGui.getContentRegionAvailX() - addWidth - 2 * spacing) / 2);
         ImGui.beginDisabled(this.addChoice == null);
-        ImGui.setNextItemWidth(comboWidth);
-        String shown = this.addChoice == null ? text("all_dimensions_configured") : edits.dimensionName(this.addChoice).getString();
-        if (ImGui.beginCombo("##add_dimension_choice", shown)) {
-            for (ResourceKey<Level> candidate : candidates) {
-                if (ImGui.selectable(edits.dimensionName(candidate).getString() + "##" + candidate.location(), candidate.equals(this.addChoice))) {
-                    this.addChoice = candidate;
-                }
-            }
-            ImGui.endCombo();
-        }
-        ImGui.sameLine();
-        ImGui.setNextItemWidth(comboWidth);
-        if (ImGui.beginCombo("##add_list_choice", edits.listName(this.addList).getString())) {
-            for (Optional<ResourceKey<VariationList>> choice : edits.listChoices()) {
-                String id = choice.map(key -> key.location().toString()).orElse("blank");
-                if (ImGui.selectable(edits.listName(choice).getString() + "##" + id, choice.equals(this.addList))) {
-                    this.addList = choice;
-                }
-            }
-            ImGui.endCombo();
-        }
-        ImGui.sameLine();
         AeroliteSettings edited = settings;
-        if (ImGui.button(add + "##add_dimension") && this.addChoice != null) {
-            edited = edits.withAddedDimension(settings, this.addChoice, this.addList);
-            this.addChoice = null;
-            this.addListFor = null;
+        try {
+            ImGui.setNextItemWidth(comboWidth);
+            String shown = this.addChoice == null ? text("all_dimensions_configured") : edits.dimensionName(this.addChoice).getString();
+            if (ImGui.beginCombo("##add_dimension_choice", shown)) {
+                try {
+                    for (ResourceKey<Level> candidate : candidates) {
+                        if (ImGui.selectable(edits.dimensionName(candidate).getString() + "##" + candidate.location(), candidate.equals(this.addChoice))) {
+                            this.addChoice = candidate;
+                        }
+                    }
+                } finally {
+                    ImGui.endCombo();
+                }
+            }
+            ImGui.sameLine();
+            ImGui.setNextItemWidth(comboWidth);
+            if (ImGui.beginCombo("##add_list_choice", edits.listName(this.addList).getString())) {
+                try {
+                    for (Optional<ResourceKey<VariationList>> choice : edits.listChoices()) {
+                        String id = choice.map(key -> key.location().toString()).orElse("blank");
+                        if (ImGui.selectable(edits.listName(choice).getString() + "##" + id, choice.equals(this.addList))) {
+                            this.addList = choice;
+                        }
+                    }
+                } finally {
+                    ImGui.endCombo();
+                }
+            }
+            ImGui.sameLine();
+            if (ImGui.button(add + "##add_dimension") && this.addChoice != null) {
+                edited = edits.withAddedDimension(settings, this.addChoice, this.addList);
+                this.addChoice = null;
+                this.addListFor = null;
+            }
+        } finally {
+            ImGui.endDisabled();
         }
-        ImGui.endDisabled();
         return edited;
     }
 
-    /** The sliders in the sequence of the menu, then the block fields and the buttons Export, Import and Remove. */
+    /** The sliders in the sequence of the menu, then the block fields and the buttons Export and Import. */
     private AeroliteSettings drawVariation(AeroliteSettings settings, ResourceKey<Level> dimension, int index, String fieldKey) {
         PresetSliders sliders = this.tools().sliders();
         AeroliteSettings edited = settings;
@@ -495,15 +545,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         edited = this.blockField(edited, dimension, index, fieldKey + "/wall", BLOCK_LABELS.get(0), fieldStart, variation.wall(), ShaftVariation::withWall);
         edited = this.blockField(edited, dimension, index, fieldKey + "/path", BLOCK_LABELS.get(1), fieldStart, variation.path(), ShaftVariation::withPath);
         edited = this.blockField(edited, dimension, index, fieldKey + "/interior", BLOCK_LABELS.get(2), fieldStart, variation.interior(), ShaftVariation::withInterior);
-        edited = this.drawVariationClipboard(edited, dimension, index);
-        ImGui.sameLine();
-        boolean removable = this.tools().edits().canRemove(edited, dimension);
-        ImGui.beginDisabled(!removable);
-        if (ImGui.button(text("remove_variation") + "##remove")) {
-            edited = this.tools().edits().withoutVariation(edited, dimension, index);
-        }
-        ImGui.endDisabled();
-        return edited;
+        return this.drawVariationClipboard(edited, dimension, index);
     }
 
     /** Export and Import of one variation. A good import replaces the variation and keeps its weight. */
@@ -563,12 +605,15 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             ImGui.sameLine();
             ImGui.setNextItemWidth(-1);
             if (ImGui.beginCombo("##dimension", dimensions.get(screen.dimensionIndex()).name().getString())) {
-                for (int index = 0; index < dimensions.size(); index++) {
-                    if (ImGui.selectable(dimensions.get(index).name().getString(), index == screen.dimensionIndex())) {
-                        screen.setDimensionIndex(index);
+                try {
+                    for (int index = 0; index < dimensions.size(); index++) {
+                        if (ImGui.selectable(dimensions.get(index).name().getString(), index == screen.dimensionIndex())) {
+                            screen.setDimensionIndex(index);
+                        }
                     }
+                } finally {
+                    ImGui.endCombo();
                 }
-                ImGui.endCombo();
             }
         }
 

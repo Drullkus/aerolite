@@ -37,6 +37,7 @@ import java.util.function.UnaryOperator;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 public class DimensionSettingsScreen extends Screen {
 
@@ -58,7 +59,7 @@ public class DimensionSettingsScreen extends Screen {
     private TabNavigationBar tabNavigationBar;
     @Nullable
     private ListTab variationsTab;
-    /** True when an add or a remove of a variation waits for the list rebuild of the next tick. */
+    /** True when an add or a remove of a variation waits for the list rebuild of the next tick. The variation rows then ignore input. */
     private boolean rebuildPending;
 
     /**
@@ -167,6 +168,9 @@ public class DimensionSettingsScreen extends Screen {
         weight[0] = new StepSlider(WeightedVariation.MAX_WEIGHT, this.edits.weight(this.settings, this.dimension, index),
                 step -> Component.translatable(KEY + "weight", step),
                 step -> {
+                    if (this.rebuildPending) {
+                        return;
+                    }
                     this.settings = this.edits.withWeight(this.settings, this.dimension, index, step);
                     weight[0].setStep(this.edits.weight(this.settings, this.dimension, index));
                 });
@@ -182,6 +186,9 @@ public class DimensionSettingsScreen extends Screen {
         thresholds[0] = new StepSlider(PresetSliders.FRACTION_STEPS, this.edits.decayStep(variation),
                 step -> Component.translatable(KEY + "decay_threshold", this.sliders.percent(step)),
                 step -> {
+                    if (this.rebuildPending) {
+                        return;
+                    }
                     this.editVariation(index, current -> this.edits.withDecayStep(current, step));
                     thresholds[0].setStep(this.edits.decayStep(this.variation(index)));
                     thresholds[1].setStep(this.edits.erosionStep(this.variation(index)) - 1);
@@ -189,6 +196,9 @@ public class DimensionSettingsScreen extends Screen {
         thresholds[1] = new StepSlider(PresetSliders.EROSION_STEPS, this.edits.erosionStep(variation) - 1,
                 step -> Component.translatable(KEY + "erosion_threshold", this.sliders.percent(step + 1)),
                 step -> {
+                    if (this.rebuildPending) {
+                        return;
+                    }
                     this.editVariation(index, current -> this.edits.withErosionStep(current, step + 1));
                     thresholds[0].setStep(this.edits.decayStep(this.variation(index)));
                 });
@@ -206,12 +216,19 @@ public class DimensionSettingsScreen extends Screen {
         );
 
         Button remove = Button.builder(Component.translatable(KEY + "remove_variation"), button -> {
+            if (this.rebuildPending) {
+                return;
+            }
             this.settings = this.edits.withoutVariation(this.settings, this.dimension, index);
             this.rebuildPending = true;
         }).build();
         remove.active = this.edits.canRemove(this.settings, this.dimension);
         list.addRow(
-                this.clipboardButton("copy_variation", button -> this.tools.json().copyVariation(this.variation(index))),
+                this.clipboardButton("copy_variation", button -> {
+                    if (!this.rebuildPending) {
+                        this.tools.json().copyVariation(this.variation(index));
+                    }
+                }),
                 this.clipboardButton("paste_variation", button -> this.importVariation(index)),
                 remove
         );
@@ -226,6 +243,9 @@ public class DimensionSettingsScreen extends Screen {
 
     /** A good import replaces the variation and keeps its weight. A bad import shows a toast and keeps the variation. */
     private void importVariation(int index) {
+        if (this.rebuildPending) {
+            return;
+        }
         this.tools.json().pasteVariation()
                 .ifSuccess(imported -> {
                     this.settings = this.settings.withVariation(this.dimension, index, imported);
@@ -241,6 +261,9 @@ public class DimensionSettingsScreen extends Screen {
     }
 
     private void editVariation(int index, UnaryOperator<ShaftVariation> edit) {
+        if (this.rebuildPending) {
+            return;
+        }
         this.settings = this.settings.withVariation(this.dimension, index, edit.apply(this.variation(index)));
     }
 
