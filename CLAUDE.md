@@ -686,7 +686,9 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - A junction box takes the variation of its horizontal shaft. So do its two patches and the maze path blocks on them.
 - A dimension without shaft data gets no shafts. The noise settings of the dimension still make its terrain.
 - `ShaftLayoutTest` holds a fingerprint of the default shafts of one seed. A change that moves a shaft fails it.
-- Shafts pierce islands. Where a shaft and an island overlap, the shaft replaces the terrain.
+- Shafts pierce islands. Each solid block of the finished shaft replaces the terrain block at its position.
+- The shaft paint writes only solid blocks. A block of the chunk stays where the finished shaft is air.
+- The shaft paint computes the finished shaft in a buffer. It does not read the chunk.
 
 ### Cross section
 
@@ -729,7 +731,7 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - The maze grid of a chunk holds the maze grid blocks up to two blocks outside the chunk. So both chunks decay one maze path the same way.
 - Decay is one fractal Brownian simplex noise over the shaft. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
 - The decay threshold t sets the regimes. Noise below -t keeps only maze walls. Noise above t keeps only maze paths.
-- A maze wall or maze path block that decay removes becomes air. A removed path exposes the interior block.
+- A maze wall or maze path block that decay removes leaves no shaft block. A removed path exposes the interior block.
 - Decay acts on the 13x13 inside of each patch. On a patch, the box block that decay exposes becomes the maze path block.
 - Erosion starts where the absolute decay noise passes the erosion threshold, at either end of the noise.
 - The reach is the absolute noise, normalized from the erosion threshold to 1.
@@ -738,7 +740,7 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - In a junction box, the box resistance rises over 6 layers from the box face inward. The 3x3x3 core has a resistance of 1.
 - A box block takes the largest of the box resistance and the resistance of each shaft whose cross section holds it. So erosion never cuts a shaft at a junction.
 - Erosion samples the noise at each block, so one side of a shaft can erode deeper than the other.
-- Erosion runs after decay and before shear. An eroded block becomes air.
+- Erosion runs after decay and before shear. An eroded block leaves no shaft block.
 - The rim of a patch face stays wall. Decay does not touch it.
 - The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
 - The prototype keeps Origin Shift and its start trees for comparison. The mod uses only Wilson's algorithm.

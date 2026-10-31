@@ -25,18 +25,23 @@ import java.util.List;
  * Each shaft and column paints with its own variation. A junction box paints with the variation of its horizontal shaft.
  * Decay and erosion read the thresholds and the decay noise of the variation of each block.
  * The maze grid of the chunk holds the grid blocks up to two blocks outside the chunk. Their maze path blocks and decay writes can lie in the chunk.
+ * Every step writes to a buffer of the finished shaft blocks. The chunk gets only the solid blocks of the buffer.
+ * So a block of the chunk stays where the finished shaft is air.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 final class ChunkPaint {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
     /** The blocks beyond a chunk edge whose maze grid blocks write into the chunk. A patch decay writes two blocks inward. */
     private static final int GRID_MARGIN = 2;
+    /** The blocks of one 16x16x16 buffer section. */
+    private static final int SECTION_BLOCKS = 16 * 16 * 16;
 
     /** A patch block: its outward face direction and the variation of its junction box. */
     private record PatchBlock(Direction normal, ShaftVariation variation) {
@@ -59,6 +64,8 @@ final class ChunkPaint {
     /** The maze grid blocks of the patches. */
     private final Long2ObjectMap<PatchBlock> patchGrid = new Long2ObjectOpenHashMap<>();
     private final Long2ObjectMap<PaintedCarve> carves = new Long2ObjectOpenHashMap<>();
+    /** The painted blocks of the chunk by 16-block band from the bottom build limit, air included. A null entry is unpainted. */
+    private final BlockState[][] buffer;
 
     ChunkPaint(MazeCarver carver, ShaftFrames frames, ErosionResistance resistance, ShaftLayout layout, ChunkAccess chunk) {
         this.carver = carver;
@@ -69,6 +76,7 @@ final class ChunkPaint {
         ChunkPos pos = chunk.getPos();
         this.minX = pos.getMinBlockX();
         this.minZ = pos.getMinBlockZ();
+        this.buffer = new BlockState[Math.ceilDiv(layout.maxY() - layout.minY(), 16)][];
     }
 
     void paint() {
@@ -110,6 +118,25 @@ final class ChunkPaint {
         for (ShaftLayout.Column column : columns) {
             this.shear(column);
         }
+        this.flush();
+    }
+
+    /** Writes each painted block that is not air to the chunk. */
+    private void flush() {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int band = 0; band < this.buffer.length; band++) {
+            BlockState[] section = this.buffer[band];
+            if (section == null) {
+                continue;
+            }
+            for (int index = 0; index < SECTION_BLOCKS; index++) {
+                BlockState state = section[index];
+                if (state != null && !state.isAir()) {
+                    pos.set(this.minX + (index & 15), this.layout.minY() + band * 16 + (index >> 8), this.minZ + (index >> 4 & 15));
+                    this.chunk.setBlockState(pos, state, false);
+                }
+            }
+        }
     }
 
     private boolean inChunk(BlockPos pos) {
@@ -125,10 +152,18 @@ final class ChunkPaint {
                 && pos.getY() >= this.layout.minY() && pos.getY() < this.layout.maxY();
     }
 
+    /** Writes the block to the buffer. Only the flush writes to the chunk. */
     private void set(BlockPos pos, BlockState state) {
-        if (this.inChunk(pos)) {
-            this.chunk.setBlockState(pos, state, false);
+        if (!this.inChunk(pos)) {
+            return;
         }
+        int height = pos.getY() - this.layout.minY();
+        BlockState[] section = this.buffer[height >> 4];
+        if (section == null) {
+            section = new BlockState[SECTION_BLOCKS];
+            this.buffer[height >> 4] = section;
+        }
+        section[(pos.getX() - this.minX) | (pos.getZ() - this.minZ) << 4 | (height & 15) << 8] = state;
     }
 
     private int alongMin(ShaftLayout.Axis axis) {
@@ -181,9 +216,7 @@ final class ChunkPaint {
             for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
                 BlockPos pos = frame.at(along, first, second);
                 boolean outer = Math.max(Math.abs(first), Math.abs(second)) == Ring.OUTER;
-                if (this.inChunk(pos)) {
-                    this.chunk.setBlockState(pos, outer ? variation.wall() : variation.interior(), false);
-                }
+                this.set(pos, outer ? variation.wall() : variation.interior());
                 if (outer && grid && this.nearChunk(pos)) {
                     this.shaftGrid.put(pos.asLong(), variation);
                 }
@@ -338,7 +371,7 @@ final class ChunkPaint {
             for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
                 BlockPos pos = frame.at(along, first, second);
                 if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > this.resistance.section(first, second)) {
-                    this.chunk.setBlockState(pos, AIR, false);
+                    this.set(pos, AIR);
                 }
             }
         }
@@ -352,7 +385,7 @@ final class ChunkPaint {
                 for (int dz = -Ring.BOX; dz <= Ring.BOX; dz++) {
                     BlockPos pos = new BlockPos(column.x() + dx, junction.center() + dy, column.z() + dz);
                     if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > this.resistance.box(junction, dx, dy, dz)) {
-                        this.chunk.setBlockState(pos, AIR, false);
+                        this.set(pos, AIR);
                     }
                 }
             }
@@ -380,7 +413,7 @@ final class ChunkPaint {
             for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
                 BlockPos pos = frame.at(y, first, second);
                 if (this.inChunk(pos) && noise.sample(pos.getX(), pos.getY(), pos.getZ()) < threshold) {
-                    this.chunk.setBlockState(pos, AIR, false);
+                    this.set(pos, AIR);
                 }
             }
         }

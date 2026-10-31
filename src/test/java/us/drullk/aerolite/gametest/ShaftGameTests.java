@@ -80,6 +80,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -232,6 +233,68 @@ public final class ShaftGameTests {
             }
         }
         helper.assertTrue(boxAir > 0, "Erosion removed no box edge block");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void paintKeepsTerrainWhereTheShaftIsAir(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        DimensionSettings settings = ShaftLookup.of(level.registryAccess()).defaults(Level.OVERWORLD);
+        ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout.Column column = null;
+        for (int cell = 0; column == null && cell < 40; cell++) {
+            for (int other = 0; column == null && other < 40; other++) {
+                column = layout.column(cell, other).orElse(null);
+            }
+        }
+        helper.assertTrue(column != null, "The default shafts have no column");
+        ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(column.x()), SectionPos.blockToSectionCoord(column.z()));
+        ProtoChunk empty = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+        painter.paint(layout, empty);
+
+        // No shipped variation uses dirt.
+        BlockState terrain = Blocks.DIRT.defaultBlockState();
+        ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int y = level.getMinBuildHeight(); y < level.getMaxBuildHeight(); y++) {
+            for (int x = pos.getMinBlockX(); x <= pos.getMaxBlockX(); x++) {
+                for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
+                    chunk.setBlockState(cursor.set(x, y, z), terrain, false);
+                }
+            }
+        }
+        painter.paint(layout, chunk);
+
+        int solid = 0;
+        for (int y = level.getMinBuildHeight(); y < level.getMaxBuildHeight(); y++) {
+            for (int x = pos.getMinBlockX(); x <= pos.getMaxBlockX(); x++) {
+                for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
+                    BlockState shaft = empty.getBlockState(cursor.set(x, y, z));
+                    BlockState painted = chunk.getBlockState(cursor);
+                    if (shaft.isAir()) {
+                        helper.assertTrue(painted == terrain, "The paint removed a terrain block where the shaft is air");
+                    } else {
+                        solid++;
+                        helper.assertTrue(painted == shaft, "The paint over terrain differs from the paint of an empty chunk");
+                    }
+                }
+            }
+        }
+        helper.assertTrue(solid > 0, "The paint wrote no shaft block");
+
+        int keptInColumn = 0;
+        ShaftFrame frame = frames.of(column);
+        for (int y = column.bottomEnd(); y < column.topEnd(); y++) {
+            for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
+                for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
+                    BlockPos at = frame.at(y, first, second);
+                    if (new ChunkPos(at).equals(pos) && empty.getBlockState(at).isAir()) {
+                        keptInColumn++;
+                    }
+                }
+            }
+        }
+        helper.assertTrue(keptInColumn > 0, "The column has no air block, so the terrain check covers no shaft air");
         helper.succeed();
     }
 
