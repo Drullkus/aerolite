@@ -482,7 +482,9 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The erosion threshold slider runs from 5% to 100% in steps of 5%.
 - The erosion threshold of a variation stays at least 5% above its decay threshold. A slider that passes the other pushes it along, so the decay threshold tops out at 95%.
 - The four block fields are, from left to right, the maze wall block, the maze path block, the interior block and the junction block.
-- A text row above the block fields shows the label of each field. A block field has no tooltip.
+- A text row above the block fields shows the heading "Blocks" on its first line and the label of each field on its second line. A block field has no tooltip.
+- The block labels are "Wall", "Path", "Interior" and "Junction".
+- The rows of each variation draw inside one box: a white rectangle at 25% opacity that pads the rows by 4 on each side. An empty row separates two variations.
 - A block field reads a block id or a block state string, such as `oxidized_copper` or `oak_log[axis=x]`.
 - Bad text gives the block field a red border. The field keeps its last good block.
 - While a block field has focus and text, a dropdown lists up to 8 blocks whose id or name holds the text. A click or Enter picks one.
@@ -537,7 +539,8 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The list combo lists "No prefab" and every prefab by its name. It follows the rules of the list dropdown of the shafts screen.
 - The list combo shows the tooltip of the list dropdown on hover, with the same dimension rule.
 - When no dimension is left to add, both combos and the Add button are off. The dimension combo reads "All dimensions configured".
-- The panel shows the label of each block field left of the field. A block field has no tooltip.
+- The panel shows the heading "Blocks" above the block fields and the label of each block field left of the field. A block field has no tooltip.
+- Each variation of the panel draws inside one box: the default ImGui blue at 25% opacity, padded by the frame padding, behind the widgets.
 - The panel shows the block fields in the sequence of the menu, from top to bottom.
 - The dropdown of a panel block field is a popup over the panel. It moves no other widget.
 - The popup shows at most eight blocks with their item icons. It scrolls when the space below the field is too short.

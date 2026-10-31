@@ -150,7 +150,10 @@ public class DimensionSettingsScreen extends Screen {
         this.blockFields.clear();
         List<ShaftVariation> variations = this.edits.variations(this.settings, this.dimension);
         for (int index = 0; index < variations.size(); index++) {
+            list.beginGroup();
             this.addVariation(list, index, variations.get(index));
+            list.endGroup();
+            list.addSpacer();
         }
         list.addRow(Button.builder(Component.translatable(KEY + "add_variation"), button -> {
             this.settings = this.edits.withAddedVariation(this.settings, this.dimension);
@@ -204,7 +207,8 @@ public class DimensionSettingsScreen extends Screen {
                 });
         list.addRow(thresholds);
 
-        list.addLabels(
+        list.addHeadedLabels(
+                Component.translatable(KEY + "blocks"),
                 Component.translatable(KEY + "wall_block"),
                 Component.translatable(KEY + "path_block"),
                 Component.translatable(KEY + "interior_block"),

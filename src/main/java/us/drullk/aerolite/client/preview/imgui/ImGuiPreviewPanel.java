@@ -3,9 +3,11 @@ package us.drullk.aerolite.client.preview.imgui;
 import com.mojang.serialization.DataResult;
 import foundry.imgui.api.ImGuiMCEvents;
 import foundry.veil.api.client.render.VeilRenderSystem;
+import imgui.ImDrawList;
 import imgui.ImGui;
 import imgui.ImGuiStyle;
 import imgui.ImGuiViewport;
+import imgui.ImVec2;
 import imgui.ImVec4;
 import imgui.flag.ImGuiChildFlags;
 import imgui.flag.ImGuiCol;
@@ -63,6 +65,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
 
     private static final String KEY = "createWorld.customize.aerolite.";
     private static final List<String> BLOCK_LABELS = List.of("wall_block", "path_block", "interior_block", "junction_block");
+    /** The red, green and blue of the default ImGui blue. The variation box draws it at 25% opacity. */
+    private static final float[] GROUP_BLUE = {0.26F, 0.59F, 0.98F};
+    private static final float GROUP_ALPHA = 0.25F;
     private static final float SPLITTER_WIDTH = 6;
     private static final int SEED_CAPACITY = 256;
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoTitleBar
@@ -390,6 +395,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
                 int removed = -1;
                 for (int index = 0; index < count; index++) {
                     ImGui.pushID(index);
+                    ImDrawList drawList = ImGui.getWindowDrawList();
+                    drawList.channelsSplit(2);
+                    drawList.channelsSetCurrent(1);
+                    ImGui.beginGroup();
                     try {
                         edited = this.drawVariation(edited, dimension, index, id + "/" + index);
                         ImGui.sameLine();
@@ -397,8 +406,13 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
                             removed = index;
                         }
                     } finally {
+                        ImGui.endGroup();
+                        drawList.channelsSetCurrent(0);
+                        this.drawGroupBox(drawList);
+                        drawList.channelsMerge();
                         ImGui.popID();
                     }
+                    ImGui.spacing();
                     ImGui.spacing();
                 }
                 if (removed >= 0) {
@@ -412,6 +426,17 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             }
         }
         return edited;
+    }
+
+    /** A translucent box behind the last group, padded by the frame padding. It draws on the background channel of the draw list. */
+    private void drawGroupBox(ImDrawList drawList) {
+        ImVec2 min = ImGui.getItemRectMin();
+        ImVec2 max = ImGui.getItemRectMax();
+        ImGuiStyle style = ImGui.getStyle();
+        float padX = style.getFramePaddingX();
+        float padY = style.getFramePaddingY();
+        int color = ImGui.getColorU32(GROUP_BLUE[0], GROUP_BLUE[1], GROUP_BLUE[2], GROUP_ALPHA);
+        drawList.addRectFilled(min.x - padX, min.y - padY, max.x + padX, max.y + padY, color, style.getFrameRounding());
     }
 
     /** The Remove button of one variation. It is off for the last variation. Returns true when it was pressed. */
@@ -541,6 +566,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         if (erosion >= 0) {
             edited = this.editVariation(edited, dimension, index, current -> this.tools().edits().withErosionStep(current, erosion + 1));
         }
+        ImGui.text(text("blocks"));
         float labelWidth = 0;
         for (String key : BLOCK_LABELS) {
             labelWidth = Math.max(labelWidth, ImGui.calcTextSize(text(key)).x);

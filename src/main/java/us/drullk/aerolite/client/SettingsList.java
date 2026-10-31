@@ -20,6 +20,7 @@ import java.util.List;
 
 /**
  * A scrollable list of section headers, label rows and widget rows for the preset screens.
+ * A group of rows draws a translucent box behind its rows. The box pads the rows by {@link #GROUP_PADDING} on each side.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -43,6 +44,16 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
     private static final int MAX_COLUMNS = 4;
     private static final int ITEM_HEIGHT = 24;
     private static final int LABEL_COLOR = 0xFFA0A0A0;
+    /** The space between the rows of a group and the edge of its box. */
+    private static final int GROUP_PADDING = 4;
+    /** The height of a widget in a row. The rest of the row height is the gap below it. */
+    private static final int WIDGET_HEIGHT = 20;
+    /** White at 25% opacity. */
+    private static final int GROUP_COLOR = 0x40FFFFFF;
+
+    /** The entry index ranges of the groups, as first index and last index. */
+    private final List<int[]> groups = new ArrayList<>();
+    private int groupStart = -1;
 
     public SettingsList(Minecraft minecraft, int width, HeaderAndFooterLayout layout) {
         this(minecraft, width, layout.getContentHeight(), layout.getHeaderHeight());
@@ -97,12 +108,38 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
 
     /** Adds a row of one to four labels at the column widths of {@link #addRow} with as many widgets. */
     public void addLabels(Component... labels) {
+        this.addHeadedLabels(null, labels);
+    }
+
+    /** Adds a label row with a heading on the line above the labels, inside the same row. */
+    public void addHeadedLabels(@Nullable Component heading, Component... labels) {
         int width = columnWidth(labels.length);
         List<StringWidget> widgets = new ArrayList<>();
         for (Component label : labels) {
             widgets.add(new StringWidget(width, this.minecraft.font.lineHeight, label, this.minecraft.font).alignLeft().setColor(LABEL_COLOR));
         }
-        this.addEntry(new LabelEntry(widgets));
+        StringWidget headingWidget = heading == null ? null
+                : new StringWidget(ROW_WIDTH, this.minecraft.font.lineHeight, heading, this.minecraft.font).alignLeft();
+        this.addEntry(new LabelEntry(headingWidget, widgets));
+    }
+
+    /** Adds an empty row. */
+    public void addSpacer() {
+        this.addEntry(new SpacerEntry());
+    }
+
+    /** Starts a group. The rows added until {@link #endGroup} draw inside one box. */
+    public void beginGroup() {
+        this.groupStart = this.children().size();
+    }
+
+    /** Ends the group. A group without a row draws no box. */
+    public void endGroup() {
+        int last = this.children().size() - 1;
+        if (this.groupStart >= 0 && last >= this.groupStart) {
+            this.groups.add(new int[] {this.groupStart, last});
+        }
+        this.groupStart = -1;
     }
 
     /** Adds a row of one to four widgets of equal width. The row sets the widget widths. */
@@ -121,10 +158,27 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         return (ROW_WIDTH - (columns - 1) * ROW_SPACING) / columns;
     }
 
-    /** Removes every entry. */
+    /** Removes every entry and every group. */
     public void clear() {
         this.setFocused(null);
         this.clearEntries();
+        this.groups.clear();
+        this.groupStart = -1;
+    }
+
+    /** Draws the box of each group behind the rows. The list scissor clips the boxes. */
+    @Override
+    protected void renderListItems(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        int left = this.contentLeft() - GROUP_PADDING;
+        int right = this.contentLeft() + ROW_WIDTH + GROUP_PADDING;
+        for (int[] group : this.groups) {
+            int top = this.getRowTop(group[0]) - GROUP_PADDING;
+            int bottom = this.getRowTop(group[1]) + WIDGET_HEIGHT + GROUP_PADDING;
+            if (bottom > this.getY() && top < this.getBottom()) {
+                guiGraphics.fill(left, top, right, bottom, GROUP_COLOR);
+            }
+        }
+        super.renderListItems(guiGraphics, mouseX, mouseY, partialTick);
     }
 
     @Override
@@ -266,18 +320,25 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         }
     }
 
-    /** A row of labels above a row of widgets. It takes no focus. */
+    /** A row of labels above a row of widgets, with an optional heading on the line above the labels. It takes no focus. */
     public class LabelEntry extends Entry {
 
+        @Nullable
+        private final StringWidget heading;
         private final List<StringWidget> labels;
 
-        LabelEntry(List<StringWidget> labels) {
+        LabelEntry(@Nullable StringWidget heading, List<StringWidget> labels) {
+            this.heading = heading;
             this.labels = labels;
         }
 
         @Override
         public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
             int x = SettingsList.this.contentLeft();
+            if (this.heading != null) {
+                this.heading.setPosition(x, top + 1);
+                this.heading.render(guiGraphics, mouseX, mouseY, partialTick);
+            }
             for (StringWidget label : this.labels) {
                 label.setPosition(x, top + height - label.getHeight() - 1);
                 label.render(guiGraphics, mouseX, mouseY, partialTick);
@@ -302,7 +363,31 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         }
     }
 
-    /** A row of one to three widgets. */
+    /** An empty row. It takes no focus. */
+    public class SpacerEntry extends Entry {
+
+        @Override
+        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
+        }
+
+        @Nullable
+        @Override
+        public ComponentPath nextFocusPath(FocusNavigationEvent event) {
+            return null;
+        }
+
+        @Override
+        public List<? extends GuiEventListener> children() {
+            return List.of();
+        }
+
+        @Override
+        public List<? extends NarratableEntry> narratables() {
+            return List.of();
+        }
+    }
+
+    /** A row of one to four widgets. */
     public class RowEntry extends Entry {
 
         private final List<AbstractWidget> widgets;
