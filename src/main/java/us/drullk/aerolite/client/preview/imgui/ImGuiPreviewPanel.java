@@ -91,7 +91,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     /** The dimension that the add combo shows. */
     @Nullable
     private ResourceKey<Level> addChoice;
-    /** The variation list that the list combo shows. Empty is Blank. */
+    /** The variation list that the list combo shows. Empty is No prefab. */
     private Optional<ResourceKey<VariationList>> addList = Optional.empty();
     /** The dimension that {@link #addList} took its preselection from. */
     @Nullable
@@ -445,8 +445,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     }
 
     /**
-     * A combo of the dimensions without settings, a combo of Blank and the variation lists, and an Add button.
+     * A combo of the dimensions without settings, a combo of No prefab and the variation lists, and an Add button.
      * The list combo preselects the own list of the chosen dimension. All three are off when every dimension has settings.
+     * The tooltip of the list combo names the chosen dimension.
      */
     private AeroliteSettings drawAddDimension(PreviewScreen screen, AeroliteSettings settings) {
         PresetEdits edits = this.tools().edits();
@@ -484,7 +485,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             if (ImGui.beginCombo("##add_list_choice", edits.listName(this.addList).getString())) {
                 try {
                     for (Optional<ResourceKey<VariationList>> choice : edits.listChoices()) {
-                        String id = choice.map(key -> key.location().toString()).orElse("blank");
+                        String id = choice.map(key -> key.location().toString()).orElse("no_prefab");
                         if (ImGui.selectable(edits.listName(choice).getString() + "##" + id, choice.equals(this.addList))) {
                             this.addList = choice;
                         }
@@ -492,6 +493,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
                 } finally {
                     ImGui.endCombo();
                 }
+            }
+            if (ImGui.isItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) {
+                ImGui.setTooltip(edits.listTooltip(this.addChoice).getString());
             }
             ImGui.sameLine();
             if (ImGui.button(add + "##add_dimension") && this.addChoice != null) {

@@ -1,8 +1,11 @@
 package us.drullk.aerolite.datagen;
 
 import net.minecraft.data.PackOutput;
+import net.minecraft.resources.ResourceKey;
 import net.neoforged.neoforge.common.data.LanguageProvider;
 import us.drullk.aerolite.Aerolite;
+import us.drullk.aerolite.world.ShaftRegistries;
+import us.drullk.aerolite.world.VariationList;
 
 /**
  * Writes the American English lang file of Aerolite.
@@ -33,7 +36,12 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.title", "Amazing Pillars");
         this.add("createWorld.customize.aerolite.pillars", "Amazing Pillars");
         this.add("createWorld.customize.aerolite.settings", "Settings");
-        this.add("createWorld.customize.aerolite.blank_list", "Blank");
+        this.add("createWorld.customize.aerolite.no_prefab", "No prefab");
+        this.add("createWorld.customize.aerolite.prefab_tooltip", "Prefab Pillars to add in %s");
+        this.add("createWorld.customize.aerolite.prefab_dimension", "Dimension");
+        this.addListName(ShaftRegistries.OVERWORLD_LIST, "Overworld Pillars");
+        this.addListName(ShaftRegistries.NETHER_LIST, "Nether Pillars");
+        this.addListName(ShaftRegistries.END_LIST, "End Pillars");
         this.add("createWorld.customize.aerolite.shaft_placement", "Shaft Placement");
         this.add("createWorld.customize.aerolite.shaft_surface", "Shaft Surface");
         this.add("createWorld.customize.aerolite.column_chance", "Column Chance: %s");
@@ -93,6 +101,11 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.preview.center", "Center");
         this.add("createWorld.customize.aerolite.preview.reset_center", "Reset");
         this.add("aerolite.configuration.panelWidth", "Preview Panel Width");
+    }
+
+    /** The name of a variation list, under {@code pillar_variations.<namespace>.<path>}. */
+    private void addListName(ResourceKey<VariationList> list, String name) {
+        this.add(list.location().toLanguageKey("pillar_variations"), name);
     }
 
 }

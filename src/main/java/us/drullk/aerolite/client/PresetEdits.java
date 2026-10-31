@@ -120,13 +120,25 @@ public final class PresetEdits {
         return this.lookup().lists().get(list).isPresent() ? Optional.of(list) : Optional.empty();
     }
 
-    /** The name of a variation list choice: its id path, or "Blank" for no list. */
+    /**
+     * The name of a variation list choice, or "No prefab" for no list.
+     * A list reads its name from {@code pillar_variations.<namespace>.<path>}. A list without a translation shows its full id.
+     */
     public net.minecraft.network.chat.Component listName(Optional<ResourceKey<VariationList>> list) {
-        return list.<net.minecraft.network.chat.Component>map(key -> net.minecraft.network.chat.Component.literal(key.location().getPath()))
-                .orElseGet(() -> net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.blank_list"));
+        return list.map(key -> net.minecraft.network.chat.Component.translatableWithFallback(
+                        key.location().toLanguageKey("pillar_variations"), key.location().toString()))
+                .orElseGet(() -> net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.no_prefab"));
     }
 
-    /** The list choices of the add row: Blank first, then every variation list by id. */
+    /** The tooltip of the list choice of the add row. With no dimension left to add, it names the word "Dimension". */
+    public net.minecraft.network.chat.Component listTooltip(@Nullable ResourceKey<Level> dimension) {
+        net.minecraft.network.chat.Component name = dimension == null
+                ? net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.prefab_dimension")
+                : this.dimensionName(dimension);
+        return net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.prefab_tooltip", name);
+    }
+
+    /** The list choices of the add row: No prefab first, then every variation list by id. */
     public List<Optional<ResourceKey<VariationList>>> listChoices() {
         List<Optional<ResourceKey<VariationList>>> choices = new ArrayList<>();
         choices.add(Optional.empty());
@@ -201,11 +213,14 @@ public final class PresetEdits {
         return this.sorted(all.stream().filter(dimension -> !settings.dimensions().containsKey(dimension)).toList());
     }
 
-    /** The name of a dimension. A dimension other than the three vanilla ones shows its id path. */
+    /**
+     * The name of a dimension. A dimension other than the three vanilla ones reads {@code dimension.<namespace>.<path>}.
+     * Without that translation, it shows its id path.
+     */
     public net.minecraft.network.chat.Component dimensionName(ResourceKey<Level> dimension) {
         return VANILLA_DIMENSIONS.contains(dimension)
                 ? net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.dimension." + dimension.location().getPath())
-                : net.minecraft.network.chat.Component.literal(dimension.location().getPath());
+                : net.minecraft.network.chat.Component.translatableWithFallback(dimension.location().toLanguageKey("dimension"), dimension.location().getPath());
     }
 
     /**

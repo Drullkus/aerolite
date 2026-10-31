@@ -30,6 +30,7 @@ import java.util.Optional;
  * The shafts screen "Amazing Pillars" of the world creation menu. It edits a copy of the settings of the {@link ShaftSettingsHolder}.
  * Done writes the copy to the holder. Cancel and Escape drop it.
  * The add row comes first: the dimension dropdown, the list dropdown and the Add button.
+ * An open dropdown list hides the widget tooltips.
  * Each configured dimension then has a row with its name, an arrow button and a minus button.
  * The arrow opens the {@link DimensionSettingsScreen} of the dimension. The minus button removes the dimension.
  * An add or a remove rebuilds the list entries. A return from a dimension screen or the preview also rebuilds them.
@@ -178,7 +179,8 @@ public class AerolitePresetScreen extends Screen {
 
     /**
      * Adds the dropdown of the dimensions of the world without settings, the dropdown of the variation lists and the Add button.
-     * The list dropdown shows the own list of the chosen dimension, or Blank.
+     * The list dropdown shows the own list of the chosen dimension, or No prefab.
+     * Its tooltip names the chosen dimension.
      */
     private void addDimensionRow(SettingsList list) {
         List<ResourceKey<Level>> candidates = this.edits.addableDimensions(this.settings, this.edits.worldDimensions(this.context));
@@ -188,7 +190,11 @@ public class AerolitePresetScreen extends Screen {
         ChoiceDropdown<Optional<ResourceKey<VariationList>>> lists = new ChoiceDropdown<>(choices, this.ownList(dimensions.chosen()),
                 this.edits::listName, this.edits.listName(Optional.empty()));
         lists.active = dimensions.active;
-        dimensions.onPick(chosen -> lists.choose(this.ownList(chosen)));
+        lists.setTooltip(Tooltip.create(this.edits.listTooltip(dimensions.chosen())));
+        dimensions.onPick(chosen -> {
+            lists.choose(this.ownList(chosen));
+            lists.setTooltip(Tooltip.create(this.edits.listTooltip(chosen)));
+        });
         this.dropdowns.clear();
         this.dropdowns.add(dimensions);
         this.dropdowns.add(lists);
@@ -205,7 +211,7 @@ public class AerolitePresetScreen extends Screen {
         list.addRow(dimensions, lists, add);
     }
 
-    /** The own list of a dimension, or Blank. */
+    /** The own list of a dimension, or No prefab. */
     private Optional<ResourceKey<VariationList>> ownList(@Nullable ResourceKey<Level> dimension) {
         return dimension == null ? Optional.empty() : this.edits.ownList(dimension);
     }
@@ -250,6 +256,7 @@ public class AerolitePresetScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         ChoiceDropdown<?> open = this.openDropdown();
         if (open != null) {
+            this.clearTooltipForNextRenderPass();
             open.renderList(graphics, this.font, this.height, mouseX, mouseY);
         }
     }

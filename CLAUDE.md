@@ -12,7 +12,8 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Settings | The values that the player sets in the world creation menu. The settings holder keeps them until the server of the new world claims them. |
 | Settings holder | The client component that holds the settings of the open world creation flow. |
 | Pending settings | The settings that the world creation flow hands to the integrated server of the new world. |
-| Own variation list | The variation list `aerolite:<dimension path>` of a dimension. The Nether and the End use `aerolite:nether` and `aerolite:end`. |
+| Own variation list | The variation list of a dimension. A vanilla dimension uses `aerolite:overworld_pillars`, `aerolite:nether_pillars` or `aerolite:end_pillars`. Any other dimension uses `aerolite:<dimension namespace>/<dimension path>_pillars`. |
+| Prefab | An entry of `aerolite:variation_list`. The add row copies its weights. |
 | Shaft | A straight tube of blocks, 13x13 across, that runs along one axis. |
 | Horizontal shaft | A shaft that runs along X or Z. It is infinite. |
 | Column | A shaft that runs along Y. It spans the build height and is sheared at both ends. Columns bind horizontal shafts. |
@@ -300,7 +301,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 | Minimum shaft spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Maximum shaft spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Column chance | Dimension | The placement entry of the dimension, else `aerolite:default` |
-| Variation list | Dimension | The own variation list of the dimension. `AeroliteShaftEntries.java` writes the shipped lists. |
+| Variation list | Dimension | The own variation list of the dimension, for example `aerolite:overworld_pillars`. `AeroliteShaftEntries.java` writes the shipped lists. |
 | Maze decay scale | Variation | 64 blocks |
 | Maze decay threshold | Variation | 0.35 |
 | Shaft erosion threshold | Variation | 0.5 |
@@ -361,8 +362,10 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The Customize button of the preset opens the Aerolite Void screen. See [Aerolite Void](#aerolite-void).
 - Settings opens the shafts screen with the holder.
 - The row holds no Defaults button. The Defaults button is in the header of the shafts screen.
-- The own variation list of a dimension is `aerolite:<dimension path>`.
-- The Nether and the End use `aerolite:nether` and `aerolite:end` as their own lists.
+- The own variation list of the Overworld is `aerolite:overworld_pillars`.
+- The own variation list of the Nether is `aerolite:nether_pillars`.
+- The own variation list of the End is `aerolite:end_pillars`.
+- The own variation list of any other dimension is `aerolite:<dimension namespace>/<dimension path>_pillars`, for example `aerolite:twilightforest/twilight_forest_pillars`.
 - A dimension that the Defaults button or the Add button adds takes the placement entry under its id, else `aerolite:default`.
 
 ### Aerolite Void
@@ -400,7 +403,9 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The add row, the add combo of the panel and the preview dimension list show every dimension of the world.
 - So data pack dimensions such as `twilightforest:twilight_forest` and `aether:the_aether` show.
 - The Overworld, the Nether and the End come first. The others follow in the sort sequence of `ResourceLocation`: path first, then namespace.
-- A dimension other than the three vanilla dimensions shows its id path as its name.
+- A vanilla dimension reads its name from `createWorld.customize.aerolite.dimension.<path>`.
+- A dimension other than the three vanilla dimensions reads its name from `dimension.<namespace>.<path>`, for example `dimension.twilightforest.twilight_forest`.
+- A dimension without that translation shows its id path as its name.
 
 ### Shafts screen
 
@@ -409,14 +414,21 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - Its list holds the add row first, then one row per configured dimension.
 - The add row holds the dimension dropdown, the list dropdown and the Add button, in that sequence.
 - The dimension dropdown lists every dimension of the world that has no dimension settings.
-- The list dropdown lists "Blank" first, then every entry of `aerolite:variation_list` by its id path.
+- The list dropdown lists "No prefab" first, then every prefab by its name.
+- A prefab reads its name from `pillar_variations.<namespace>.<path>`, for example `pillar_variations.aerolite.overworld_pillars`.
+- A prefab without that translation shows its full id as its name, for example `mypack:ruins`.
+- The shipped prefabs read "Overworld Pillars", "Nether Pillars" and "End Pillars".
 - The lists follow the sort sequence of `ResourceLocation`: path first, then namespace.
 - The list dropdown reads the variation lists from the worldgen registries of the creation context.
-- When the chosen dimension has its own variation list, the list dropdown preselects that list. Else it preselects "Blank".
+- When the chosen dimension has its own variation list, the list dropdown preselects that list. Else it preselects "No prefab".
 - A pick in the dimension dropdown preselects the list again.
+- The tooltip of the list dropdown is "Prefab Pillars to add in %s". The %s is the name of the dimension that the dimension dropdown shows.
+- When no dimension is left to add, the %s of the tooltip is the word "Dimension".
+- A pick in the dimension dropdown changes the tooltip of the list dropdown.
+- An open dropdown list hides the tooltips of the screen.
 - A click on a dropdown opens its list. A pick closes the list.
 - Add with a list adds the chosen dimension with the weights of that list.
-- Add with "Blank" adds the chosen dimension with one stone variation, `aerolite:stone`, with weight 1.
+- Add with "No prefab" adds the chosen dimension with one stone variation, `aerolite:stone`, with weight 1.
 - When no dimension is left to add, both dropdowns and the Add button are off. The dimension dropdown reads "All dimensions configured".
 - A dimension row holds the dimension name on the left. An arrow button and a minus button sit at the right end, in that sequence.
 - The arrow button is 20x20. It draws the server list sprite `server_list/join`, and `server_list/join_highlighted` on hover.
@@ -518,7 +530,8 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The radio buttons and the dimension dropdown of the Preview section always show the same dimension.
 - A small Remove button sits at the right end of each dimension header in the panel.
 - After the dimensions, the panel has a dimension combo, a list combo and an Add button.
-- The list combo lists "Blank" and every variation list by its id path. It follows the rules of the list dropdown of the shafts screen.
+- The list combo lists "No prefab" and every prefab by its name. It follows the rules of the list dropdown of the shafts screen.
+- The list combo shows the tooltip of the list dropdown on hover, with the same dimension rule.
 - When no dimension is left to add, both combos and the Add button are off. The dimension combo reads "All dimensions configured".
 - The panel shows the label of each block field left of the field. A block field has no tooltip.
 - The panel shows the block fields in the sequence of the menu, from top to bottom.
@@ -617,7 +630,7 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - `aerolite:shaft_placement` holds the placements. A dimension takes the entry under its own dimension id.
 - A dimension without its own placement entry takes `aerolite:default`.
 - The placements of the vanilla dimensions are in the namespace `minecraft`, for example `data/minecraft/aerolite/shaft_placement/overworld.json`.
-- `aerolite:variation_list` holds `aerolite:overworld`, `aerolite:nether` and `aerolite:end`. Each entry is a variation list.
+- `aerolite:variation_list` holds `aerolite:overworld_pillars`, `aerolite:nether_pillars` and `aerolite:end_pillars`. Each entry is a variation list.
 - The menu copies from the variation lists. Worldgen reads them only for a generator without the field `aerolite`.
 - A change to a shipped variation list changes the shafts of each world whose generator has no field `aerolite`.
 - The JSON key sequence of a variation list is the pick sequence. A tool that sorts the keys changes the shafts.

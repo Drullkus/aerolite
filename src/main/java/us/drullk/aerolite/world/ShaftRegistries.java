@@ -12,6 +12,7 @@ import java.util.Map;
  * The keys of the shaft data registries and their shipped entries.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 public final class ShaftRegistries {
 
@@ -27,9 +28,9 @@ public final class ShaftRegistries {
     /** The variation of a dimension other than the three vanilla dimensions, with weight 1. */
     public static final ResourceKey<ShaftVariation> STONE = ResourceKey.create(SHAFT_VARIATION, id("stone"));
 
-    public static final ResourceKey<VariationList> OVERWORLD_LIST = ResourceKey.create(VARIATION_LIST, id("overworld"));
-    public static final ResourceKey<VariationList> NETHER_LIST = ResourceKey.create(VARIATION_LIST, id("nether"));
-    public static final ResourceKey<VariationList> END_LIST = ResourceKey.create(VARIATION_LIST, id("end"));
+    public static final ResourceKey<VariationList> OVERWORLD_LIST = ResourceKey.create(VARIATION_LIST, id("overworld_pillars"));
+    public static final ResourceKey<VariationList> NETHER_LIST = ResourceKey.create(VARIATION_LIST, id("nether_pillars"));
+    public static final ResourceKey<VariationList> END_LIST = ResourceKey.create(VARIATION_LIST, id("end_pillars"));
 
     /** The variation list of each vanilla dimension. */
     public static final Map<ResourceKey<Level>, ResourceKey<VariationList>> DIMENSION_LISTS = Map.of(
@@ -46,12 +47,17 @@ public final class ShaftRegistries {
     }
 
     /**
-     * The id of the own variation list of a dimension: {@code aerolite:<dimension path>}.
-     * The Nether and the End use {@code aerolite:nether} and {@code aerolite:end}.
+     * The id of the own variation list of a dimension.
+     * A vanilla dimension uses {@code aerolite:overworld_pillars}, {@code aerolite:nether_pillars} or {@code aerolite:end_pillars}.
+     * Any other dimension uses {@code aerolite:<dimension namespace>/<dimension path>_pillars}.
      */
     public static ResourceKey<VariationList> listOf(ResourceKey<Level> dimension) {
         ResourceKey<VariationList> vanilla = DIMENSION_LISTS.get(dimension);
-        return vanilla != null ? vanilla : ResourceKey.create(VARIATION_LIST, id(dimension.location().getPath()));
+        if (vanilla != null) {
+            return vanilla;
+        }
+        ResourceLocation location = dimension.location();
+        return ResourceKey.create(VARIATION_LIST, id(location.getNamespace() + "/" + location.getPath() + "_pillars"));
     }
 
     /** The placement entry under the id of a dimension. */

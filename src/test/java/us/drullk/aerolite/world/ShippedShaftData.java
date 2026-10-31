@@ -26,12 +26,13 @@ import java.util.List;
  * The shipped shaft data registry entries, read from the generated resources. Tests read the default settings from them.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 public final class ShippedShaftData {
 
     public static final List<String> VARIATIONS = List.of("stone", "mossy", "tuff", "deepslate", "copper", "mud", "andesite", "diorite", "granite",
             "nether", "blackstone", "soul", "quartz", "end", "purpur");
-    public static final List<String> LISTS = List.of("overworld", "nether", "end");
+    public static final List<String> LISTS = List.of("overworld_pillars", "nether_pillars", "end_pillars");
     public static final List<ResourceLocation> PLACEMENTS = List.of(ShaftRegistries.DEFAULT_PLACEMENT.location(),
             ResourceLocation.withDefaultNamespace("overworld"), ResourceLocation.withDefaultNamespace("the_nether"), ResourceLocation.withDefaultNamespace("the_end"));
 

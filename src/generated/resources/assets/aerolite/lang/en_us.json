@@ -3,7 +3,6 @@
   "createWorld.customize.aerolite.add_dimension": "Add Dimension",
   "createWorld.customize.aerolite.add_variation": "Add Variation",
   "createWorld.customize.aerolite.all_dimensions_configured": "All dimensions configured",
-  "createWorld.customize.aerolite.blank_list": "Blank",
   "createWorld.customize.aerolite.cloud_height": "Cloud Height: %s",
   "createWorld.customize.aerolite.clouds": "Clouds",
   "createWorld.customize.aerolite.column_chance": "Column Chance: %s",
@@ -29,6 +28,7 @@
   "createWorld.customize.aerolite.maze_bias.ringwise": "%s (ringwise)",
   "createWorld.customize.aerolite.maze_bias.uniform": "%s (uniform)",
   "createWorld.customize.aerolite.min_shaft_spacing": "Minimum Shaft Spacing: %s",
+  "createWorld.customize.aerolite.no_prefab": "No prefab",
   "createWorld.customize.aerolite.paste": "Paste",
   "createWorld.customize.aerolite.paste_failed": "Paste failed",
   "createWorld.customize.aerolite.paste_tooltip": "Paste from Clipboard",
@@ -36,6 +36,8 @@
   "createWorld.customize.aerolite.paste_variation_tooltip": "Import this variation from the clipboard",
   "createWorld.customize.aerolite.path_block": "Maze Path Block",
   "createWorld.customize.aerolite.pillars": "Amazing Pillars",
+  "createWorld.customize.aerolite.prefab_dimension": "Dimension",
+  "createWorld.customize.aerolite.prefab_tooltip": "Prefab Pillars to add in %s",
   "createWorld.customize.aerolite.preview": "Preview",
   "createWorld.customize.aerolite.preview.baking": "Baking sections: %s / %s",
   "createWorld.customize.aerolite.preview.center": "Center",
@@ -66,5 +68,8 @@
   "createWorld.customize.aerolite.void.vanilla_biomes": "Vanilla biomes",
   "createWorld.customize.aerolite.wall_block": "Maze Wall Block",
   "createWorld.customize.aerolite.weight": "Weight: %s",
-  "generator.aerolite.void": "Aerolite Void"
+  "generator.aerolite.void": "Aerolite Void",
+  "pillar_variations.aerolite.end_pillars": "End Pillars",
+  "pillar_variations.aerolite.nether_pillars": "Nether Pillars",
+  "pillar_variations.aerolite.overworld_pillars": "Overworld Pillars"
 }

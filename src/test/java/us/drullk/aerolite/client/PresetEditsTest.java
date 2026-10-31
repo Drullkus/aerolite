@@ -1,6 +1,8 @@
 package us.drullk.aerolite.client;
 
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
@@ -22,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks the list rules of the add row, of Defaults and of Add Variation over the shipped registries.
+ * Checks the names and the list rules of the add row, of Defaults and of Add Variation over the shipped registries.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
@@ -49,7 +51,45 @@ class PresetEditsTest {
     }
 
     @Test
-    void listChoicesStartWithBlank() {
+    void listOfOtherDimensionHoldsItsNamespaceAndPath() {
+        assertEquals(ResourceKey.create(ShaftRegistries.VARIATION_LIST, ShaftRegistries.id("twilightforest/twilight_forest_pillars")),
+                ShaftRegistries.listOf(TWILIGHT));
+        assertEquals(ShaftRegistries.id("overworld_pillars"), ShaftRegistries.listOf(Level.OVERWORLD).location());
+        assertEquals(ShaftRegistries.id("nether_pillars"), ShaftRegistries.listOf(Level.NETHER).location());
+        assertEquals(ShaftRegistries.id("end_pillars"), ShaftRegistries.listOf(Level.END).location());
+    }
+
+    @Test
+    void listNameReadsItsKeyWithTheFullIdAsFallback() {
+        ResourceKey<VariationList> ruins = ResourceKey.create(ShaftRegistries.VARIATION_LIST, ResourceLocation.fromNamespaceAndPath("mypack", "ruins"));
+        assertEquals(new TranslatableContents("pillar_variations.mypack.ruins", "mypack:ruins", TranslatableContents.NO_ARGS),
+                this.edits.listName(Optional.of(ruins)).getContents());
+        assertEquals("mypack:ruins", this.edits.listName(Optional.of(ruins)).getString());
+        assertEquals(new TranslatableContents("pillar_variations.aerolite.overworld_pillars", "aerolite:overworld_pillars", TranslatableContents.NO_ARGS),
+                this.edits.listName(Optional.of(ShaftRegistries.OVERWORLD_LIST)).getContents());
+        assertEquals(new TranslatableContents("createWorld.customize.aerolite.no_prefab", null, TranslatableContents.NO_ARGS),
+                this.edits.listName(Optional.empty()).getContents());
+    }
+
+    @Test
+    void dimensionNameReadsTheDimensionKeyWithThePathAsFallback() {
+        assertEquals(new TranslatableContents("dimension.twilightforest.twilight_forest", "twilight_forest", TranslatableContents.NO_ARGS),
+                this.edits.dimensionName(TWILIGHT).getContents());
+        assertEquals("twilight_forest", this.edits.dimensionName(TWILIGHT).getString());
+        assertEquals(new TranslatableContents("createWorld.customize.aerolite.dimension.the_nether", null, TranslatableContents.NO_ARGS),
+                this.edits.dimensionName(Level.NETHER).getContents());
+    }
+
+    @Test
+    void listTooltipNamesTheDimensionOrTheWordDimension() {
+        assertEquals(Component.translatable("createWorld.customize.aerolite.prefab_tooltip", this.edits.dimensionName(TWILIGHT)),
+                this.edits.listTooltip(TWILIGHT));
+        assertEquals(Component.translatable("createWorld.customize.aerolite.prefab_tooltip", Component.translatable("createWorld.customize.aerolite.prefab_dimension")),
+                this.edits.listTooltip(null));
+    }
+
+    @Test
+    void listChoicesStartWithNoPrefab() {
         List<Optional<ResourceKey<VariationList>>> choices = this.edits.listChoices();
         assertEquals(Optional.empty(), choices.getFirst());
         assertEquals(List.of(Optional.of(ShaftRegistries.END_LIST), Optional.of(ShaftRegistries.NETHER_LIST), Optional.of(ShaftRegistries.OVERWORLD_LIST)),
@@ -82,7 +122,7 @@ class PresetEditsTest {
     }
 
     @Test
-    void blankAddsStoneWithTheDefaultPlacement() {
+    void noPrefabAddsStoneWithTheDefaultPlacement() {
         AeroliteSettings added = this.edits.withAddedDimension(ShaftSettingsHolder.BLANK, TWILIGHT, Optional.empty());
         DimensionSettings twilight = added.dimension(TWILIGHT);
         assertEquals(this.lookup.placement(TWILIGHT), twilight.placement());
