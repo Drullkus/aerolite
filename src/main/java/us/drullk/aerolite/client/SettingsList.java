@@ -24,6 +24,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entry> {
 
@@ -35,6 +36,8 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
     /** The size of each square button at the right end of a trailing row. */
     public static final int TRAILING_SIZE = 20;
     private static final int TRAILING_SPACING = 4;
+    /** The width of the title of a value row. */
+    private static final int VALUE_TITLE_WIDTH = 80;
     private static final int ITEM_HEIGHT = 24;
     private static final int LABEL_COLOR = 0xFFA0A0A0;
 
@@ -71,6 +74,22 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         }
         StringWidget text = new StringWidget(ROW_WIDTH - buttons - TRAILING_SPACING, this.minecraft.font.lineHeight, title, this.minecraft.font).alignLeft();
         this.addEntry(new TrailingEntry(List.of(trailing), text));
+    }
+
+    /**
+     * Adds a row with a title on the left, a value text right of it and buttons at the right end.
+     * The buttons keep their widths. The row sets their height.
+     */
+    public void addValueRow(Component title, Component value, AbstractWidget... trailing) {
+        int buttons = 0;
+        for (AbstractWidget widget : trailing) {
+            widget.setHeight(TRAILING_SIZE);
+            buttons += widget.getWidth() + TRAILING_SPACING;
+        }
+        StringWidget titleText = new StringWidget(VALUE_TITLE_WIDTH, this.minecraft.font.lineHeight, title, this.minecraft.font).alignLeft();
+        int valueWidth = ROW_WIDTH - VALUE_TITLE_WIDTH - ROW_SPACING - buttons;
+        StringWidget valueText = new StringWidget(valueWidth, this.minecraft.font.lineHeight, value, this.minecraft.font).alignLeft().setColor(LABEL_COLOR);
+        this.addEntry(new ValueEntry(titleText, valueText, List.of(trailing)));
     }
 
     /** Adds a row of one to three labels at the column widths of {@link #addRow} with as many widgets. */
@@ -186,6 +205,46 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
             this.title.setPosition(contentLeft, top + (TRAILING_SIZE - this.title.getHeight()) / 2 + 1);
             this.title.render(guiGraphics, mouseX, mouseY, partialTick);
             int x = contentLeft + ROW_WIDTH - this.trailing.size() * (TRAILING_SIZE + TRAILING_SPACING) + TRAILING_SPACING;
+            for (AbstractWidget widget : this.trailing) {
+                widget.setPosition(x, top);
+                widget.render(guiGraphics, mouseX, mouseY, partialTick);
+                x += widget.getWidth() + TRAILING_SPACING;
+            }
+        }
+
+        @Override
+        public List<? extends GuiEventListener> children() {
+            return this.trailing;
+        }
+
+        @Override
+        public List<? extends NarratableEntry> narratables() {
+            return this.trailing;
+        }
+    }
+
+    /** A row with a title, a value text and buttons at the right end. */
+    public class ValueEntry extends Entry {
+
+        private final StringWidget title;
+        private final StringWidget value;
+        private final List<AbstractWidget> trailing;
+
+        ValueEntry(StringWidget title, StringWidget value, List<AbstractWidget> trailing) {
+            this.title = title;
+            this.value = value;
+            this.trailing = trailing;
+        }
+
+        @Override
+        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
+            int contentLeft = SettingsList.this.contentLeft();
+            int textTop = top + (TRAILING_SIZE - this.title.getHeight()) / 2 + 1;
+            this.title.setPosition(contentLeft, textTop);
+            this.title.render(guiGraphics, mouseX, mouseY, partialTick);
+            this.value.setPosition(contentLeft + VALUE_TITLE_WIDTH + ROW_SPACING, textTop);
+            this.value.render(guiGraphics, mouseX, mouseY, partialTick);
+            int x = this.value.getRight() + TRAILING_SPACING;
             for (AbstractWidget widget : this.trailing) {
                 widget.setPosition(x, top);
                 widget.render(guiGraphics, mouseX, mouseY, partialTick);

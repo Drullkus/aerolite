@@ -60,7 +60,11 @@
   "createWorld.customize.aerolite.tab.shaft_placement": "Shaft Placement",
   "createWorld.customize.aerolite.tab.shaft_variations": "Shaft Variations",
   "createWorld.customize.aerolite.title": "Amazing Pillars",
+  "createWorld.customize.aerolite.void.biome": "Biome",
+  "createWorld.customize.aerolite.void.reset": "Reset",
+  "createWorld.customize.aerolite.void.title": "Aerolite Void",
+  "createWorld.customize.aerolite.void.vanilla_biomes": "Vanilla biomes",
   "createWorld.customize.aerolite.wall_block": "Maze Wall Block",
   "createWorld.customize.aerolite.weight": "Weight: %s",
-  "generator.aerolite.aerolite": "Aerolite"
+  "generator.aerolite.void": "Aerolite Void"
 }

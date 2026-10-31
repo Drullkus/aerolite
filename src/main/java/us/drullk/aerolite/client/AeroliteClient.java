@@ -3,6 +3,7 @@ package us.drullk.aerolite.client;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.client.event.RegisterDimensionSpecialEffectsEvent;
+import net.neoforged.neoforge.client.event.RegisterPresetEditorsEvent;
 import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import tamaized.beanification.PostConstruct;
@@ -11,6 +12,7 @@ import us.drullk.aerolite.client.preview.PreviewPanel;
 import us.drullk.aerolite.client.preview.PreviewViewport;
 import us.drullk.aerolite.network.CloudHeightSync;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.VoidPresetBiomes;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 
@@ -29,25 +31,33 @@ public final class AeroliteClient {
     private final PresetTools tools;
     private final CloudHeightHolder cloudHeight;
     private final CloudHeightSync cloudHeightSync;
+    private final VoidPresetBiomes presetBiomes;
 
     public AeroliteClient(@Autowired PresetSliders sliders, @Autowired PresetEdits edits, @Autowired BlockSearch blocks,
                           @Autowired ShaftPainter painter, @Autowired ShaftMazes mazes, @Autowired PreviewPanel panel,
                           @Autowired PreviewViewport viewport, @Autowired AeroliteClientConfig config, @Autowired ItemIconAtlas icons,
                           @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync, @Autowired SettingsJson json,
-                          @Autowired ShaftSettingsHolder holder) {
+                          @Autowired ShaftSettingsHolder holder, @Autowired VoidPresetBiomes presetBiomes) {
         this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json, holder);
         this.cloudHeight = cloudHeight;
         this.cloudHeightSync = cloudHeightSync;
+        this.presetBiomes = presetBiomes;
     }
 
     @PostConstruct
     public void register(IEventBus modEventBus) {
+        modEventBus.addListener(this::registerPresetEditors);
         modEventBus.addListener(this::registerDimensionEffects);
         this.cloudHeightSync.setReceiver(this.cloudHeight::set);
     }
 
     private void registerDimensionEffects(RegisterDimensionSpecialEffectsEvent event) {
         event.register(AeroliteWorldgen.OVERWORLD_EFFECTS, new AeroliteDimensionEffects(this.cloudHeight));
+    }
+
+    /** The Customize button of the world creation menu opens the Aerolite Void screen while the preset is active. */
+    private void registerPresetEditors(RegisterPresetEditorsEvent event) {
+        event.register(AeroliteWorldgen.PRESET, (parent, context) -> new VoidPresetScreen(parent, context, this.tools, this.presetBiomes));
     }
 
     /** The components of the screens of the world creation flow. */

@@ -24,7 +24,11 @@ public class AeroliteLanguageProvider extends LanguageProvider {
 
     @Override
     protected void addTranslations() {
-        this.add("generator.aerolite.aerolite", "Aerolite");
+        this.add("generator.aerolite.void", "Aerolite Void");
+        this.add("createWorld.customize.aerolite.void.title", "Aerolite Void");
+        this.add("createWorld.customize.aerolite.void.vanilla_biomes", "Vanilla biomes");
+        this.add("createWorld.customize.aerolite.void.biome", "Biome");
+        this.add("createWorld.customize.aerolite.void.reset", "Reset");
         this.add("createWorld.customize.aerolite.title", "Amazing Pillars");
         this.add("createWorld.customize.aerolite.pillars", "Amazing Pillars");
         this.add("createWorld.customize.aerolite.load_defaults", "Load Defaults");

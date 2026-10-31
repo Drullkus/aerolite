@@ -245,20 +245,31 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 
 ## Dimension
 
+- The preset is "Aerolite Void". Its key is `aerolite:void`. Its lang key is `generator.aerolite.void`.
 - The preset is in `#minecraft:normal`. It shows in the world type list without Alt.
-- The preset gives the Aerolite generator to the Overworld, the Nether and the End.
+- The preset gives a vanilla noise generator to the Overworld, the Nether and the End. Each generator uses the Aerolite noise settings of its dimension.
+- A dedicated server needs `level-type=aerolite:void` in `server.properties`.
+- The old key `aerolite:aerolite` gives the vanilla default preset. The server logs "Failed to parse level-type aerolite:aerolite, defaulting to minecraft:normal".
+- `DeferredRegister#addAlias` does not reach world presets. `RegisterEvent` fires only for the static registries of `BuiltInRegistries.REGISTRY`.
+- `RegistryDataLoader` loads the world presets into a new registry at each load. So no alias applies to them.
+- A saved world does not store the preset key.
 - The Overworld uses the Aerolite dimension type `aerolite:overworld`.
 - The Aerolite dimension type is a copy of the vanilla Overworld type with the effects id `aerolite:overworld`.
 - The Nether and the End keep their vanilla dimension types.
 - The Overworld keeps its sun, moon, day cycle and weather. The Overworld spans -64 to 320.
 - The cloud height of a dimension type is the value of the data map `aerolite:cloud_height`.
+- The cloud height slider of the Aerolite Void screen sets the cloud height of the holder settings.
+- The hand-over gives that cloud height to each level of the type `aerolite:overworld` in the first session of a new world.
+- The world shaft pack holds that cloud height as the `aerolite:cloud_height` value of `aerolite:overworld`. Later sessions read it from the data map.
 - Only the dimension type `aerolite:overworld` ships a cloud height, Y -32.
 - The packet carries the cloud height of the shaft data of the player's level. A level without a cloud height sends no packet.
 - A packet carries the cloud height to the client on login, on respawn and on dimension change.
 - The client effects of `aerolite:overworld` put the clouds at the cloud height of the last packet.
-- Each dimension uses its own vanilla biome list. Overworld biomes in the Overworld, Nether biomes in the Nether, End biomes in the End.
+- Each dimension uses its own vanilla biome source. Overworld biomes in the Overworld, Nether biomes in the Nether, End biomes in the End.
+- A biome that the player picks in the Aerolite Void screen replaces the biome source of its dimension with a fixed biome source.
 - Each dimension has the same structure: shafts, islands, bridges and center structures.
-- Each dimension uses the Aerolite generator, a subclass of the vanilla noise-based chunk generator. It carries the settings.
+- The generator of a new world carries no shaft settings.
+- The Aerolite generator `aerolite:aerolite` stays registered for the worlds of 0.2. Its field `aerolite` carries their settings.
 - The shafts step does not read the generator. It paints any level with shaft data, whatever its generator.
 - The noise settings of each dimension make only air. The islands replace the void later.
 - The void Overworld has a sea level of -64. A higher sea level makes the noise step fill the bottom with lava.
@@ -347,7 +358,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - `WorldTabRow` places the widgets on each `ScreenEvent.Render.Pre` from the position of the Bonus Chest label and switch.
 - The row shows only while the screen holds the Bonus Chest label. The vanilla tab manager adds that label only for the World tab.
 - The vanilla grid does not hold the row. So the vanilla rows keep their vanilla positions, and no mixin is necessary.
-- The world preset has no customize screen. The Customize button is off for it.
+- The Customize button of the preset opens the Aerolite Void screen. See [Aerolite Void](#aerolite-void).
 - Settings opens the shafts screen with the holder.
 - Load Defaults is on only while no dimension is configured.
 - The tooltip of Load Defaults is "Replace empty settings with Amazing Pillar defaults".
@@ -355,6 +366,32 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The own variation list of a dimension is `aerolite:<dimension path>`.
 - The Nether and the End use `aerolite:nether` and `aerolite:end` as their own lists.
 - A dimension that Load Defaults or the Add button adds takes the placement entry under its id, else `aerolite:default`.
+
+### Aerolite Void
+
+- `RegisterPresetEditorsEvent` gives the preset `aerolite:void` its customize screen, the Aerolite Void screen.
+- The Aerolite Void screen has the title "Aerolite Void". The footer holds Done and Cancel.
+- The screen edits a copy of the biome choice of each preset dimension and a copy of the cloud height of the holder settings.
+- Done applies the biome choices to the dimensions of the world creation state, like the vanilla single biome screen.
+- Done writes the cloud height to the holder settings. Cancel and Escape drop both copies.
+- The Aerolite Void screen is the only screen that writes the generators. It writes only their biome sources.
+- The list holds one row per preset dimension: the Overworld, the Nether and the End, in that sequence.
+- A dimension row holds the dimension name on the left, then the biome name or "Vanilla biomes".
+- The Biome button and the Reset button sit at the right end of the row, in that sequence. Each button is 20 high and fits its text.
+- The narration of each row button is its text and the dimension name.
+- The Biome button opens the vanilla single biome screen for that dimension.
+- The single biome screen preselects the first biome of the dimension's current biome source.
+- The single biome screen reads that source from the Overworld of its creation context. So the Aerolite Void screen gives it a context whose Overworld is the edited dimension.
+- Done in the single biome screen gives the dimension a fixed biome source of the picked biome. Cancel keeps the choice.
+- A dimension keeps its vanilla biome source until the player picks a biome. The Overworld and the Nether use a multi-noise source. The End uses the End source.
+- The Reset button gives the dimension the biome source of the preset again. It is off while the dimension has its vanilla biome source.
+- A reset rebuilds the list and keeps the scroll position.
+- A rebuilt dimension keeps its dimension type and the noise settings of its noise generator.
+- A dimension without a noise generator takes the noise settings of the preset.
+- The component `VoidPresetBiomes` builds the dimensions. A GameTest checks it.
+- Below the rows, the header Clouds holds the cloud height slider.
+- The cloud height slider runs from Y -64 to Y 320 in steps of 8. Y 100 is not a step.
+- A change of the world type gives the dimensions of the new preset. So it drops the biome choices.
 
 ### Dimension candidates
 
