@@ -485,15 +485,15 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     /** Export and Import of one variation. A good import replaces the variation and keeps its weight. */
     private AeroliteSettings drawVariationClipboard(AeroliteSettings settings, ResourceKey<Level> dimension, int index) {
         ShaftVariation current = this.tools().edits().variations(settings, dimension).get(index);
-        if (ImGui.button(text("export_variation") + "##export")) {
+        if (ImGui.button(text("copy_variation") + "##export")) {
             this.tools().json().copyVariation(current);
         }
         if (ImGui.isItemHovered()) {
-            ImGui.setTooltip(text("export_variation_tooltip"));
+            ImGui.setTooltip(text("copy_variation_tooltip"));
         }
         ImGui.sameLine();
         AeroliteSettings edited = settings;
-        if (ImGui.button(text("import_variation") + "##import")) {
+        if (ImGui.button(text("paste_variation") + "##import")) {
             DataResult<ShaftVariation> imported = this.tools().json().pasteVariation(current.weight());
             Optional<ShaftVariation> parsed = imported.result();
             if (parsed.isPresent()) {
@@ -503,7 +503,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             }
         }
         if (ImGui.isItemHovered()) {
-            ImGui.setTooltip(text("import_variation_tooltip"));
+            ImGui.setTooltip(text("paste_variation_tooltip"));
         }
         return edited;
     }

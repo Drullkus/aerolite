@@ -57,10 +57,10 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.path_block", "Maze Path Block");
         this.add("createWorld.customize.aerolite.add_variation", "Add Variation");
         this.add("createWorld.customize.aerolite.remove_variation", "Remove Variation");
-        this.add("createWorld.customize.aerolite.export_variation", "Export");
-        this.add("createWorld.customize.aerolite.import_variation", "Import");
-        this.add("createWorld.customize.aerolite.export_variation_tooltip", "Copy this variation to the clipboard");
-        this.add("createWorld.customize.aerolite.import_variation_tooltip", "Replace this variation from the clipboard");
+        this.add("createWorld.customize.aerolite.copy_variation", "Copy");
+        this.add("createWorld.customize.aerolite.paste_variation", "Paste");
+        this.add("createWorld.customize.aerolite.copy_variation_tooltip", "Export this variation to the clipboard");
+        this.add("createWorld.customize.aerolite.paste_variation_tooltip", "Import this variation from the clipboard");
         this.add("createWorld.customize.aerolite.preview", "Preview");
         this.add("createWorld.customize.aerolite.copy", "Copy");
         this.add("createWorld.customize.aerolite.paste", "Paste");

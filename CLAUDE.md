@@ -324,7 +324,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - For the Overworld, the tab Shaft Placement adds the header Clouds and the cloud height slider.
 - The tab Shaft Variations holds the rows of each variation, then the Add Variation button.
 - The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the three block fields, and the button row.
-- The button row holds the Export button, the Import button and the Remove button, in that sequence.
+- The button row holds the Copy button (export), the Paste button (import) and the Remove button, in that sequence.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.

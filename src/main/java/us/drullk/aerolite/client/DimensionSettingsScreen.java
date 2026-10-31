@@ -217,8 +217,8 @@ public class DimensionSettingsScreen extends Screen {
         }).build();
         remove.active = this.edits.canRemove(this.settings, this.dimension);
         list.addRow(
-                this.clipboardButton("export_variation", button -> this.tools.json().copyVariation(this.variation(index))),
-                this.clipboardButton("import_variation", button -> this.importVariation(index)),
+                this.clipboardButton("copy_variation", button -> this.tools.json().copyVariation(this.variation(index))),
+                this.clipboardButton("paste_variation", button -> this.importVariation(index)),
                 remove
         );
     }
