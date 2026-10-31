@@ -62,11 +62,51 @@ sourceSets {
 
 repositories {
     maven {
-        name "Tama's Maven" // Beanification
+        name "Tama's Maven" // Beanification, Twilight Forest
         url 'https://maven.tamaized.com/releases/'
         content {
             includeGroup 'tamaized'
             includeGroup 'team-twilight'
+        }
+    }
+
+    maven {
+        name 'NeoForged Maven' // Applied Energistics 2, GuideME
+        url 'https://maven.neoforged.net/releases/'
+        content {
+            includeGroup 'org.appliedenergistics'
+        }
+    }
+
+    maven {
+        name 'Resourceful Bees Maven' // The Bumblezone
+        url 'https://maven.resourcefulbees.com/repository/maven-public/'
+        content {
+            includeGroup 'com.telepathicgrunt'
+        }
+    }
+
+    maven {
+        name 'Wisp Forest Maven' // Accessories, owo-lib
+        url 'https://maven.wispforest.io/releases/'
+        content {
+            includeGroup 'io.wispforest'
+        }
+    }
+
+    maven {
+        name 'Modrinth Maven' // The Aether
+        url 'https://api.modrinth.com/maven'
+        content {
+            includeGroup 'maven.modrinth'
+        }
+    }
+
+    maven {
+        name 'CurseMaven' // Gaia Dimension, Voidscape
+        url 'https://cursemaven.com'
+        content {
+            includeGroup 'curse.maven'
         }
     }
 
@@ -323,6 +363,37 @@ dependencies {
     }
 
     localRuntime "team-twilight:twilightforest:${twilightforest_version}:universal"
+
+    // The dev runs load these dimension mods. The code does not reference them.
+    // The Aether jar holds Accessories, Cumulus Menus and Nitrogen Internals. Accessories needs owo-lib.
+    localRuntime("maven.modrinth:aether:${aether_version}") {
+        transitive = false
+    }
+    localRuntime("io.wispforest:owo-lib-neoforge:${owolib_version}") {
+        transitive = false
+    }
+    // This Accessories replaces the Aether copy. It also targets the lambda names of the recompiled dev Minecraft.
+    localRuntime("io.wispforest:accessories-neoforge:${accessories_version}") {
+        transitive = false
+    }
+    // Applied Energistics 2 needs GuideME as a separate mod.
+    localRuntime("org.appliedenergistics:appliedenergistics2:${ae2_version}") {
+        transitive = false
+    }
+    localRuntime("org.appliedenergistics:guideme:${guideme_version}") {
+        transitive = false
+    }
+    // The Bumblezone jar holds Resourceful Lib and Athena.
+    localRuntime("com.telepathicgrunt:the_bumblezone:${bumblezone_version}") {
+        transitive = false
+    }
+    localRuntime("curse.maven:gaia-dimension-302529:${gaiadimension_file_id}") {
+        transitive = false
+    }
+    // The CurseForge jar of Voidscape relocates its Beanification copy. The Tamaized maven jar shares the Aerolite copy.
+    localRuntime("curse.maven:voidscape-251730:${voidscape_file_id}") {
+        transitive = false
+    }
 
     datagenImplementation sourceSets.main.output
 }

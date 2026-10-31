@@ -69,6 +69,7 @@ The source still contains the MDK template (`com.example.examplemod`, mod ID `ex
 - Veil: the ImGui panel and custom block and entity rendering. See [Veil](#veil).
 - imgui-mc: hosts ImGui for Veil. It is optional. See [imgui-mc](#imgui-mc).
 - WorldEdit: an editor for the dev runs. See [WorldEdit](#worldedit).
+- Dimension mods: other dimensions for the dev runs. See [Dimension mods](#dimension-mods).
 
 ### Dependency injection
 
@@ -130,6 +131,22 @@ Rules:
 - The mod jar of imgui-mc holds the ImGui binding and its natives as jar-in-jar libraries.
 - Only classes in `us.drullk.aerolite.client.preview.imgui` reference ImGui or imgui-mc types.
 - The bean method of `PreviewPanel` creates the ImGui panel only when imgui-mc is loaded. Else it returns a no-op panel.
+
+### Dimension mods
+
+- The dev runs load the dimension mods. The code does not reference them. The production jar does not hold them.
+- Each dimension mod is in `localRuntime` with `transitive = false`.
+- Each companion mod is on its own `localRuntime` line.
+- The versions and the CurseForge file ids are in `gradle.properties`.
+- The Aether: Modrinth maven, `maven.modrinth:aether`. Its jar holds Accessories, Cumulus Menus and Nitrogen Internals. Its companions are owo-lib and Accessories from the Wisp Forest maven.
+- The Aether team publishes to GitHub Packages. GitHub Packages needs credentials, so the build uses the Modrinth maven.
+- The Accessories copy in the Aether jar fails a mixin on the recompiled dev Minecraft. The newer Accessories on its own line replaces it.
+- Applied Energistics 2: NeoForged maven, `org.appliedenergistics:appliedenergistics2`. Its companion is GuideME, `org.appliedenergistics:guideme`.
+- The Bumblezone: Resourceful Bees maven, `com.telepathicgrunt:the_bumblezone`. Its jar holds Resourceful Lib and Athena.
+- Gaia Dimension: CurseMaven, `curse.maven:gaia-dimension-302529`. It has no maven of its own. It has no companion.
+- Voidscape: CurseMaven, `curse.maven:voidscape-251730`. It has no companion.
+- The Tamaized maven jar of Voidscape does not relocate Beanification. Its bean context collides with the Aerolite bean context, so the build uses the CurseForge jar.
+- Twilight Forest: Tama's Maven, `team-twilight:twilightforest`, classifier `universal`. It has no companion.
 
 ### Veil
 
