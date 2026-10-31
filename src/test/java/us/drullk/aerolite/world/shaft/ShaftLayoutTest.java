@@ -9,15 +9,22 @@ import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.DimensionSettings;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.ShippedShaftData;
 import us.drullk.aerolite.world.TestSettings;
+import us.drullk.aerolite.world.WeightedVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.MazeEdges;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
@@ -36,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_18-08_4c0300c8-1a76-4b8e-86b0-0cb9daa7d32a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 class ShaftLayoutTest {
 
@@ -151,13 +159,14 @@ class ShaftLayoutTest {
         assertEquals(layout(9, 128, 384).shafts(ShaftLayout.Axis.X, -4000, 4000), layout(9, 128, 384).shafts(ShaftLayout.Axis.X, -4000, 4000));
     }
 
-    private static final ShaftVariation NEVER = TestSettings.TUFF.withWeight(0);
-    private static final ShaftVariation HEAVY = TestSettings.STONE.withWeight(3);
-    private static final ShaftVariation LIGHT = new ShaftVariation(1, 0.2F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
+    private static final ShaftVariation NEVER = TestSettings.TUFF;
+    private static final ShaftVariation HEAVY = TestSettings.STONE;
+    private static final ShaftVariation LIGHT = new ShaftVariation(0.2F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
             Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.COBBLED_DEEPSLATE.defaultBlockState());
 
     private ShaftLayout pickLayout(long seed) {
-        DimensionSettings settings = new DimensionSettings(TestSettings.PLACEMENT.withShaftSpacing(32, 64).withColumnChance(1), List.of(NEVER, HEAVY, LIGHT));
+        DimensionSettings settings = new DimensionSettings(TestSettings.PLACEMENT.withShaftSpacing(32, 64).withColumnChance(1),
+                List.of(new WeightedVariation(0, NEVER), new WeightedVariation(3, HEAVY), new WeightedVariation(1, LIGHT)));
         return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
     }
 
@@ -237,6 +246,45 @@ class ShaftLayoutTest {
             }
         }
         assertTrue(changes > largeChanges, "The small scale noise changes sign no more often than the large scale noise");
+    }
+
+    /** A fingerprint of the shafts, the columns and their variations, from the defaults of version 0.2.1 with seed 3446441043220923556. */
+    private static final Map<ResourceKey<Level>, String> DEFAULT_FINGERPRINTS = Map.of(
+            Level.OVERWORLD, "c8a097a35c770874a5eb64285b21d3f2767d8dfe08dd1478c7ca80f69e4bdd5f",
+            Level.NETHER, "f92fe707a8806b6191e47885f3fddd5b632ade2c7a2692d91ee1f5b90232e4c6",
+            Level.END, "6ebbdc82d3606a2932d1ccb4fafb4d31b3bbe0c010596792a8e3ce88ef0d60e0"
+    );
+
+    /** The shipped data gives the same shafts as the defaults of version 0.2.1 for one seed. */
+    @Test
+    void shippedDefaultsKeepTheEarlierShafts() throws NoSuchAlgorithmException {
+        for (Map.Entry<ResourceKey<Level>, String> expected : DEFAULT_FINGERPRINTS.entrySet()) {
+            ResourceKey<Level> dimension = expected.getKey();
+            int minY = dimension == Level.OVERWORLD ? -64 : 0;
+            int maxY = dimension == Level.OVERWORLD ? 320 : 256;
+            ShaftLayout layout = new ShaftLayout(this.mazes, 3446441043220923556L, dimension, minY, maxY, ShippedShaftData.lookup().defaults(dimension));
+            StringBuilder print = new StringBuilder();
+            for (ShaftLayout.Axis axis : ShaftLayout.Axis.values()) {
+                for (ShaftLayout.Shaft shaft : layout.shafts(axis, -3000, 3000)) {
+                    print.append(shaft).append(fingerprint(layout.variation(shaft))).append('\n');
+                }
+            }
+            for (int x = -12; x <= 12; x++) {
+                for (int z = -12; z <= 12; z++) {
+                    int xCell = x;
+                    int zCell = z;
+                    layout.column(x, z).ifPresent(column -> print.append(xCell).append(',').append(zCell).append(',').append(column.bottomEnd()).append(',')
+                            .append(column.topEnd()).append(fingerprint(layout.variation(column))).append('\n'));
+                }
+            }
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(print.toString().getBytes(StandardCharsets.UTF_8));
+            assertEquals(expected.getValue(), HexFormat.of().formatHex(hash), "The shafts of " + dimension.location() + " changed");
+        }
+    }
+
+    private static String fingerprint(ShaftVariation variation) {
+        return "|" + variation.bias() + "|" + variation.decayScale() + "|" + variation.decayThreshold() + "|" + variation.erosionThreshold()
+                + "|" + variation.interior() + "|" + variation.wall() + "|" + variation.path();
     }
 
 }

@@ -6,9 +6,10 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 /**
- * The placement of the shafts and columns of one dimension.
+ * The placement of the shafts and columns of one dimension. The registry {@code aerolite:shaft_placement} holds one placement per dimension id.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  *
  * @param minShaftSpacing the smallest center distance of two neighbor horizontal shafts on one axis
  * @param maxShaftSpacing the largest center distance of two neighbor horizontal shafts on one axis
@@ -23,11 +24,11 @@ public record ShaftPlacement(int minShaftSpacing, int maxShaftSpacing, float col
 
     private static final Codec<Integer> SPACING_CODEC = Codec.intRange(MIN_SHAFT_SPACING, MAX_SHAFT_SPACING);
 
-    /** The fields of the placement. A 0.1.0 save holds them at the top level of the settings. */
+    /** The fields of the placement. They are always written. A 0.1.0 save holds them at the top level of the settings. */
     public static final MapCodec<ShaftPlacement> MAP_CODEC = RecordCodecBuilder.<ShaftPlacement>mapCodec(instance -> instance.group(
-            SPACING_CODEC.optionalFieldOf("min_shaft_spacing", DEFAULT.minShaftSpacing).forGetter(ShaftPlacement::minShaftSpacing),
-            SPACING_CODEC.optionalFieldOf("max_shaft_spacing", DEFAULT.maxShaftSpacing).forGetter(ShaftPlacement::maxShaftSpacing),
-            Codec.floatRange(0, 1).optionalFieldOf("column_chance", DEFAULT.columnChance).forGetter(ShaftPlacement::columnChance)
+            AeroliteCodecs.defaultedField(SPACING_CODEC, "min_shaft_spacing", DEFAULT.minShaftSpacing).forGetter(ShaftPlacement::minShaftSpacing),
+            AeroliteCodecs.defaultedField(SPACING_CODEC, "max_shaft_spacing", DEFAULT.maxShaftSpacing).forGetter(ShaftPlacement::maxShaftSpacing),
+            AeroliteCodecs.defaultedField(Codec.floatRange(0, 1), "column_chance", DEFAULT.columnChance).forGetter(ShaftPlacement::columnChance)
     ).apply(instance, ShaftPlacement::new)).validate(ShaftPlacement::validate);
 
     public static final Codec<ShaftPlacement> CODEC = MAP_CODEC.codec();

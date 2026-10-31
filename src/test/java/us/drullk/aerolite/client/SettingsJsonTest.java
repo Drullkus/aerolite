@@ -2,6 +2,7 @@ package us.drullk.aerolite.client;
 
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.ShippedShaftData;
 import us.drullk.aerolite.world.TestSettings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the JSON export and import of the preset settings.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 class SettingsJsonTest {
 
@@ -19,7 +21,7 @@ class SettingsJsonTest {
 
     @Test
     void exportThenParseGivesEqualSettings() {
-        for (AeroliteSettings settings : new AeroliteSettings[]{AeroliteSettings.DEFAULT, TestSettings.SETTINGS}) {
+        for (AeroliteSettings settings : new AeroliteSettings[]{ShippedShaftData.lookup().defaultSettings(), TestSettings.SETTINGS}) {
             assertEquals(settings, this.json.parse(this.json.export(settings)).getOrThrow());
         }
     }

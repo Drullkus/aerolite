@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.ShippedShaftData;
 
 import java.util.List;
 
@@ -19,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class VariationJsonTest {
 
     private static final List<ShaftVariation> VARIATIONS = List.of(
-            ShaftVariation.STONE,
-            ShaftVariation.TUFF,
-            ShaftVariation.PURPUR,
-            ShaftVariation.COPPER.withDecayScale(256).withDecayThreshold(0.6F).withErosionThreshold(0.9F)
+            ShippedShaftData.variation("stone"),
+            ShippedShaftData.variation("tuff"),
+            ShippedShaftData.variation("purpur"),
+            ShippedShaftData.variation("copper").withDecayScale(256).withDecayThreshold(0.6F).withErosionThreshold(0.9F)
     );
 
     private final SettingsJson json = new SettingsJson();
@@ -30,7 +31,7 @@ class VariationJsonTest {
     @Test
     void exportDropsTheWeight() {
         for (ShaftVariation variation : VARIATIONS) {
-            String text = this.json.exportVariation(variation.withWeight(7));
+            String text = this.json.exportVariation(variation);
             JsonObject object = JsonParser.parseString(text).getAsJsonObject();
             assertFalse(object.has("weight"));
             assertTrue(object.has("interior"));
@@ -42,32 +43,29 @@ class VariationJsonTest {
     }
 
     @Test
-    void importKeepsTheRowWeight() {
-        String text = this.json.exportVariation(ShaftVariation.STONE);
-        assertEquals(3, this.json.parseVariation(text, 3).getOrThrow().weight());
-
-        JsonObject object = JsonParser.parseString(text).getAsJsonObject();
+    void importIgnoresAWeight() {
+        ShaftVariation stone = ShippedShaftData.variation("stone");
+        JsonObject object = JsonParser.parseString(this.json.exportVariation(stone)).getAsJsonObject();
         object.addProperty("weight", 12);
-        assertEquals(5, this.json.parseVariation(object.toString(), 5).getOrThrow().weight());
+        assertEquals(stone, this.json.parseVariation(object.toString()).getOrThrow());
     }
 
     @Test
-    void roundTripGivesTheSameVariationApartFromWeight() {
+    void roundTripGivesTheSameVariation() {
         for (ShaftVariation variation : VARIATIONS) {
-            ShaftVariation imported = this.json.parseVariation(this.json.exportVariation(variation), 2).getOrThrow();
-            assertEquals(variation.withWeight(2), imported);
+            assertEquals(variation, this.json.parseVariation(this.json.exportVariation(variation)).getOrThrow());
         }
     }
 
     @Test
     void badTextGivesAnError() {
-        assertTrue(this.json.parseVariation("not json at all {", 1).isError());
-        assertTrue(this.json.parseVariation("", 1).isError());
-        assertTrue(this.json.parseVariation("[1, 2]", 1).isError());
-        assertTrue(this.json.parseVariation("{\"interior\": ", 1).isError());
-        assertTrue(this.json.parseVariation("{\"interior\": {\"Name\": \"minecraft:stone\"}}", 1).isError());
+        assertTrue(this.json.parseVariation("not json at all {").isError());
+        assertTrue(this.json.parseVariation("").isError());
+        assertTrue(this.json.parseVariation("[1, 2]").isError());
+        assertTrue(this.json.parseVariation("{\"interior\": ").isError());
+        assertTrue(this.json.parseVariation("{\"interior\": {\"Name\": \"minecraft:stone\"}}").isError());
         assertTrue(this.json.parseVariation("{\"decay_scale\": 100, \"interior\": {\"Name\": \"minecraft:stone\"},"
-                + " \"wall\": {\"Name\": \"minecraft:stone\"}, \"path\": {\"Name\": \"minecraft:stone\"}}", 1).isError());
+                + " \"wall\": {\"Name\": \"minecraft:stone\"}, \"path\": {\"Name\": \"minecraft:stone\"}}").isError());
     }
 
 }

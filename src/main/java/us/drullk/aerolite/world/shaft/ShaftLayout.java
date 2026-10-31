@@ -6,6 +6,7 @@ import net.minecraft.world.level.Level;
 import us.drullk.aerolite.world.DimensionSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.WeightedVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
@@ -26,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public final class ShaftLayout {
 
@@ -85,7 +87,7 @@ public final class ShaftLayout {
 
     private final ShaftMazes mazes;
     private final ShaftPlacement placement;
-    private final List<ShaftVariation> variations;
+    private final List<WeightedVariation> variations;
     private final int totalWeight;
     private final int minY;
     private final int maxY;
@@ -110,7 +112,7 @@ public final class ShaftLayout {
         this.mazes = mazes;
         this.placement = settings.placement();
         this.variations = settings.variations();
-        this.totalWeight = this.variations.stream().mapToInt(ShaftVariation::weight).sum();
+        this.totalWeight = this.variations.stream().mapToInt(WeightedVariation::weight).sum();
         this.minY = minY;
         this.maxY = maxY;
         MixedRandomFactory root = new MixedRandomFactory(seed).fork("aerolite:shafts/" + dimension.location());
@@ -165,10 +167,10 @@ public final class ShaftLayout {
             throw new IllegalStateException("The dimension has no shaft variation with a positive weight");
         }
         int value = random.nextInt(this.totalWeight);
-        for (ShaftVariation variation : this.variations) {
+        for (WeightedVariation variation : this.variations) {
             value -= variation.weight();
             if (value < 0) {
-                return variation;
+                return variation.variation();
             }
         }
         throw new IllegalStateException("The weights do not sum to the total weight");

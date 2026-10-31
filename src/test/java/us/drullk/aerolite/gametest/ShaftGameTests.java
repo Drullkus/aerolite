@@ -1,5 +1,8 @@
 package us.drullk.aerolite.gametest;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -29,8 +32,19 @@ import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.DimensionSettings;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.ShaftDataMaps;
+import us.drullk.aerolite.world.ShaftLookup;
+import us.drullk.aerolite.world.ShaftPlacement;
+import us.drullk.aerolite.world.ShaftRegistries;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.TestSettings;
+import us.drullk.aerolite.world.VariationList;
+import us.drullk.aerolite.world.WeightedVariation;
+import us.drullk.aerolite.world.level.DimensionShaftValues;
+import us.drullk.aerolite.world.level.LevelShafts;
+import us.drullk.aerolite.world.level.LevelShaftsBinding;
+import us.drullk.aerolite.world.level.LevelShaftsResolver;
+import us.drullk.aerolite.world.level.WorldShaftPack;
 import us.drullk.aerolite.world.shaft.ShaftFrame;
 import us.drullk.aerolite.world.shaft.ShaftFrames;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
@@ -41,12 +55,15 @@ import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
 import us.drullk.aerolite.world.status.AeroliteChunkStatuses;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /**
- * GameTests of the shafts chunk step and the blocks it writes.
+ * GameTests of the shafts chunk step, the blocks it writes and the shaft data of a level.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -55,6 +72,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_18-08_4c0300c8-1a76-4b8e-86b0-0cb9daa7d32a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -71,6 +89,14 @@ public final class ShaftGameTests {
     private static Ring ring;
     @Autowired
     private static ShaftFrames frames;
+    @Autowired
+    private static LevelShaftsResolver resolver;
+    @Autowired
+    private static LevelShaftsBinding binding;
+    @Autowired
+    private static DimensionShaftValues values;
+    @Autowired
+    private static WorldShaftPack pack;
 
     private ShaftGameTests() {
     }
@@ -276,7 +302,7 @@ public final class ShaftGameTests {
         long seed = 3446441043220923556L;
         BlockPos around = new BlockPos(421, 220, 166);
         int reach = 32;
-        DimensionSettings settings = TestSettings.withDecay(DimensionSettings.defaults(Level.OVERWORLD), ShaftVariation.DEFAULT_DECAY_SCALE, 1, 1);
+        DimensionSettings settings = TestSettings.withDecay(ShaftLookup.of(level.registryAccess()).defaults(Level.OVERWORLD), ShaftVariation.DEFAULT_DECAY_SCALE, 1, 1);
         ShaftLayout layout = new ShaftLayout(mazes, seed, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         Map<Long, ProtoChunk> chunks = new HashMap<>();
         int crossings = 0;
@@ -311,21 +337,95 @@ public final class ShaftGameTests {
             helper.assertTrue(dimensions.dimensions().get(stem).generator() instanceof AeroliteChunkGenerator, "A dimension of the preset has no Aerolite generator");
         }
         AeroliteChunkGenerator generator = (AeroliteChunkGenerator) dimensions.dimensions().get(LevelStem.OVERWORLD).generator();
-        ShaftLayout layout = generator.layout(level);
+        helper.assertTrue(generator.aeroliteSettings().isEmpty(), "The preset generator carries settings");
+        LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, generator, Optional.empty());
+        helper.assertTrue(shafts.source() == LevelShafts.Source.GENERATOR, "The preset generator gave no shaft settings");
+        helper.assertTrue(shafts.settings().equals(ShaftLookup.of(level.registryAccess()).defaults(Level.OVERWORLD)), "The preset generator did not take the default settings");
+        ShaftLayout layout = shafts.layout();
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.X, 0).orElseThrow();
         ChunkPos pos = new ChunkPos(0, SectionPos.blockToSectionCoord(shaft.position()));
         ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
-        generator.buildShafts(level, chunk);
+        painter.paint(layout, chunk);
         helper.assertTrue(chunk.getBlockState(new BlockPos(pos.getMinBlockX(), shaft.centerY(), shaft.position())).is(layout.variation(shaft).interior().getBlock()),
-                "The generator wrote no shaft core");
+                "The generator settings wrote no shaft core");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void dataMapValueWinsOverTheGenerator(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
+        AeroliteChunkGenerator generator = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
+        ResourceKey<ShaftVariation> end = ResourceKey.create(ShaftRegistries.SHAFT_VARIATION, ShaftRegistries.id("end"));
+        VariationList value = new VariationList(List.of(new VariationList.Entry(end, 1)));
+        LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, generator, Optional.of(value));
+        helper.assertTrue(shafts.source() == LevelShafts.Source.DATA_MAP, "The data map value did not win");
+        ShaftVariation endVariation = level.registryAccess().registryOrThrow(ShaftRegistries.SHAFT_VARIATION).getOrThrow(end);
+        helper.assertTrue(shafts.layout().variation(shafts.layout().shaft(ShaftLayout.Axis.X, 0).orElseThrow()) == endVariation, "A shaft did not take the variation of the data map");
+        ShaftPlacement placement = level.registryAccess().registryOrThrow(ShaftRegistries.SHAFT_PLACEMENT).getOrThrow(ShaftRegistries.placementOf(Level.OVERWORLD));
+        helper.assertTrue(shafts.settings().placement().equals(placement), "The dimension did not take the placement under its id");
+        ResourceKey<Level> elsewhere = ResourceKey.create(Registries.DIMENSION, ShaftRegistries.id("elsewhere"));
+        helper.assertTrue(resolver.resolve(level, elsewhere, generator, Optional.of(value)).settings().placement().equals(ShaftPlacement.DEFAULT),
+                "A dimension without a placement entry did not take the default placement");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void levelLoadBindsTheShaftData(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        LevelShafts shafts = binding.get(level);
+        helper.assertTrue(shafts != null, "The level load bound no shaft data");
+        helper.assertTrue(shafts.layout().minY() == level.getMinBuildHeight() && shafts.layout().maxY() == level.getMaxBuildHeight(),
+                "The bound layout does not span the build height of the level");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void shippedDataMapsGiveOnlyTheCloudHeight(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (ResourceKey<Level> dimension : List.of(Level.OVERWORLD, Level.NETHER, Level.END)) {
+            helper.assertTrue(values.get(dimension).isEmpty(), "A shipped data map gives shaft variations to a dimension");
+        }
+        Integer cloudHeight = level.registryAccess().registryOrThrow(Registries.DIMENSION_TYPE).getData(ShaftDataMaps.CLOUD_HEIGHT, AeroliteWorldgen.OVERWORLD_TYPE);
+        helper.assertTrue(cloudHeight != null && cloudHeight == AeroliteSettings.DEFAULT_CLOUD_HEIGHT, "The Aerolite Overworld type has no default cloud height");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void worldPackRefersToShippedVariations(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ShaftLookup lookup = ShaftLookup.of(level.registryAccess());
+        DimensionSettings overworld = lookup.defaults(Level.OVERWORLD);
+        ShaftVariation changed = overworld.variations().get(1).variation().withBias(0.15F);
+        AeroliteSettings settings = lookup.defaultSettings()
+                .withVariation(Level.OVERWORLD, 1, changed)
+                .withPlacement(Level.NETHER, new ShaftPlacement(64, 128, 0.5F));
+        Map<ResourceKey<Level>, DimensionSettings> dimensions = new LinkedHashMap<>(settings.dimensions());
+        Map<String, JsonElement> files = pack.files(level.registryAccess(), dimensions, OptionalInt.of(100));
+
+        helper.assertTrue(files.get("pack.mcmeta").getAsJsonObject().getAsJsonObject("pack").has("pack_format"), "The pack has no pack format");
+        JsonObject values = files.get("data/aerolite/data_maps/dimension/shaft_variations.json").getAsJsonObject().getAsJsonObject("values");
+        helper.assertTrue(values.keySet().equals(Set.of("minecraft:overworld", "minecraft:the_nether", "minecraft:the_end")), "The data map does not hold every dimension");
+        VariationList list = VariationList.CODEC.parse(JsonOps.INSTANCE, values.get("minecraft:overworld")).getOrThrow();
+        List<String> ids = list.entries().stream().map(entry -> entry.variation().location().toString()).toList();
+        helper.assertTrue(ids.getFirst().equals("aerolite:stone"), "An unchanged variation does not refer to its shipped entry");
+        helper.assertTrue(ids.get(1).equals("aerolite_world:minecraft/overworld/1"), "A changed variation does not get its own entry");
+        helper.assertTrue(list.entries().stream().map(VariationList.Entry::weight).toList().equals(overworld.variations().stream().map(WeightedVariation::weight).toList()),
+                "The data map does not keep the weights and their sequence");
+        ShaftVariation written = ShaftVariation.CODEC.parse(JsonOps.INSTANCE, files.get("data/aerolite_world/aerolite/shaft_variation/minecraft/overworld/1.json")).getOrThrow();
+        helper.assertTrue(written.equals(changed), "The changed variation does not round trip");
+        ShaftPlacement nether = ShaftPlacement.CODEC.parse(JsonOps.INSTANCE, files.get("data/minecraft/aerolite/shaft_placement/the_nether.json")).getOrThrow();
+        helper.assertTrue(nether.equals(new ShaftPlacement(64, 128, 0.5F)), "The placement of the Nether does not round trip");
+        int cloudHeight = files.get("data/aerolite/data_maps/dimension_type/cloud_height.json").getAsJsonObject().getAsJsonObject("values").get("aerolite:overworld").getAsInt();
+        helper.assertTrue(cloudHeight == 100, "The pack does not hold the cloud height");
         helper.succeed();
     }
 
     /** Settings whose Overworld variations differ in every block, without decay and erosion. */
     private static DimensionSettings twoVariations() {
-        ShaftVariation deepslate = new ShaftVariation(1, 0.8F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
+        ShaftVariation deepslate = new ShaftVariation(0.8F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
                 Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
-        return TestSettings.withDecay(TestSettings.OVERWORLD.withVariations(List.of(TestSettings.STONE.withWeight(1), deepslate)),
+        return TestSettings.withDecay(TestSettings.OVERWORLD.withVariations(List.of(TestSettings.one(TestSettings.STONE), TestSettings.one(deepslate))),
                 TestSettings.DECAY_SCALE, 1, 1);
     }
 
@@ -370,19 +470,22 @@ public final class ShaftGameTests {
         ServerLevel level = helper.getLevel();
         Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
         AeroliteChunkGenerator presetGenerator = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
-        AeroliteChunkGenerator listed = presetGenerator.withAeroliteSettings(TestSettings.SETTINGS);
         AeroliteSettings netherOnly = TestSettings.SETTINGS.withoutDimension(Level.OVERWORLD).withoutDimension(Level.END);
         helper.assertTrue(netherOnly.dimensions().keySet().equals(Set.of(Level.NETHER)), "The settings hold a dimension other than the Nether");
-        AeroliteChunkGenerator generator = listed.withAeroliteSettings(netherOnly);
-        ShaftLayout listedLayout = listed.layout(level);
-        ShaftLayout.Shaft shaft = listedLayout.shaft(ShaftLayout.Axis.X, 0).orElseThrow();
+        LevelShafts listed = resolver.resolve(level, Level.OVERWORLD, presetGenerator.withAeroliteSettings(TestSettings.SETTINGS), Optional.empty());
+        LevelShafts unlisted = resolver.resolve(level, Level.OVERWORLD, presetGenerator.withAeroliteSettings(netherOnly), Optional.empty());
+        helper.assertTrue(listed.layout().hasShafts(), "A listed dimension has no shafts");
+        helper.assertTrue(unlisted.source() == LevelShafts.Source.NONE, "A dimension without variations took settings");
+        helper.assertFalse(unlisted.layout().hasShafts(), "A dimension without variations has shafts");
+        ShaftLayout.Shaft shaft = listed.layout().shaft(ShaftLayout.Axis.X, 0).orElseThrow();
         ChunkPos pos = new ChunkPos(0, SectionPos.blockToSectionCoord(shaft.position()));
         ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
-        generator.buildShafts(level, chunk);
+        if (unlisted.layout().hasShafts()) {
+            painter.paint(unlisted.layout(), chunk);
+        }
         for (int y = level.getMinBuildHeight(); y < level.getMaxBuildHeight(); y++) {
             helper.assertTrue(chunk.getBlockState(new BlockPos(pos.getMinBlockX(), y, shaft.position())).isAir(), "A dimension without variations got a shaft block");
         }
-        helper.assertFalse(generator.layout(level).hasShafts(), "A dimension without variations has shafts");
         helper.succeed();
     }
 

@@ -9,15 +9,19 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import tamaized.beanification.Component;
 import tamaized.beanification.PostConstruct;
-import us.drullk.aerolite.world.AeroliteChunkGenerator;
+import tamaized.beanification.Autowired;
+import us.drullk.aerolite.world.level.LevelShafts;
+import us.drullk.aerolite.world.level.LevelShaftsBinding;
 
 import java.util.function.IntConsumer;
 
 /**
- * Sends the cloud height of the Aerolite generator to each player on login, respawn and dimension change.
+ * Sends the cloud height of the player's level to each player on login, respawn and dimension change.
+ * The cloud height comes from the shaft data of the level. A level without a cloud height sends nothing.
  * The client gives the received value to its receiver.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 @Component
 public final class CloudHeightSync {
@@ -28,7 +32,10 @@ public final class CloudHeightSync {
     private IntConsumer receiver = cloudHeight -> {
     };
 
-    public CloudHeightSync() {
+    private final LevelShaftsBinding binding;
+
+    public CloudHeightSync(@Autowired LevelShaftsBinding binding) {
+        this.binding = binding;
     }
 
     public void setReceiver(IntConsumer receiver) {
@@ -62,10 +69,12 @@ public final class CloudHeightSync {
     }
 
     private void send(Player player) {
-        if (player instanceof ServerPlayer serverPlayer
-                && serverPlayer.serverLevel().getChunkSource().getGenerator() instanceof AeroliteChunkGenerator generator
-                && serverPlayer.connection.hasChannel(CloudHeightPayload.TYPE)) {
-            PacketDistributor.sendToPlayer(serverPlayer, new CloudHeightPayload(generator.aeroliteSettings().cloudHeight()));
+        if (!(player instanceof ServerPlayer serverPlayer) || !serverPlayer.connection.hasChannel(CloudHeightPayload.TYPE)) {
+            return;
+        }
+        LevelShafts shafts = this.binding.get(serverPlayer.serverLevel());
+        if (shafts != null && shafts.cloudHeight().isPresent()) {
+            PacketDistributor.sendToPlayer(serverPlayer, new CloudHeightPayload(shafts.cloudHeight().getAsInt()));
         }
     }
 

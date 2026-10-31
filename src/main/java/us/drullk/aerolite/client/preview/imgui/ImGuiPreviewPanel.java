@@ -32,6 +32,7 @@ import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.WeightedVariation;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -437,7 +438,8 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         PresetSliders sliders = this.tools().sliders();
         AeroliteSettings edited = settings;
         ShaftVariation variation = this.tools().edits().variations(edited, dimension).get(index);
-        int weight = this.stepSlider("##weight", variation.weight(), ShaftVariation.MAX_WEIGHT, text("weight", variation.weight()));
+        int currentWeight = this.tools().edits().weight(edited, dimension, index);
+        int weight = this.stepSlider("##weight", currentWeight, WeightedVariation.MAX_WEIGHT, text("weight", currentWeight));
         if (weight >= 0) {
             edited = this.tools().edits().withWeight(edited, dimension, index, weight);
         }
@@ -494,7 +496,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         ImGui.sameLine();
         AeroliteSettings edited = settings;
         if (ImGui.button(text("paste_variation") + "##import")) {
-            DataResult<ShaftVariation> imported = this.tools().json().pasteVariation(current.weight());
+            DataResult<ShaftVariation> imported = this.tools().json().pasteVariation();
             Optional<ShaftVariation> parsed = imported.result();
             if (parsed.isPresent()) {
                 edited = settings.withVariation(dimension, index, parsed.get());

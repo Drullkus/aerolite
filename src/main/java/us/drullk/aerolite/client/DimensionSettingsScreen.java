@@ -20,6 +20,7 @@ import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.WeightedVariation;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -170,11 +171,11 @@ public class DimensionSettingsScreen extends Screen {
     /** Adds the slider rows, the label row, the block row and the row of Export, Import and Remove of one variation. */
     private void addVariation(SettingsList list, int index, ShaftVariation variation) {
         StepSlider[] weight = new StepSlider[1];
-        weight[0] = new StepSlider(ShaftVariation.MAX_WEIGHT, variation.weight(),
+        weight[0] = new StepSlider(WeightedVariation.MAX_WEIGHT, this.edits.weight(this.settings, this.dimension, index),
                 step -> Component.translatable(KEY + "weight", step),
                 step -> {
                     this.settings = this.edits.withWeight(this.settings, this.dimension, index, step);
-                    weight[0].setStep(this.variation(index).weight());
+                    weight[0].setStep(this.edits.weight(this.settings, this.dimension, index));
                 });
         StepSlider bias = new StepSlider(PresetSliders.BIAS_STEPS, this.sliders.biasStep(variation.bias()),
                 step -> Component.translatable(KEY + "maze_bias", this.sliders.biasLabel(step)),
@@ -232,7 +233,7 @@ public class DimensionSettingsScreen extends Screen {
 
     /** A good import replaces the variation and keeps its weight. A bad import shows a toast and keeps the variation. */
     private void importVariation(int index) {
-        this.tools.json().pasteVariation(this.variation(index).weight())
+        this.tools.json().pasteVariation()
                 .ifSuccess(imported -> {
                     this.settings = this.settings.withVariation(this.dimension, index, imported);
                     this.rebuildPending = true;

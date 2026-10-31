@@ -1,0 +1,15 @@
+{
+  "bias": 0.7,
+  "decay_scale": 64,
+  "decay_threshold": 0.35,
+  "erosion_threshold": 0.5,
+  "interior": {
+    "Name": "minecraft:tuff"
+  },
+  "path": {
+    "Name": "minecraft:polished_tuff"
+  },
+  "wall": {
+    "Name": "minecraft:tuff_bricks"
+  }
+}

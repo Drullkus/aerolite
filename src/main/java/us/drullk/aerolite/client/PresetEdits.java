@@ -6,9 +6,13 @@ import net.neoforged.api.distmarker.Dist;
 import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
-import us.drullk.aerolite.world.DimensionSettings;
+import net.minecraft.core.HolderLookup;
+import us.drullk.aerolite.world.ShaftLookup;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.WeightedVariation;
+
+import javax.annotation.Nullable;
 
 import java.util.Collection;
 import java.util.Comparator;
@@ -21,6 +25,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetEdits {
@@ -29,9 +34,25 @@ public final class PresetEdits {
     private static final List<ResourceKey<Level>> VANILLA_DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
 
     private final PresetSliders sliders;
+    /** The shaft registries of the world being created. They give the default settings of a dimension. */
+    @Nullable
+    private ShaftLookup lookup;
 
     public PresetEdits(@Autowired PresetSliders sliders) {
         this.sliders = sliders;
+    }
+
+    /** Takes the registries of the world being created. The Aerolite screen calls this when it opens. */
+    public void useRegistries(HolderLookup.Provider registries) {
+        this.lookup = ShaftLookup.of(registries);
+    }
+
+    /** The registries of the world being created. */
+    public ShaftLookup lookup() {
+        if (this.lookup == null) {
+            throw new IllegalStateException("The Aerolite screen has not opened");
+        }
+        return this.lookup;
     }
 
     /** A minimum spacing above the maximum spacing pushes the maximum along. */
@@ -69,7 +90,11 @@ public final class PresetEdits {
     }
 
     public List<ShaftVariation> variations(AeroliteSettings settings, ResourceKey<Level> dimension) {
-        return settings.variations(dimension);
+        return settings.variations(dimension).stream().map(WeightedVariation::variation).toList();
+    }
+
+    public int weight(AeroliteSettings settings, ResourceKey<Level> dimension, int index) {
+        return settings.variations(dimension).get(index).weight();
     }
 
     /** The dimensions of the settings map. The Overworld, the Nether and the End come first, then the rest by id. */
@@ -91,7 +116,7 @@ public final class PresetEdits {
 
     /** Adds a dimension with its default placement and variation list. A configured dimension stays as it is. */
     public AeroliteSettings withAddedDimension(AeroliteSettings settings, ResourceKey<Level> dimension) {
-        return settings.dimensions().containsKey(dimension) ? settings : settings.withDimension(dimension, DimensionSettings.defaults(dimension));
+        return settings.dimensions().containsKey(dimension) ? settings : settings.withDimension(dimension, this.lookup().defaults(dimension));
     }
 
     /** Removes a dimension and its settings. The dimension then gets no shafts. */
@@ -112,7 +137,7 @@ public final class PresetEdits {
 
     /** A dimension keeps at least one variation with a positive weight. */
     public AeroliteSettings withWeight(AeroliteSettings settings, ResourceKey<Level> dimension, int index, int weight) {
-        List<ShaftVariation> variations = this.variations(settings, dimension);
+        List<WeightedVariation> variations = settings.variations(dimension);
         boolean otherPositive = false;
         for (int other = 0; other < variations.size(); other++) {
             if (other != index && variations.get(other).weight() > 0) {
@@ -120,7 +145,7 @@ public final class PresetEdits {
             }
         }
         int chosen = weight == 0 && !otherPositive ? 1 : weight;
-        return settings.withVariation(dimension, index, variations.get(index).withWeight(chosen));
+        return settings.withWeight(dimension, index, chosen);
     }
 
     public boolean canRemove(AeroliteSettings settings, ResourceKey<Level> dimension) {
@@ -133,20 +158,20 @@ public final class PresetEdits {
             return settings;
         }
         AeroliteSettings removed = settings.withoutVariation(dimension, index);
-        List<ShaftVariation> rest = this.variations(removed, dimension);
+        List<WeightedVariation> rest = removed.variations(dimension);
         return rest.stream().anyMatch(other -> other.weight() > 0)
                 ? removed
-                : removed.withVariation(dimension, 0, rest.getFirst().withWeight(1));
+                : removed.withWeight(dimension, 0, 1);
     }
 
     /** Appends a copy of the first variation, or the default variation of the dimension. */
     public AeroliteSettings withAddedVariation(AeroliteSettings settings, ResourceKey<Level> dimension) {
-        List<ShaftVariation> current = this.variations(settings, dimension);
+        List<WeightedVariation> current = settings.variations(dimension);
         return settings.withAddedVariation(dimension, current.isEmpty() ? this.defaultVariation(dimension) : current.getFirst());
     }
 
-    private ShaftVariation defaultVariation(ResourceKey<Level> dimension) {
-        return ShaftVariation.defaultList(dimension).getFirst();
+    private WeightedVariation defaultVariation(ResourceKey<Level> dimension) {
+        return this.lookup().defaults(dimension).variations().getFirst();
     }
 
 }

@@ -45,6 +45,7 @@ import java.util.Map;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public class AerolitePresetScreen extends Screen {
 
@@ -79,12 +80,13 @@ public class AerolitePresetScreen extends Screen {
         this.context = context;
         this.tools = tools;
         this.edits = tools.edits();
+        this.edits.useRegistries(context.worldgenLoadContext());
         this.settings = context.selectedDimensions().dimensions().values().stream()
                 .map(LevelStem::generator)
                 .filter(AeroliteChunkGenerator.class::isInstance)
-                .map(generator -> ((AeroliteChunkGenerator) generator).aeroliteSettings())
+                .map(generator -> ((AeroliteChunkGenerator) generator).aeroliteSettings(context.worldgenLoadContext()))
                 .findFirst()
-                .orElse(AeroliteSettings.DEFAULT);
+                .orElseGet(() -> this.edits.lookup().defaultSettings());
     }
 
     @Override

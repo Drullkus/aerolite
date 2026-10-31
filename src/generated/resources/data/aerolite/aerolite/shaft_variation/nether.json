@@ -1,0 +1,15 @@
+{
+  "bias": 0.25,
+  "decay_scale": 64,
+  "decay_threshold": 0.35,
+  "erosion_threshold": 0.5,
+  "interior": {
+    "Name": "minecraft:netherrack"
+  },
+  "path": {
+    "Name": "minecraft:red_nether_bricks"
+  },
+  "wall": {
+    "Name": "minecraft:nether_bricks"
+  }
+}

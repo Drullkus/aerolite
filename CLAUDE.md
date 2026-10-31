@@ -26,7 +26,11 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Wilson's algorithm | The spanning tree sampler. A loop-erased random walk steps by edge weight until it hits the tree. |
 | Axis edge | An edge along the shaft axis. On a column the axis is Y. |
 | Ring edge | An edge around the shaft. |
-| Variation | One set of weight, maze bias, decay scale, decay threshold, erosion threshold, interior block, maze wall block and maze path block. Each shaft and column picks one. |
+| Variation | One set of maze bias, decay scale, decay threshold, erosion threshold, interior block, maze wall block and maze path block. Each shaft and column picks one. |
+| Variation list | A map of variation id to weight. Its key sequence is the pick sequence. |
+| Shaft data | The placement and the weighted variations of one dimension. |
+| Data map | A NeoForge data map. It attaches a value to a registry entry by id. |
+| World shaft pack | The world data pack `aerolite_shafts`. It holds the generator settings of a world as shaft data. |
 | Maze bias | The weight of axis edges in the maze sampler, 5% to 95%. Ring edges take the rest. 50% is uniform. |
 | Segment | One chunk length of a shaft. On a column it is one chunk section. Tree segments and connector segments alternate along the shaft. |
 | Tree segment | A segment whose nodes form one spanning tree. It has no crossing of its own. |
@@ -244,13 +248,15 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 - The Aerolite dimension type is a copy of the vanilla Overworld type with the effects id `aerolite:overworld`.
 - The Nether and the End keep their vanilla dimension types.
 - The Overworld keeps its sun, moon, day cycle and weather. The Overworld spans -64 to 320.
-- The cloud height is a setting. The default is Y -32.
-- The cloud height applies to the Overworld only.
+- The cloud height of a dimension type is the value of the data map `aerolite:cloud_height`.
+- Only the dimension type `aerolite:overworld` ships a cloud height, Y -32.
+- The packet carries the cloud height of the shaft data of the player's level. A level without a cloud height sends no packet.
 - A packet carries the cloud height to the client on login, on respawn and on dimension change.
 - The client effects of `aerolite:overworld` put the clouds at the cloud height of the last packet.
 - Each dimension uses its own vanilla biome list. Overworld biomes in the Overworld, Nether biomes in the Nether, End biomes in the End.
 - Each dimension has the same structure: shafts, islands, bridges and center structures.
 - Each dimension uses the Aerolite generator, a subclass of the vanilla noise-based chunk generator. It carries the settings.
+- The shafts step does not read the generator. It paints any level with shaft data, whatever its generator.
 - The noise settings of each dimension make only air. The islands replace the void later.
 - The void Overworld has a sea level of -64. A higher sea level makes the noise step fill the bottom with lava.
 - The shafts are the chunk status `aerolite:shafts`, between the carvers and the features. Two mixins add the status and its step, because no API adds a chunk status.
@@ -476,6 +482,63 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - Each popup icon renders at the framebuffer pixel size of its row, rounded up to a multiple of 16.
 - A change of that pixel size renders the icon atlas again.
 
+## Data
+
+The shaft data lives in datapack registries and data maps. See the glossary for the terms.
+
+### Registries
+
+- Three datapack registries hold the shaft data. They do not sync to the client.
+- `aerolite:shaft_variation` holds the variations. The shipped entries are `aerolite:stone`, `aerolite:tuff` and the others in `AeroliteShaftEntries.java`.
+- A variation entry holds `bias`, `decay_scale`, `decay_threshold`, `erosion_threshold`, `interior`, `wall` and `path`. It holds no weight.
+- The variation codec clamps the bias to the slider range.
+- The variation codec raises an erosion threshold at or below the decay threshold to the decay threshold plus 5%.
+- `aerolite:shaft_placement` holds the placements. A dimension takes the entry under its own dimension id.
+- A dimension without its own placement entry takes `aerolite:default`.
+- The placements of the vanilla dimensions are in the namespace `minecraft`, for example `data/minecraft/aerolite/shaft_placement/overworld.json`.
+- `aerolite:variation_list` holds `aerolite:overworld`, `aerolite:nether` and `aerolite:end`. Each entry is a variation list.
+- The menu copies from the variation lists. Worldgen reads them only for a generator without the field `aerolite`.
+- A change to a shipped variation list changes the shafts of each world whose generator has no field `aerolite`.
+- The JSON key sequence of a variation list is the pick sequence. A tool that sorts the keys changes the shafts.
+- Data generation writes the variation lists with their key sequence. The other generated JSON has sorted keys.
+
+### Data maps
+
+- The data map `aerolite:shaft_variations` is on the level stem registry. Its value is a variation list.
+- Its file is `data/<namespace>/data_maps/dimension/shaft_variations.json`. The keys are dimension ids.
+- It ships without values. So no dimension gets shafts from the shipped data alone.
+- The world creation screen applies data maps to a level stem registry without the dimensions of the new world.
+- So `DimensionShaftValues` reads the files of `aerolite:shaft_variations` by dimension id, with the merge rules of NeoForge.
+- `DimensionShaftValues` skips a tag entry, because a tag cannot resolve without the dimensions.
+- The data map `aerolite:cloud_height` is on the dimension type registry. Its value is a Y level.
+
+### Level binding
+
+- The level load resolves the shaft data of each server level. A data attachment of the level holds it. The level does not save it.
+- The shafts step and the cloud height packet read the attachment.
+- The binding resolves once per level load. A reload of the data packs does not change it.
+- The project timed a mixin field on the server level against the attachment. Per chunk, the difference stayed below the noise.
+- So the attachment holds the shaft data. The project rule allows a mixin only when no API can do the task.
+- A data map value for the dimension wins over the generator settings.
+- Without a data map value, a level takes the generator settings for its dimension. Its generator must be the Aerolite generator, and the settings must list the dimension.
+- A level that takes the generator settings and has the dimension type `aerolite:overworld` takes the cloud height of the generator settings.
+- A generator without the field `aerolite` takes the default settings. They come from the shipped variation lists and placements.
+- A 0.1.0 save without a variation map reads the default lists from the registries of the save.
+
+### World shaft pack
+
+- A level that takes the generator settings writes the world shaft pack to `<world>/datapacks/aerolite_shafts/`.
+- The level load writes the pack once. A world with a folder `datapacks/aerolite_shafts` gets no new pack.
+- The game enables the new pack on the next world load. From then on, the data maps give the shaft data.
+- The writer puts the partial pack in `<world>/aerolite_shafts.tmp`. Then it moves the pack into the data pack folder.
+- The pack holds a value for each dimension whose Aerolite generator lists it and that has no data map value.
+- `pack.mcmeta` holds the data pack format of the game.
+- `data/aerolite/data_maps/dimension/shaft_variations.json` holds the variation list of each of those dimensions.
+- `data/<dimension namespace>/aerolite/shaft_placement/<dimension path>.json` holds the placement of each of those dimensions.
+- A variation equal to a shipped entry refers to that entry. Each dimension list refers to one entry at most once.
+- Any other variation gets the entry `aerolite_world:<dimension namespace>/<dimension path>/<index>`. The index is its position in the list.
+- `data/aerolite/data_maps/dimension_type/cloud_height.json` holds the cloud height of the Overworld generator for `aerolite:overworld`.
+
 ## Shafts
 
 ### Placement
@@ -505,9 +568,11 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - Shear does not touch a junction box.
 - Where a column crosses a horizontal shaft, a junction joins them. The junction is a 15x15x15 box of the shaft interior block, centered on the crossing.
 - Every horizontal shaft and every column picks one variation by weight. A weight of 0 never picks.
+- The pick walks the variation list in its sequence. The same seed, weights and sequence give the same shafts.
 - A horizontal shaft picks with a random at its axis and cell. A column picks with a random at the cells of its two shafts.
 - A junction box takes the variation of its horizontal shaft. So do its two patches and the maze path blocks on them.
-- A dimension that is not in the variation map gets no shafts. The noise settings of the dimension still make its terrain.
+- A dimension without shaft data gets no shafts. The noise settings of the dimension still make its terrain.
+- `ShaftLayoutTest` holds a fingerprint of the default shafts of one seed. A change that moves a shaft fails it.
 - Shafts pierce islands. Where a shaft and an island overlap, the shaft replaces the terrain.
 
 ### Cross section

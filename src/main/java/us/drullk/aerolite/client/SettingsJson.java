@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParseException;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
@@ -19,7 +18,7 @@ import us.drullk.aerolite.world.ShaftVariation;
  * The copy and the paste of the preset settings as one line of JSON through the system clipboard.
  * Only the settings codec knows the fields, so a new field needs no change here.
  * The toast of a failed paste is the same on the Aerolite screen and in the preview panel.
- * The export and the import of one variation leave out the weight, like a datapack registry entry.
+ * The export and the import of one variation hold no weight, like a datapack registry entry.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
@@ -29,9 +28,6 @@ public final class SettingsJson {
 
     /** HTML escapes turn the equals sign of a block state into a unicode escape. */
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
-
-    /** The variation field that the export of one variation leaves out. */
-    private static final String WEIGHT = "weight";
 
     /** The toast id of a failed paste. */
     private final SystemToast.SystemToastId pasteFailedToast = new SystemToast.SystemToastId();
@@ -54,22 +50,14 @@ public final class SettingsJson {
 
     /** Encodes one variation as minified JSON without its weight. */
     public String exportVariation(ShaftVariation variation) {
-        JsonElement json = ShaftVariation.CODEC.encodeStart(JsonOps.INSTANCE, variation).getOrThrow();
-        json.getAsJsonObject().remove(WEIGHT);
-        return GSON.toJson(json);
+        return GSON.toJson(ShaftVariation.CODEC.encodeStart(JsonOps.INSTANCE, variation).getOrThrow());
     }
 
-    /** Decodes one variation from JSON text. The variation takes the given weight, whatever weight the text holds. */
-    public DataResult<ShaftVariation> parseVariation(String text, int weight) {
-        return parseJson(text).flatMap(json -> {
-            if (!json.isJsonObject()) {
-                return DataResult.error(() -> "Not a JSON object: " + json);
-            }
-            JsonObject object = json.getAsJsonObject().deepCopy();
-            object.remove(WEIGHT);
-            object.addProperty(WEIGHT, weight);
-            return ShaftVariation.CODEC.parse(JsonOps.INSTANCE, object);
-        });
+    /** Decodes one variation from JSON text. The variation codec ignores a weight in the text. */
+    public DataResult<ShaftVariation> parseVariation(String text) {
+        return parseJson(text).flatMap(json -> json.isJsonObject()
+                ? ShaftVariation.CODEC.parse(JsonOps.INSTANCE, json)
+                : DataResult.error(() -> "Not a JSON object: " + json));
     }
 
     /** Parses JSON text. Bad JSON gives an error result with the first line of the deepest cause. */
@@ -115,9 +103,9 @@ public final class SettingsJson {
         Minecraft.getInstance().keyboardHandler.setClipboard(this.exportVariation(variation));
     }
 
-    /** Parses the text of the system clipboard as one variation with the given weight. */
-    public DataResult<ShaftVariation> pasteVariation(int weight) {
-        return this.parseVariation(Minecraft.getInstance().keyboardHandler.getClipboard(), weight);
+    /** Parses the text of the system clipboard as one variation. */
+    public DataResult<ShaftVariation> pasteVariation() {
+        return this.parseVariation(Minecraft.getInstance().keyboardHandler.getClipboard());
     }
 
     /** Shows the system toast of a failed import of one variation. */

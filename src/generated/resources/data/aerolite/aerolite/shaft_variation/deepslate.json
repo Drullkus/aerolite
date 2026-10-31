@@ -1,0 +1,18 @@
+{
+  "bias": 0.3,
+  "decay_scale": 64,
+  "decay_threshold": 0.35,
+  "erosion_threshold": 0.5,
+  "interior": {
+    "Name": "minecraft:deepslate",
+    "Properties": {
+      "axis": "y"
+    }
+  },
+  "path": {
+    "Name": "minecraft:polished_deepslate"
+  },
+  "wall": {
+    "Name": "minecraft:deepslate_bricks"
+  }
+}

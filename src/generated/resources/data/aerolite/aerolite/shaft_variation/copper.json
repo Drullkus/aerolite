@@ -1,0 +1,19 @@
+{
+  "bias": 0.8,
+  "decay_scale": 64,
+  "decay_threshold": 0.35,
+  "erosion_threshold": 0.5,
+  "interior": {
+    "Name": "minecraft:oxidized_copper"
+  },
+  "path": {
+    "Name": "minecraft:oxidized_copper_bulb",
+    "Properties": {
+      "lit": "false",
+      "powered": "false"
+    }
+  },
+  "wall": {
+    "Name": "minecraft:oxidized_cut_copper"
+  }
+}

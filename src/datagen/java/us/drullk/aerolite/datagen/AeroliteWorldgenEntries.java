@@ -22,30 +22,42 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.NoiseSettings;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
+import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteChunkGenerator;
-import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.ShaftRegistries;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
  * The worldgen entries of the preset: the Overworld dimension type, the void noise settings of each dimension and the preset.
+ * The generators of the preset carry no settings, so they take the default settings.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 @Component
 public final class AeroliteWorldgenEntries {
+
+    private final AeroliteShaftEntries shaftEntries;
+
+    public AeroliteWorldgenEntries(@Autowired AeroliteShaftEntries shaftEntries) {
+        this.shaftEntries = shaftEntries;
+    }
 
     public RegistrySetBuilder builder() {
         return new RegistrySetBuilder()
                 .add(Registries.DIMENSION_TYPE, this::dimensionTypes)
                 .add(Registries.NOISE_SETTINGS, this::noiseSettings)
-                .add(Registries.WORLD_PRESET, this::worldPresets);
+                .add(Registries.WORLD_PRESET, this::worldPresets)
+                .add(ShaftRegistries.SHAFT_VARIATION, this.shaftEntries::variations)
+                .add(ShaftRegistries.SHAFT_PLACEMENT, this.shaftEntries::placements);
     }
 
     private void dimensionTypes(BootstrapContext<DimensionType> context) {
@@ -106,7 +118,7 @@ public final class AeroliteWorldgenEntries {
                 new AeroliteChunkGenerator(
                         MultiNoiseBiomeSource.createFromPreset(parameterLists.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)),
                         noiseSettings.getOrThrow(AeroliteWorldgen.OVERWORLD_NOISE),
-                        AeroliteSettings.DEFAULT
+                        Optional.empty()
                 )
         );
         LevelStem nether = new LevelStem(
@@ -114,7 +126,7 @@ public final class AeroliteWorldgenEntries {
                 new AeroliteChunkGenerator(
                         MultiNoiseBiomeSource.createFromPreset(parameterLists.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)),
                         noiseSettings.getOrThrow(AeroliteWorldgen.NETHER_NOISE),
-                        AeroliteSettings.DEFAULT
+                        Optional.empty()
                 )
         );
         LevelStem end = new LevelStem(
@@ -122,7 +134,7 @@ public final class AeroliteWorldgenEntries {
                 new AeroliteChunkGenerator(
                         TheEndBiomeSource.create(context.lookup(Registries.BIOME)),
                         noiseSettings.getOrThrow(AeroliteWorldgen.END_NOISE),
-                        AeroliteSettings.DEFAULT
+                        Optional.empty()
                 )
         );
         context.register(AeroliteWorldgen.PRESET, new WorldPreset(Map.of(
