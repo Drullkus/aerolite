@@ -9,15 +9,17 @@ import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftVariation;
 
 /**
- * The copy and the paste of the preset settings as one line of JSON through the system clipboard.
+ * The copy and the paste of the shaft settings as one line of JSON through the system clipboard.
  * Only the settings codec knows the fields, so a new field needs no change here.
- * The toast of a failed paste is the same on the Aerolite screen and in the preview panel.
+ * The settings codec reads and writes through registry ops, because settings of 0.1.0 without dimensions read the shipped lists.
+ * The toast of a failed paste is the same on the shafts screen and in the preview panel.
  * The export and the import of one variation hold no weight, like a datapack registry entry.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
@@ -38,14 +40,14 @@ public final class SettingsJson {
     }
 
     /** Encodes the settings as minified JSON, with no newline and no indentation. */
-    public String export(AeroliteSettings settings) {
-        JsonElement json = AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow();
+    public String export(AeroliteSettings settings, HolderLookup.Provider registries) {
+        JsonElement json = AeroliteSettings.CODEC.encodeStart(registries.createSerializationContext(JsonOps.INSTANCE), settings).getOrThrow();
         return GSON.toJson(json);
     }
 
     /** Decodes settings from JSON text. Bad JSON and values that the codec refuses give an error result. */
-    public DataResult<AeroliteSettings> parse(String text) {
-        return parseJson(text).flatMap(json -> AeroliteSettings.CODEC.parse(JsonOps.INSTANCE, json));
+    public DataResult<AeroliteSettings> parse(String text, HolderLookup.Provider registries) {
+        return parseJson(text).flatMap(json -> AeroliteSettings.CODEC.parse(registries.createSerializationContext(JsonOps.INSTANCE), json));
     }
 
     /** Encodes one variation as minified JSON without its weight. */
@@ -82,13 +84,13 @@ public final class SettingsJson {
     }
 
     /** Puts the export of the settings on the system clipboard. */
-    public void copy(AeroliteSettings settings) {
-        Minecraft.getInstance().keyboardHandler.setClipboard(this.export(settings));
+    public void copy(AeroliteSettings settings, HolderLookup.Provider registries) {
+        Minecraft.getInstance().keyboardHandler.setClipboard(this.export(settings, registries));
     }
 
     /** Parses the text of the system clipboard. */
-    public DataResult<AeroliteSettings> paste() {
-        return this.parse(Minecraft.getInstance().keyboardHandler.getClipboard());
+    public DataResult<AeroliteSettings> paste(HolderLookup.Provider registries) {
+        return this.parse(Minecraft.getInstance().keyboardHandler.getClipboard(), registries);
     }
 
     /** Shows the system toast of a failed paste. The error message of the parse wraps over several lines. */

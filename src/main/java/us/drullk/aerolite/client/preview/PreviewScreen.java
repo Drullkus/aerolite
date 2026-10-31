@@ -34,7 +34,7 @@ import java.util.OptionalLong;
 import java.util.function.BiConsumer;
 
 /**
- * The preview of the preset settings. It shows the shafts of a region around the region center.
+ * The preview of the shaft settings. It shows the shafts of a region around the region center.
  * The ImGui panel on the right edits a copy of the settings. Done sends the copy back. Cancel drops it.
  * A previewed dimension without variations shows the empty region: sky, grid and outline.
  * The movement keys and a middle drag move the region center. A move across a chunk border shifts the region.
@@ -43,6 +43,7 @@ import java.util.function.BiConsumer;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -99,8 +100,9 @@ public class PreviewScreen extends Screen {
             this.seed = WorldOptions.randomSeed();
             this.seedText = Long.toString(this.seed);
         }
+        tools.edits().useRegistries(context.worldgenLoadContext());
         this.dimensions = PreviewDimension.of(context, tools.edits());
-        this.levels = context.selectedDimensions().dimensions().keySet().stream().map(Registries::levelStemToLevel).toList();
+        this.levels = tools.edits().worldDimensions(context);
         this.biomes = context.worldgenLoadContext().registryOrThrow(Registries.BIOME);
         this.noise = context.worldgenLoadContext().lookupOrThrow(Registries.NOISE);
         this.radius = Mth.clamp(Minecraft.getInstance().options.renderDistance().get(), MIN_RADIUS, MAX_RADIUS);
@@ -163,7 +165,7 @@ public class PreviewScreen extends Screen {
         return this.dimensions;
     }
 
-    /** Every level of the world being created. */
+    /** Every dimension of the world being created, in the sequence of the variation sections. */
     public List<ResourceKey<Level>> levels() {
         return this.levels;
     }

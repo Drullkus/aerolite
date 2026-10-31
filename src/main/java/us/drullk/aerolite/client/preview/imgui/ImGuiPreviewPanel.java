@@ -23,6 +23,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.AeroliteClientConfig;
+import us.drullk.aerolite.client.PresetEdits;
 import us.drullk.aerolite.client.PresetSliders;
 import us.drullk.aerolite.client.PresetTools;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
@@ -32,6 +33,7 @@ import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.VariationList;
 import us.drullk.aerolite.world.WeightedVariation;
 
 import javax.annotation.Nullable;
@@ -88,6 +90,11 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     /** The dimension that the add combo shows. */
     @Nullable
     private ResourceKey<Level> addChoice;
+    /** The variation list that the list combo shows. Empty is Blank. */
+    private Optional<ResourceKey<VariationList>> addList = Optional.empty();
+    /** The dimension that {@link #addList} took its preselection from. */
+    @Nullable
+    private ResourceKey<Level> addListFor;
     @Nullable
     private PreviewScreen drawn;
     private float width;
@@ -205,6 +212,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             this.drawn = screen;
             this.blockFields.clear();
             this.addChoice = null;
+            this.addListFor = null;
             this.width = screen.panelUnits();
             this.dragging = false;
         }
@@ -372,7 +380,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return edited;
     }
 
-    /** The column chance and the two spacing sliders. The Overworld adds the cloud height under the text Clouds. */
+    /** The column chance and the two spacing sliders. */
     private AeroliteSettings drawPlacement(AeroliteSettings settings, ResourceKey<Level> dimension) {
         PresetSliders sliders = this.tools().sliders();
         ShaftPlacement placement = settings.placement(dimension);
@@ -391,34 +399,46 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         if (max >= 0) {
             placement = this.tools().edits().withMaxSpacingStep(placement, max);
         }
-        AeroliteSettings edited = settings.withPlacement(dimension, placement);
-        if (Level.OVERWORLD.equals(dimension)) {
-            ImGui.text(text("clouds"));
-            int cloud = this.stepSlider("##cloud_height", sliders.cloudHeightStep(edited.cloudHeight()), PresetSliders.CLOUD_HEIGHT_STEPS,
-                    text("cloud_height", edited.cloudHeight()));
-            if (cloud >= 0) {
-                edited = edited.withCloudHeight(sliders.cloudHeight(cloud));
-            }
-        }
-        return edited;
+        return settings.withPlacement(dimension, placement);
     }
 
-    /** A combo of the levels without settings and an Add button. Both are off when every level has settings. */
+    /**
+     * A combo of the dimensions without settings, a combo of Blank and the variation lists, and an Add button.
+     * The list combo preselects the own list of the chosen dimension. All three are off when every dimension has settings.
+     */
     private AeroliteSettings drawAddDimension(PreviewScreen screen, AeroliteSettings settings) {
-        List<ResourceKey<Level>> candidates = this.tools().edits().addableDimensions(settings, screen.levels());
+        PresetEdits edits = this.tools().edits();
+        List<ResourceKey<Level>> candidates = edits.addableDimensions(settings, screen.levels());
         if (this.addChoice == null || !candidates.contains(this.addChoice)) {
             this.addChoice = candidates.isEmpty() ? null : candidates.getFirst();
+        }
+        if (this.addChoice != null && !this.addChoice.equals(this.addListFor)) {
+            this.addListFor = this.addChoice;
+            this.addList = edits.ownList(this.addChoice);
         }
         ImGui.separator();
         String add = text("add_dimension");
         float addWidth = ImGui.calcTextSize(add).x + 2 * ImGui.getStyle().getFramePaddingX();
+        float spacing = ImGui.getStyle().getItemSpacingX();
+        float comboWidth = Math.max(1, (ImGui.getContentRegionAvailX() - addWidth - 2 * spacing) / 2);
         ImGui.beginDisabled(this.addChoice == null);
-        ImGui.setNextItemWidth(Math.max(1, ImGui.getContentRegionAvailX() - addWidth - ImGui.getStyle().getItemSpacingX()));
-        String shown = this.addChoice == null ? text("all_dimensions_configured") : this.tools().edits().dimensionName(this.addChoice).getString();
+        ImGui.setNextItemWidth(comboWidth);
+        String shown = this.addChoice == null ? text("all_dimensions_configured") : edits.dimensionName(this.addChoice).getString();
         if (ImGui.beginCombo("##add_dimension_choice", shown)) {
             for (ResourceKey<Level> candidate : candidates) {
-                if (ImGui.selectable(this.tools().edits().dimensionName(candidate).getString() + "##" + candidate.location(), candidate.equals(this.addChoice))) {
+                if (ImGui.selectable(edits.dimensionName(candidate).getString() + "##" + candidate.location(), candidate.equals(this.addChoice))) {
                     this.addChoice = candidate;
+                }
+            }
+            ImGui.endCombo();
+        }
+        ImGui.sameLine();
+        ImGui.setNextItemWidth(comboWidth);
+        if (ImGui.beginCombo("##add_list_choice", edits.listName(this.addList).getString())) {
+            for (Optional<ResourceKey<VariationList>> choice : edits.listChoices()) {
+                String id = choice.map(key -> key.location().toString()).orElse("blank");
+                if (ImGui.selectable(edits.listName(choice).getString() + "##" + id, choice.equals(this.addList))) {
+                    this.addList = choice;
                 }
             }
             ImGui.endCombo();
@@ -426,8 +446,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         ImGui.sameLine();
         AeroliteSettings edited = settings;
         if (ImGui.button(add + "##add_dimension") && this.addChoice != null) {
-            edited = this.tools().edits().withAddedDimension(settings, this.addChoice);
+            edited = edits.withAddedDimension(settings, this.addChoice, this.addList);
             this.addChoice = null;
+            this.addListFor = null;
         }
         ImGui.endDisabled();
         return edited;
@@ -569,14 +590,14 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         }
 
         if (ImGui.button(text("copy") + "##copy")) {
-            this.tools().json().copy(screen.settings());
+            this.tools().json().copy(screen.settings(), this.tools().edits().registries());
         }
         if (ImGui.isItemHovered()) {
             ImGui.setTooltip(text("copy_tooltip"));
         }
         ImGui.sameLine();
         if (ImGui.button(text("paste") + "##paste")) {
-            this.tools().json().paste()
+            this.tools().json().paste(this.tools().edits().registries())
                     .ifSuccess(screen::setSettings)
                     .ifError(error -> this.tools().json().showPasteFailed(error.message()));
         }

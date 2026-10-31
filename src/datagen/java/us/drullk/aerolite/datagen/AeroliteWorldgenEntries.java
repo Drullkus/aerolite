@@ -18,24 +18,23 @@ import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.DensityFunctions;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.NoiseSettings;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
-import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.ShaftRegistries;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.OptionalLong;
 
 /**
  * The worldgen entries of the preset: the Overworld dimension type, the void noise settings of each dimension and the preset.
- * The generators of the preset carry no settings, so they take the default settings.
+ * The preset uses vanilla noise generators. The shaft settings of a new world come from the world creation menu.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -115,26 +114,23 @@ public final class AeroliteWorldgenEntries {
         HolderGetter<MultiNoiseBiomeSourceParameterList> parameterLists = context.lookup(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
         LevelStem overworld = new LevelStem(
                 dimensionTypes.getOrThrow(AeroliteWorldgen.OVERWORLD_TYPE),
-                new AeroliteChunkGenerator(
+                new NoiseBasedChunkGenerator(
                         MultiNoiseBiomeSource.createFromPreset(parameterLists.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)),
-                        noiseSettings.getOrThrow(AeroliteWorldgen.OVERWORLD_NOISE),
-                        Optional.empty()
+                        noiseSettings.getOrThrow(AeroliteWorldgen.OVERWORLD_NOISE)
                 )
         );
         LevelStem nether = new LevelStem(
                 dimensionTypes.getOrThrow(BuiltinDimensionTypes.NETHER),
-                new AeroliteChunkGenerator(
+                new NoiseBasedChunkGenerator(
                         MultiNoiseBiomeSource.createFromPreset(parameterLists.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)),
-                        noiseSettings.getOrThrow(AeroliteWorldgen.NETHER_NOISE),
-                        Optional.empty()
+                        noiseSettings.getOrThrow(AeroliteWorldgen.NETHER_NOISE)
                 )
         );
         LevelStem end = new LevelStem(
                 dimensionTypes.getOrThrow(BuiltinDimensionTypes.END),
-                new AeroliteChunkGenerator(
+                new NoiseBasedChunkGenerator(
                         TheEndBiomeSource.create(context.lookup(Registries.BIOME)),
-                        noiseSettings.getOrThrow(AeroliteWorldgen.END_NOISE),
-                        Optional.empty()
+                        noiseSettings.getOrThrow(AeroliteWorldgen.END_NOISE)
                 )
         );
         context.register(AeroliteWorldgen.PRESET, new WorldPreset(Map.of(

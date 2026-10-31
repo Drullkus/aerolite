@@ -12,26 +12,25 @@ import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationContext;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.dimension.LevelStem;
-import net.minecraft.world.level.levelgen.WorldDimensions;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.preview.PreviewScreen;
-import us.drullk.aerolite.world.AeroliteChunkGenerator;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.VariationList;
 
 import javax.annotation.Nullable;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 /**
- * The customize screen of the preset in the world creation menu. It lists the Aerolite dimensions.
- * The add row comes first. Each configured dimension then has a row with its name, an arrow button and a minus button.
+ * The shafts screen "Amazing Pillars" of the world creation menu. It edits a copy of the settings of the {@link ShaftSettingsHolder}.
+ * Done writes the copy to the holder. Cancel and Escape drop it.
+ * The add row comes first: the dimension dropdown, the list dropdown and the Add button.
+ * Each configured dimension then has a row with its name, an arrow button and a minus button.
  * The arrow opens the {@link DimensionSettingsScreen} of the dimension. The minus button removes the dimension.
  * An add or a remove rebuilds the list entries. A return from a dimension screen or the preview also rebuilds them.
  * The Preview button shows only when ImGui loaded. The preview edits a copy of the settings.
@@ -63,30 +62,25 @@ public class AerolitePresetScreen extends Screen {
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
     /** The header row at the full window width. It holds the centered title and the clipboard buttons. */
     private final FrameLayout header = new FrameLayout();
+    /** The dropdowns of the add row. The screen draws their open lists over the rows below. */
+    private final List<ChoiceDropdown<?>> dropdowns = new ArrayList<>();
     @Nullable
     private SettingsList list;
     private AeroliteSettings settings;
     /** True when an add or a remove waits for the list rebuild of the next tick. */
     private boolean rebuildPending;
-    @Nullable
-    private DimensionDropdown addDropdown;
     /** The candidate that the add dropdown shows after a rebuild. */
     @Nullable
     private ResourceKey<Level> addChoice;
 
-    public AerolitePresetScreen(CreateWorldScreen parent, WorldCreationContext context, PresetTools tools) {
+    public AerolitePresetScreen(CreateWorldScreen parent, PresetTools tools) {
         super(Component.translatable("createWorld.customize.aerolite.title"));
         this.parent = parent;
-        this.context = context;
+        this.context = parent.getUiState().getSettings();
         this.tools = tools;
         this.edits = tools.edits();
-        this.edits.useRegistries(context.worldgenLoadContext());
-        this.settings = context.selectedDimensions().dimensions().values().stream()
-                .map(LevelStem::generator)
-                .filter(AeroliteChunkGenerator.class::isInstance)
-                .map(generator -> ((AeroliteChunkGenerator) generator).aeroliteSettings(context.worldgenLoadContext()))
-                .findFirst()
-                .orElseGet(() -> this.edits.lookup().defaultSettings());
+        this.edits.useRegistries(this.context.worldgenLoadContext());
+        this.settings = tools.holder().settings();
     }
 
     @Override
@@ -94,7 +88,7 @@ public class AerolitePresetScreen extends Screen {
         this.header.addChild(new StringWidget(this.title, this.font), LayoutSettings::alignHorizontallyCenter);
         LinearLayout clipboard = this.header.addChild(LinearLayout.horizontal().spacing(HEADER_BUTTON_GAP),
                 settings -> settings.alignHorizontallyRight().paddingRight(HEADER_RIGHT_MARGIN));
-        clipboard.addChild(this.headerButton("copy", button -> this.tools.json().copy(this.settings)));
+        clipboard.addChild(this.headerButton("copy", button -> this.tools.json().copy(this.settings, this.edits.registries())));
         clipboard.addChild(this.headerButton("paste", button -> this.paste()));
         this.layout.addToHeader(this.header);
         SettingsList list = this.layout.addToContents(new SettingsList(this.minecraft, this.width, this.layout));
@@ -103,8 +97,7 @@ public class AerolitePresetScreen extends Screen {
 
         LinearLayout footer = this.layout.addToFooter(LinearLayout.horizontal().spacing(8));
         footer.addChild(Button.builder(CommonComponents.GUI_DONE, button -> {
-            AeroliteSettings chosen = this.settings;
-            this.parent.getUiState().updateDimensions((registries, dimensions) -> this.withSettings(dimensions, chosen));
+            this.tools.holder().set(this.settings);
             this.onClose();
         }).width(FOOTER_BUTTON_WIDTH).build());
         if (this.tools.panel().available()) {
@@ -126,7 +119,7 @@ public class AerolitePresetScreen extends Screen {
 
     /** Replaces the settings with the clipboard settings. A bad parse shows a toast and keeps the settings. */
     private void paste() {
-        DataResult<AeroliteSettings> pasted = this.tools.json().paste();
+        DataResult<AeroliteSettings> pasted = this.tools.json().paste(this.edits.registries());
         pasted.ifSuccess(chosen -> {
             this.settings = chosen;
             this.addChoice = null;
@@ -173,23 +166,38 @@ public class AerolitePresetScreen extends Screen {
         }));
     }
 
-    /** Adds the dropdown of the dimensions that the world holds without settings, and the Add button. */
+    /**
+     * Adds the dropdown of the dimensions of the world without settings, the dropdown of the variation lists and the Add button.
+     * The list dropdown shows the own list of the chosen dimension, or Blank.
+     */
     private void addDimensionRow(SettingsList list) {
-        List<ResourceKey<Level>> candidates = this.edits.addableDimensions(this.settings,
-                this.context.selectedDimensions().dimensions().keySet().stream().map(Registries::levelStemToLevel).toList());
-        DimensionDropdown dropdown = new DimensionDropdown(candidates, this.addChoice, this.edits::dimensionName,
+        List<ResourceKey<Level>> candidates = this.edits.addableDimensions(this.settings, this.edits.worldDimensions(this.context));
+        ChoiceDropdown<ResourceKey<Level>> dimensions = new ChoiceDropdown<>(candidates, this.addChoice, this.edits::dimensionName,
                 Component.translatable("createWorld.customize.aerolite.all_dimensions_configured"));
-        this.addDropdown = dropdown;
+        List<Optional<ResourceKey<VariationList>>> choices = this.edits.listChoices();
+        ChoiceDropdown<Optional<ResourceKey<VariationList>>> lists = new ChoiceDropdown<>(choices, this.ownList(dimensions.chosen()),
+                this.edits::listName, this.edits.listName(Optional.empty()));
+        lists.active = dimensions.active;
+        dimensions.onPick(chosen -> lists.choose(this.ownList(chosen)));
+        this.dropdowns.clear();
+        this.dropdowns.add(dimensions);
+        this.dropdowns.add(lists);
         Button add = Button.builder(Component.translatable("createWorld.customize.aerolite.add_dimension"), button -> {
-            ResourceKey<Level> chosen = dropdown.chosen();
-            if (chosen != null) {
-                this.settings = this.edits.withAddedDimension(this.settings, chosen);
+            ResourceKey<Level> chosen = dimensions.chosen();
+            Optional<ResourceKey<VariationList>> chosenList = lists.chosen();
+            if (chosen != null && chosenList != null) {
+                this.settings = this.edits.withAddedDimension(this.settings, chosen, chosenList);
                 this.addChoice = null;
                 this.rebuildPending = true;
             }
         }).build();
-        add.active = dropdown.chosen() != null;
-        list.addRow(dropdown, add);
+        add.active = dimensions.chosen() != null;
+        list.addRow(dimensions, lists, add);
+    }
+
+    /** The own list of a dimension, or Blank. */
+    private Optional<ResourceKey<VariationList>> ownList(@Nullable ResourceKey<Level> dimension) {
+        return dimension == null ? Optional.empty() : this.edits.ownList(dimension);
     }
 
     /** Rebuilds the list entries from the settings and keeps the scroll position. */
@@ -212,39 +220,36 @@ public class AerolitePresetScreen extends Screen {
         }
     }
 
-    /** The add dropdown when its list shows and the button lies inside the list area, or null. */
+    /** The add row dropdown whose list shows while its button lies inside the list area, or null. It closes the other lists. */
     @Nullable
-    private DimensionDropdown openDimensionList() {
-        DimensionDropdown dropdown = this.addDropdown;
-        if (this.list == null || dropdown == null) {
-            return null;
+    private ChoiceDropdown<?> openDropdown() {
+        ChoiceDropdown<?> open = null;
+        for (ChoiceDropdown<?> dropdown : this.dropdowns) {
+            boolean inside = this.list != null && dropdown.getY() >= this.list.getY() && dropdown.getBottom() <= this.list.getBottom();
+            if (open == null && dropdown.listVisible() && inside) {
+                open = dropdown;
+            } else {
+                dropdown.closeList();
+            }
         }
-        if (!dropdown.listVisible()) {
-            dropdown.closeList();
-            return null;
-        }
-        if (dropdown.getY() >= this.list.getY() && dropdown.getBottom() <= this.list.getBottom()) {
-            return dropdown;
-        }
-        dropdown.closeList();
-        return null;
+        return open;
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
-        DimensionDropdown dimensions = this.openDimensionList();
-        if (dimensions != null) {
-            dimensions.renderList(graphics, this.font, this.height, mouseX, mouseY);
+        ChoiceDropdown<?> open = this.openDropdown();
+        if (open != null) {
+            open.renderList(graphics, this.font, this.height, mouseX, mouseY);
         }
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        DimensionDropdown dimensions = this.openDimensionList();
-        if (dimensions != null) {
-            dimensions.listClicked(mouseX, mouseY, this.height);
-            dimensions.closeList();
+        ChoiceDropdown<?> open = this.openDropdown();
+        if (open != null) {
+            open.listClicked(mouseX, mouseY, this.height);
+            open.closeList();
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -252,9 +257,9 @@ public class AerolitePresetScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        DimensionDropdown dimensions = this.openDimensionList();
-        if (dimensions != null && keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            dimensions.closeList();
+        ChoiceDropdown<?> open = this.openDropdown();
+        if (open != null && keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            open.closeList();
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -272,14 +277,6 @@ public class AerolitePresetScreen extends Screen {
     @Override
     public void onClose() {
         this.minecraft.setScreen(this.parent);
-    }
-
-    private WorldDimensions withSettings(WorldDimensions dimensions, AeroliteSettings settings) {
-        Map<ResourceKey<LevelStem>, LevelStem> stems = new LinkedHashMap<>();
-        dimensions.dimensions().forEach((key, stem) -> stems.put(key, stem.generator() instanceof AeroliteChunkGenerator generator
-                ? new LevelStem(stem.type(), generator.withAeroliteSettings(settings))
-                : stem));
-        return new WorldDimensions(stems);
     }
 
 }

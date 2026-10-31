@@ -45,6 +45,15 @@ public final class ShaftRegistries {
         return ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, path);
     }
 
+    /**
+     * The id of the own variation list of a dimension: {@code aerolite:<dimension path>}.
+     * The Nether and the End use {@code aerolite:nether} and {@code aerolite:end}.
+     */
+    public static ResourceKey<VariationList> listOf(ResourceKey<Level> dimension) {
+        ResourceKey<VariationList> vanilla = DIMENSION_LISTS.get(dimension);
+        return vanilla != null ? vanilla : ResourceKey.create(VARIATION_LIST, id(dimension.location().getPath()));
+    }
+
     /** The placement entry under the id of a dimension. */
     public static ResourceKey<ShaftPlacement> placementOf(ResourceKey<Level> dimension) {
         return ResourceKey.create(SHAFT_PLACEMENT, dimension.location());

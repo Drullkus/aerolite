@@ -1,26 +1,38 @@
 package us.drullk.aerolite.client;
 
+import net.minecraft.client.gui.screens.worldselection.WorldCreationContext;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.LevelStem;
 import net.neoforged.api.distmarker.Dist;
 import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
-import net.minecraft.core.HolderLookup;
+import us.drullk.aerolite.world.DimensionSettings;
 import us.drullk.aerolite.world.ShaftLookup;
 import us.drullk.aerolite.world.ShaftPlacement;
+import us.drullk.aerolite.world.ShaftRegistries;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.VariationList;
 import us.drullk.aerolite.world.WeightedVariation;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
- * The edit rules of the preset settings. The vanilla screen and the preview panel share them.
+ * The edit rules of the shaft settings. The vanilla screens and the preview panel share them.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -34,7 +46,9 @@ public final class PresetEdits {
     private static final List<ResourceKey<Level>> VANILLA_DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
 
     private final PresetSliders sliders;
-    /** The shaft registries of the world being created. They give the default settings of a dimension. */
+    /** The worldgen registries of the world being created. They hold the shaft data registries. */
+    @Nullable
+    private HolderLookup.Provider registries;
     @Nullable
     private ShaftLookup lookup;
 
@@ -42,17 +56,96 @@ public final class PresetEdits {
         this.sliders = sliders;
     }
 
-    /** Takes the registries of the world being created. The Aerolite screen calls this when it opens. */
+    /** Takes the worldgen registries of the world being created. Each screen of the flow calls this before it reads them. */
     public void useRegistries(HolderLookup.Provider registries) {
-        this.lookup = ShaftLookup.of(registries);
+        if (registries != this.registries) {
+            this.registries = registries;
+            this.lookup = ShaftLookup.of(registries);
+        }
     }
 
-    /** The registries of the world being created. */
+    /** The worldgen registries of the world being created. */
+    public HolderLookup.Provider registries() {
+        if (this.registries == null) {
+            throw new IllegalStateException("No screen of the world creation flow has opened");
+        }
+        return this.registries;
+    }
+
+    /** The shaft data registries of the world being created. */
     public ShaftLookup lookup() {
         if (this.lookup == null) {
-            throw new IllegalStateException("The Aerolite screen has not opened");
+            throw new IllegalStateException("No screen of the world creation flow has opened");
         }
         return this.lookup;
+    }
+
+    /**
+     * Every dimension of the world being created: the level stems of the data packs and the dimensions of the world type.
+     * The Overworld, the Nether and the End come first, then the rest by id.
+     */
+    public List<ResourceKey<Level>> worldDimensions(WorldCreationContext context) {
+        return this.sorted(worldStems(context).keySet().stream().map(Registries::levelStemToLevel).toList());
+    }
+
+    /**
+     * The level stems of the world being created by key. A stem of the world type replaces a data pack stem of the same key.
+     * The worldgen load context holds no level stem registry, so the data pack stems come from the context field.
+     */
+    public static Map<ResourceKey<LevelStem>, LevelStem> worldStems(WorldCreationContext context) {
+        Map<ResourceKey<LevelStem>, LevelStem> stems = new LinkedHashMap<>();
+        context.worldgenLoadContext().registry(Registries.LEVEL_STEM).ifPresent(registry -> putAll(stems, registry));
+        putAll(stems, context.datapackDimensions());
+        stems.putAll(context.selectedDimensions().dimensions());
+        return stems;
+    }
+
+    private static void putAll(Map<ResourceKey<LevelStem>, LevelStem> stems, Registry<LevelStem> registry) {
+        for (Map.Entry<ResourceKey<LevelStem>, LevelStem> entry : registry.entrySet()) {
+            stems.put(entry.getKey(), entry.getValue());
+        }
+    }
+
+    /** The ids of the variation lists of the world being created, by id. */
+    public List<ResourceKey<VariationList>> variationLists() {
+        return this.registries().lookupOrThrow(ShaftRegistries.VARIATION_LIST).listElementIds()
+                .sorted(Comparator.comparing(ResourceKey::location))
+                .toList();
+    }
+
+    /** The own variation list of a dimension, when the registry holds it. See {@link ShaftRegistries#listOf}. */
+    public Optional<ResourceKey<VariationList>> ownList(ResourceKey<Level> dimension) {
+        ResourceKey<VariationList> list = ShaftRegistries.listOf(dimension);
+        return this.lookup().lists().get(list).isPresent() ? Optional.of(list) : Optional.empty();
+    }
+
+    /** The name of a variation list choice: its id path, or "Blank" for no list. */
+    public net.minecraft.network.chat.Component listName(Optional<ResourceKey<VariationList>> list) {
+        return list.<net.minecraft.network.chat.Component>map(key -> net.minecraft.network.chat.Component.literal(key.location().getPath()))
+                .orElseGet(() -> net.minecraft.network.chat.Component.translatable("createWorld.customize.aerolite.blank_list"));
+    }
+
+    /** The list choices of the add row: Blank first, then every variation list by id. */
+    public List<Optional<ResourceKey<VariationList>>> listChoices() {
+        List<Optional<ResourceKey<VariationList>>> choices = new ArrayList<>();
+        choices.add(Optional.empty());
+        this.variationLists().forEach(list -> choices.add(Optional.of(list)));
+        return List.copyOf(choices);
+    }
+
+    /**
+     * Replaces blank settings with the defaults: every dimension of {@code dimensions} that has its own variation list, with that list.
+     * The cloud height stays.
+     */
+    public AeroliteSettings withDefaults(AeroliteSettings settings, Collection<ResourceKey<Level>> dimensions) {
+        AeroliteSettings edited = settings;
+        for (ResourceKey<Level> dimension : this.sorted(dimensions)) {
+            Optional<ResourceKey<VariationList>> list = this.ownList(dimension);
+            if (list.isPresent()) {
+                edited = this.withAddedDimension(edited, dimension, list);
+            }
+        }
+        return edited;
     }
 
     /** A minimum spacing above the maximum spacing pushes the maximum along. */
@@ -114,9 +207,26 @@ public final class PresetEdits {
                 : net.minecraft.network.chat.Component.literal(dimension.location().getPath());
     }
 
-    /** Adds a dimension with its default placement and variation list. A configured dimension stays as it is. */
-    public AeroliteSettings withAddedDimension(AeroliteSettings settings, ResourceKey<Level> dimension) {
-        return settings.dimensions().containsKey(dimension) ? settings : settings.withDimension(dimension, this.lookup().defaults(dimension));
+    /**
+     * Adds a dimension with the placement entry of the dimension and the weights of a variation list.
+     * No list, or a list that the registry lacks, gives one stone variation with weight 1. A configured dimension stays as it is.
+     */
+    public AeroliteSettings withAddedDimension(AeroliteSettings settings, ResourceKey<Level> dimension, Optional<ResourceKey<VariationList>> list) {
+        if (settings.dimensions().containsKey(dimension)) {
+            return settings;
+        }
+        VariationList chosen = list.flatMap(key -> this.lookup().lists().get(key))
+                .map(Holder::value)
+                .orElseGet(PresetEdits::blankList);
+        DimensionSettings added = this.lookup().dimension(dimension, chosen);
+        if (added.variations().isEmpty()) {
+            added = this.lookup().dimension(dimension, blankList());
+        }
+        return settings.withDimension(dimension, added);
+    }
+
+    private static VariationList blankList() {
+        return new VariationList(List.of(new VariationList.Entry(ShaftRegistries.STONE, 1)));
     }
 
     /** Removes a dimension and its settings. The dimension then gets no shafts. */
@@ -164,14 +274,14 @@ public final class PresetEdits {
                 : removed.withWeight(dimension, 0, 1);
     }
 
-    /** Appends a copy of the first variation, or the default variation of the dimension. */
+    /** Appends a copy of the first variation, or the stone variation with weight 1 when the dimension has none. */
     public AeroliteSettings withAddedVariation(AeroliteSettings settings, ResourceKey<Level> dimension) {
         List<WeightedVariation> current = settings.variations(dimension);
-        return settings.withAddedVariation(dimension, current.isEmpty() ? this.defaultVariation(dimension) : current.getFirst());
+        return settings.withAddedVariation(dimension, current.isEmpty() ? this.stoneVariation() : current.getFirst());
     }
 
-    private WeightedVariation defaultVariation(ResourceKey<Level> dimension) {
-        return this.lookup().defaults(dimension).variations().getFirst();
+    private WeightedVariation stoneVariation() {
+        return this.lookup().resolve(blankList()).getFirst();
     }
 
 }

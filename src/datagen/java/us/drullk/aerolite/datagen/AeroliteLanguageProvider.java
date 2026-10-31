@@ -25,7 +25,12 @@ public class AeroliteLanguageProvider extends LanguageProvider {
     @Override
     protected void addTranslations() {
         this.add("generator.aerolite.aerolite", "Aerolite");
-        this.add("createWorld.customize.aerolite.title", "Aerolite Settings");
+        this.add("createWorld.customize.aerolite.title", "Amazing Pillars");
+        this.add("createWorld.customize.aerolite.pillars", "Amazing Pillars");
+        this.add("createWorld.customize.aerolite.load_defaults", "Load Defaults");
+        this.add("createWorld.customize.aerolite.load_defaults_tooltip", "Replace empty settings with Amazing Pillar defaults");
+        this.add("createWorld.customize.aerolite.settings", "Settings");
+        this.add("createWorld.customize.aerolite.blank_list", "Blank");
         this.add("createWorld.customize.aerolite.shaft_placement", "Shaft Placement");
         this.add("createWorld.customize.aerolite.shaft_surface", "Shaft Surface");
         this.add("createWorld.customize.aerolite.column_chance", "Column Chance: %s");
@@ -40,7 +45,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.configure_dimension", "Configure");
         this.add("createWorld.customize.aerolite.tab.shaft_placement", "Shaft Placement");
         this.add("createWorld.customize.aerolite.tab.shaft_variations", "Shaft Variations");
-        this.add("createWorld.customize.aerolite.dimension_title", "Aerolite Settings: %s");
+        this.add("createWorld.customize.aerolite.dimension_title", "Amazing Pillars: %s");
         this.add("createWorld.customize.aerolite.dimension.overworld", "Overworld");
         this.add("createWorld.customize.aerolite.dimension.the_nether", "The Nether");
         this.add("createWorld.customize.aerolite.dimension.the_end", "The End");

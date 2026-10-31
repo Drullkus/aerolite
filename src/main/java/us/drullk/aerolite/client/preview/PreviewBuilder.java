@@ -68,6 +68,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public final class PreviewBuilder implements AutoCloseable {
 
@@ -186,7 +187,7 @@ public final class PreviewBuilder implements AutoCloseable {
         final Request request;
         final long number;
         final LevelHeightAccessor heightAccessor;
-        final Climate.Sampler sampler;
+        final PreviewBiomes biomes;
         @Nullable
         final ShaftLayout layout;
         final Long2ObjectMap<ProtoChunk> painted = new Long2ObjectOpenHashMap<>();
@@ -196,7 +197,8 @@ public final class PreviewBuilder implements AutoCloseable {
             this.number = number;
             PreviewDimension dimension = request.dimension();
             this.heightAccessor = LevelHeightAccessor.create(dimension.minY(), dimension.maxY() - dimension.minY());
-            this.sampler = RandomState.create(dimension.noiseSettings().value(), request.noise(), request.seed()).sampler();
+            Climate.Sampler sampler = RandomState.create(dimension.noiseSettings().value(), request.noise(), request.seed()).sampler();
+            this.biomes = new PreviewBiomes(dimension.biomeSource(), sampler, request.biomes());
             this.layout = request.settings().variations(dimension.key()).isEmpty()
                     ? null
                     : new ShaftLayout(mazes, request.seed(), dimension.key(), dimension.minY(), dimension.maxY(), request.settings().dimension(dimension.key()));
@@ -342,8 +344,8 @@ public final class PreviewBuilder implements AutoCloseable {
         Scene scene = this.scene(request);
         scene.painted.keySet().removeIf((long key) -> !RegionChunks.contains(center, paintRadius, ChunkPos.getX(key), ChunkPos.getZ(key)));
         int centerY = dimension.minY() + scene.heightAccessor.getHeight() / 2;
-        Holder<Biome> centerBiome = dimension.biomeSource().getNoiseBiome(QuartPos.fromBlock(center.getMiddleBlockX()), QuartPos.fromBlock(centerY),
-                QuartPos.fromBlock(center.getMiddleBlockZ()), scene.sampler);
+        Holder<Biome> centerBiome = scene.biomes.at(QuartPos.fromBlock(center.getMiddleBlockX()), QuartPos.fromBlock(centerY),
+                QuartPos.fromBlock(center.getMiddleBlockZ()));
         Region region = new Region(scene.number, dimension, radius, center, centerBiome);
 
         List<ChunkPos> bakes;
@@ -364,7 +366,7 @@ public final class PreviewBuilder implements AutoCloseable {
             chunks[RegionChunks.index(center, paintRadius, ChunkPos.getX(key), ChunkPos.getZ(key))] = entry.getValue();
         }
         PreviewBlockGetter getter = new PreviewBlockGetter(chunks, center, paintRadius, dimension.minY(), scene.heightAccessor.getHeight(),
-                request.constantAmbientLight(), dimension.biomeSource(), scene.sampler);
+                request.constantAmbientLight(), scene.biomes);
         Build build = new Build(generation, region, bakes, paints.size(), scene.heightAccessor, getter, chunks, paintRadius);
         this.current = build;
         if (bakes.isEmpty()) {

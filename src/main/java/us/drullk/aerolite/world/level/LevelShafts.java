@@ -21,6 +21,8 @@ public record LevelShafts(DimensionSettings settings, ShaftLayout layout, Option
     public enum Source {
         /** The data map {@code aerolite:shaft_variations} has a value for the dimension. */
         DATA_MAP,
+        /** The server claimed the settings of the world creation menu for a new world, and they list the dimension. */
+        PENDING,
         /** The generator of the level carries settings for the dimension, and the data map has no value. */
         GENERATOR,
         /** Neither source has settings. The level gets no shafts. */

@@ -9,7 +9,10 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Term | Meaning |
 |---|---|
 | Preset | The Aerolite world preset. It replaces the generator of the Overworld, the Nether and the End. |
-| Settings | The values that the player sets in the world creation menu. They live in the generator settings of the preset. |
+| Settings | The values that the player sets in the world creation menu. The settings holder keeps them until the server of the new world claims them. |
+| Settings holder | The client component that holds the settings of the open world creation flow. |
+| Pending settings | The settings that the world creation flow hands to the integrated server of the new world. |
+| Own variation list | The variation list `aerolite:<dimension path>` of a dimension. The Nether and the End use `aerolite:nether` and `aerolite:end`. |
 | Shaft | A straight tube of blocks, 13x13 across, that runs along one axis. |
 | Horizontal shaft | A shaft that runs along X or Z. It is infinite. |
 | Column | A shaft that runs along Y. It spans the build height and is sheared at both ends. Columns bind horizontal shafts. |
@@ -264,7 +267,7 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 
 ## World creation menu
 
-The player tweaks the settings in the world creation menu, like the superflat customize screen.
+The player sets the shaft settings in the World tab of the create world screen. The world type does not matter.
 
 ### Settings
 
@@ -283,10 +286,10 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 | Bridge chance | Preset | 0.5 |
 | Allowed biome list | Preset | The vanilla biome list of the dimension |
 | Cloud height | Preset | Y -32 |
-| Minimum shaft spacing | Dimension | 48 blocks |
-| Maximum shaft spacing | Dimension | 80 blocks |
-| Column chance | Dimension | 0.3 |
-| Variation list | Dimension | The default list of the dimension in `ShaftVariation.java` |
+| Minimum shaft spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
+| Maximum shaft spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
+| Column chance | Dimension | The placement entry of the dimension, else `aerolite:default` |
+| Variation list | Dimension | The own variation list of the dimension. `AeroliteShaftEntries.java` writes the shipped lists. |
 | Maze decay scale | Variation | 64 blocks |
 | Maze decay threshold | Variation | 0.35 |
 | Shaft erosion threshold | Variation | 0.5 |
@@ -305,53 +308,112 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - A 0.1.0 save loads with its top-level placement in every dimension of its map.
 - In a 0.1.0 save, a variation without its own decay values takes the top-level decay values.
 - A 0.1.0 save without a variation map loads the default dimensions with its top-level values.
+- A 0.1.0 save without a variation map reads the shipped lists, so it parses only with registry ops.
 - A variation with a decay threshold at or above its erosion threshold loads with the erosion threshold raised to the decay threshold plus 5%.
-- The other preset settings have no slider yet. They live in the generator settings with their defaults.
+- The other preset settings have no slider and no storage yet.
 
-### Aerolite screen
+### Settings holder
 
-- The customize button opens the Aerolite screen when the preset is active.
-- The Aerolite screen has the title "Aerolite Settings" and a footer.
-- Its list holds the add row first, then one row per configured dimension.
-- The add row holds a dropdown on the left and an Add button on the right.
-- The dropdown lists every level of the world being created that has no dimension settings.
-- A click on the dropdown opens its list. A pick closes the list.
-- The Add button adds the chosen dimension with its default settings.
-- The Overworld, the Nether and the End get their defaults. Any other dimension gets the default placement and one stone variation with weight 1.
-- When no dimension is left to add, the dropdown and the Add button are off. The dropdown reads "All dimensions configured".
-- The Overworld, the Nether and the End come first, then the others by id.
+- The client component `ShaftSettingsHolder` holds the settings of the open world creation flow.
+- A create world screen that the holder does not track starts a new flow. The holder then holds blank settings.
+- Blank settings hold no dimension and the default cloud height.
+- The shafts screen, the dimension screen and the preview read and write the holder. No screen reads or writes the generator.
+- The title screen and the world list end the flow. When one of them opens, the holder resets and clears the pending settings.
+- Cancel in the create world screen returns to one of those screens. So a cancelled flow leaves blank settings and no pending settings.
+
+### Hand-over to the server
+
+- `PendingShaftSettings` is a common component. The client offers settings to it. The server claims them.
+- The flow opens the screen "Preparing world data" when it creates the world. That screen hands the holder settings to the pending settings.
+- Blank settings are not handed over. So a world created with blank settings gets no shafts and no world shaft pack.
+- The hand-over happens before the integrated server starts.
+- The server claims the pending settings at `ServerAboutToStartEvent`, before it loads the levels.
+- The server claims them only for a new world. A world is new while its Overworld data is not initialized.
+- The server posts the Overworld load event before it sets the spawn and the initialized flag. It posts the other level load events after.
+- So the server claims once at its start, not at each level load.
+- An old world drops the pending settings. It claims nothing.
+- The server stop clears the pending and the claimed settings.
+- A dedicated server gets no offer. Its pending settings stay empty.
+- The level binding uses the claimed settings. See [Level binding](#level-binding).
+
+### World tab row
+
+- The World tab has the row "Amazing Pillars" under the Bonus Chest row.
+- The row holds the label "Amazing Pillars", the button Load Defaults and the button Settings, from left to right.
+- The row sits one switch row under the Bonus Chest row, 4 units below the Bonus Chest switch.
+- The label starts at the left edge of the Bonus Chest label. The Settings button ends at the right edge of the Bonus Chest switch.
+- A gap of 4 separates the two buttons. Each button is 20 high and fits its text.
+- `WorldTabRow` adds the widgets in `ScreenEvent.Init.Post` of the create world screen.
+- `WorldTabRow` places the widgets on each `ScreenEvent.Render.Pre` from the position of the Bonus Chest label and switch.
+- The row shows only while the screen holds the Bonus Chest label. The vanilla tab manager adds that label only for the World tab.
+- The vanilla grid does not hold the row. So the vanilla rows keep their vanilla positions, and no mixin is necessary.
+- The world preset has no customize screen. The Customize button is off for it.
+- Settings opens the shafts screen with the holder.
+- Load Defaults is on only while no dimension is configured.
+- The tooltip of Load Defaults is "Replace empty settings with Amazing Pillar defaults".
+- Load Defaults adds every dimension of the world that has its own variation list, with that list. It keeps the cloud height.
+- The own variation list of a dimension is `aerolite:<dimension path>`.
+- The Nether and the End use `aerolite:nether` and `aerolite:end` as their own lists.
+- A dimension that Load Defaults or the Add button adds takes the placement entry under its id, else `aerolite:default`.
+
+### Dimension candidates
+
+- The dimensions of the world are the level stems of the data packs and the dimensions of the world type.
+- The worldgen load context of the creation context holds no level stem registry.
+- So the data pack stems come from `WorldCreationContext#datapackDimensions`.
+- A stem of the world type replaces a data pack stem with the same key.
+- The add row, the add combo of the panel and the preview dimension list show every dimension of the world.
+- So data pack dimensions such as `twilightforest:twilight_forest` and `aether:the_aether` show.
+- The Overworld, the Nether and the End come first. The others follow in the sort sequence of `ResourceLocation`: path first, then namespace.
 - A dimension other than the three vanilla dimensions shows its id path as its name.
+
+### Shafts screen
+
+- The shafts screen has the title "Amazing Pillars" and a footer.
+- The shafts screen edits a copy of the holder settings. Done writes the copy to the holder. Cancel and Escape drop it.
+- Its list holds the add row first, then one row per configured dimension.
+- The add row holds the dimension dropdown, the list dropdown and the Add button, in that sequence.
+- The dimension dropdown lists every dimension of the world that has no dimension settings.
+- The list dropdown lists "Blank" first, then every entry of `aerolite:variation_list` by its id path.
+- The lists follow the sort sequence of `ResourceLocation`: path first, then namespace.
+- The list dropdown reads the variation lists from the worldgen registries of the creation context.
+- When the chosen dimension has its own variation list, the list dropdown preselects that list. Else it preselects "Blank".
+- A pick in the dimension dropdown preselects the list again.
+- A click on a dropdown opens its list. A pick closes the list.
+- Add with a list adds the chosen dimension with the weights of that list.
+- Add with "Blank" adds the chosen dimension with one stone variation, `aerolite:stone`, with weight 1.
+- When no dimension is left to add, both dropdowns and the Add button are off. The dimension dropdown reads "All dimensions configured".
 - A dimension row holds the dimension name on the left. An arrow button and a minus button sit at the right end, in that sequence.
 - The arrow button is 20x20. It draws the server list sprite `server_list/join`, and `server_list/join_highlighted` on hover.
 - The arrow sprite draws at its own size of 32 pixels, centered on the arrow.
 - The arrow button opens the dimension screen. Its narration is "Configure" and the dimension name.
 - The minus button is 20x20. It removes the dimension and its settings.
 - An add or a remove of a dimension rebuilds the list and keeps the scroll position.
+- After a remove, the dimension dropdown shows the removed dimension.
 - A return from the dimension screen or the preview rebuilds the list.
 - The header keeps its centered title. A Copy button and a Paste button sit at the right end of the header row, in that sequence.
 - Each header button is 20 high and fits its text. A gap of 4 separates them. The Paste button ends 8 units from the right window edge.
 - The tooltip of Copy is "Copy to Clipboard". The tooltip of Paste is "Paste from Clipboard".
 - Copy writes the settings to the system clipboard as one line of JSON. Only the settings codec knows the fields.
+- Copy and Paste use registry ops over the worldgen registries of the creation context.
 - Paste parses the clipboard at once. A good parse replaces the settings and rebuilds the list.
 - A bad parse shows a system toast with the title "Paste failed" and the parse error. The settings stay.
-- The dimension screen has no Copy button and no Paste button.
+- The dimension screen has no Copy button and no Paste button for the whole settings.
 
 ### Dimension screen
 
 - The dimension screen edits a copy of the settings.
-- Its title is "Aerolite Settings: " and the dimension name. The title shows below the tab bar.
+- Its title is "Amazing Pillars: " and the dimension name. The title shows below the tab bar.
 - A tab bar at the top holds two tabs: Shaft Placement and Shaft Variations.
 - The footer holds Done and Cancel.
-- Done writes the edited settings back to the Aerolite screen. Cancel and Escape drop them.
+- Done writes the edited settings back to the shafts screen. Cancel and Escape drop them.
 - The tab Shaft Placement holds the column chance slider, then the two spacing sliders in one row.
-- For the Overworld, the tab Shaft Placement adds the header Clouds and the cloud height slider.
 - The tab Shaft Variations holds the rows of each variation, then the Add Variation button.
 - The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the three block fields, and the button row.
 - The button row holds the Copy button (export), the Paste button (import) and the Remove button, in that sequence.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.
-- The cloud height slider runs from Y -64 to Y 320 in steps of 8.
 - The weight slider runs from 0 to 16. The last positive weight of a dimension does not go below 1.
 - The maze bias slider runs from 5% to 95% in steps of 5%.
 - The maze bias label says "ringwise" below 50%, "uniform" at 50% and "lengthwise" above 50%.
@@ -369,22 +431,24 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - Export writes one variation to the system clipboard as one line of JSON.
 - The JSON of one variation has the fields of a variation entry: bias, decay_scale, decay_threshold, erosion_threshold, interior, wall and path.
 - The JSON of one variation holds no weight. Only the variation codec knows the fields.
-- The codec leaves out each field at its default value, so the export can omit bias and the decay fields.
+- The variation codec writes every field.
 - Import parses the clipboard at once as one variation.
 - A good import replaces the variation and keeps the weight of its row. It rebuilds the tab.
 - An import ignores a weight in the clipboard text.
 - A bad import shows a system toast with the title "Import failed" and the parse error. The variation stays.
-- The tooltip of Export is "Copy this variation to the clipboard". The tooltip of Import is "Replace this variation from the clipboard".
+- The tooltip of Export is "Export this variation to the clipboard". The tooltip of Import is "Import this variation from the clipboard".
 - The Add Variation button appends a copy of the first variation.
+- A dimension without a variation gets `aerolite:stone` with weight 1 from Add Variation.
 - An add or a remove of a variation rebuilds the tab and keeps the scroll position.
+- The dimension screen and the panel have no cloud height slider. The cloud height stays a field of the holder settings.
 
 ### Preview
 
-- The footer of the Aerolite screen has a Preview button between Done and Cancel.
-- Each footer button of the Aerolite screen is half the vanilla default button width.
+- The footer of the shafts screen has a Preview button between Done and Cancel.
+- Each footer button of the shafts screen is half the vanilla default button width.
 - The Preview button shows only when ImGui loaded.
 - The Preview button opens the preview screen with a copy of the settings.
-- Done in the preview sends the copy back to the Aerolite screen. Cancel drops the copy.
+- Done in the preview sends the copy back to the shafts screen. Cancel drops the copy.
 - The preview shows the shafts of a square region of chunks around the region center.
 - The region center is a world X and Z position in blocks. It starts at the origin.
 - The region is the square of `2 * radius + 1` chunks around the chunk that holds the region center.
@@ -397,7 +461,6 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The id of a dimension header does not change in a rebuild. So the header keeps its open state after an add or a remove.
 - Each dimension header holds two groups that start open: Shaft Placement and Shaft Variations.
 - The group Shaft Placement holds the column chance slider and the two spacing sliders.
-- For the Overworld, the group Shaft Placement adds the text Clouds and the cloud height slider.
 - The group Shaft Variations holds the variation rows and the Add Variation button.
 - Each variation row of the panel shows the sliders in the menu sequence: weight, maze bias, decay scale, decay threshold, erosion threshold.
 - The block fields follow the sliders. The Export button, the Import button and the Remove button follow on one line.
@@ -406,16 +469,23 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - A radio button left of each dimension name selects the previewed dimension.
 - The radio buttons and the dimension dropdown of the Preview section always show the same dimension.
 - A small Remove button sits at the right end of each dimension header in the panel.
-- After the dimensions, the panel has a combo of the dimensions to add and an Add button.
-- When no dimension is left to add, the combo and the Add button are off. The combo reads "All dimensions configured".
+- After the dimensions, the panel has a dimension combo, a list combo and an Add button.
+- The list combo lists "Blank" and every variation list by its id path. It follows the rules of the list dropdown of the shafts screen.
+- When no dimension is left to add, both combos and the Add button are off. The dimension combo reads "All dimensions configured".
 - The panel shows the label of each block field left of the field. A block field has no tooltip.
 - The panel shows the block fields in the sequence of the menu, from top to bottom.
 - The dropdown of a panel block field is a popup over the panel. It moves no other widget.
 - The popup shows at most eight blocks with their item icons. It scrolls when the space below the field is too short.
 - A click on a block in the popup sets the field and the variation.
-- The Preview section of the panel has a dimension dropdown. It lists every level of the world being created with a noise generator.
+- The Preview section of the panel has a dimension dropdown. It lists every dimension of the world being created, whatever its generator.
 - The Overworld, the Nether and the End come first. The preview starts on the first dimension of the list.
-- The dimension gives the build height, the biome source, the variations and the sky of the preview.
+- The dimension type gives the build height and the sky of the preview. The generator gives the biome source.
+- The noise settings of a noise generator serve only the climate sampler of the biome source.
+- A generator without noise settings samples biomes with the vanilla dummy noise settings, `NoiseGeneratorSettings.dummy()`.
+- The climate of the dummy noise settings is zero everywhere. So a multi-noise biome source shows one biome.
+- A biome source can fail without a running server. The Twilight Forest biome source reads the Overworld seed of the server.
+- After the first failure of a biome source, the preview scene shows its fallback biome. The fallback is the first possible biome of the source, else the Plains.
+- The preview logs the failure once per scene.
 - A previewed dimension without a variations list shows the empty region: the sky, the grid and the outline.
 - A removed dimension stays in the preview and shows the empty region.
 - The Preview section of the panel has a seed field. The field starts with the seed text of the world creation screen.
@@ -426,7 +496,7 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - Done in the preview writes the seed text to the seed field of the world creation screen. Cancel drops it.
 - A Copy button and a Paste button sit on one line after the seed row. They have the tooltips of the header buttons.
 - Copy in the panel writes the preview copy of the settings to the clipboard.
-- Paste in the panel replaces the preview copy and starts a rebuild. A bad parse shows the toast of the Aerolite screen.
+- Paste in the panel replaces the preview copy and starts a rebuild. A bad parse shows the toast of the shafts screen.
 - The toast draws left of the panel, because the window reports the reduced width.
 - The radius slider runs from 2 to 32 chunks in steps of 1.
 - The radius starts at the render distance option of the client.
@@ -519,8 +589,14 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - The binding resolves once per level load. A reload of the data packs does not change it.
 - The project timed a mixin field on the server level against the attachment. Per chunk, the difference stayed below the noise.
 - So the attachment holds the shaft data. The project rule allows a mixin only when no API can do the task.
-- A data map value for the dimension wins over the generator settings.
-- Without a data map value, a level takes the generator settings for its dimension. Its generator must be the Aerolite generator, and the settings must list the dimension.
+- A data map value for the dimension wins over the pending settings and the generator settings.
+- Without a data map value, a level takes the claimed pending settings when they list its dimension.
+- The server claims pending settings only for a new world. See [Hand-over to the server](#hand-over-to-the-server).
+- Claimed pending settings give their cloud height to each level of the dimension type `aerolite:overworld`, listed or not.
+- Without a data map value and without pending settings for it, a level takes the generator settings for its dimension. Its generator must be the Aerolite generator, and the settings must list the dimension.
+- A server with claimed pending settings writes the world shaft pack from them at the first level load.
+- That pack holds each listed dimension without a data map value, and the cloud height of the pending settings.
+- A new world gets vanilla noise generators. So only a world of 0.2 takes generator settings.
 - A level that takes the generator settings and has the dimension type `aerolite:overworld` takes the cloud height of the generator settings.
 - A generator without the field `aerolite` takes the default settings. They come from the shipped variation lists and placements.
 - A 0.1.0 save without a variation map reads the default lists from the registries of the save.

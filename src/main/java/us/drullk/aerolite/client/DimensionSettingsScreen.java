@@ -30,10 +30,10 @@ import java.util.function.UnaryOperator;
 
 /**
  * The settings screen of one dimension. It edits a copy of the settings.
- * The tab Shaft Placement holds the placement sliders. For the Overworld it also holds the cloud height slider.
+ * The tab Shaft Placement holds the placement sliders.
  * The tab Shaft Variations holds the variation rows and the Add Variation button.
  * Export and Import move one variation without its weight through the system clipboard.
- * Done sends the copy back to the preset screen. Cancel and Escape drop it.
+ * Done sends the copy back to the shafts screen. Cancel and Escape drop it.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
@@ -62,7 +62,7 @@ public class DimensionSettingsScreen extends Screen {
     private boolean rebuildPending;
 
     /**
-     * @param settings the settings of every dimension; the screen edits the entry of {@code dimension} and the cloud height
+     * @param settings the settings of every dimension; the screen edits the entry of {@code dimension}
      * @param onDone   takes the edited settings when the user clicks Done
      */
     public DimensionSettingsScreen(Screen parent, PresetTools tools, ResourceKey<Level> dimension, AeroliteSettings settings, Consumer<AeroliteSettings> onDone) {
@@ -118,7 +118,7 @@ public class DimensionSettingsScreen extends Screen {
         return this.settings.placement(this.dimension);
     }
 
-    /** The column chance and the two spacing sliders. The Overworld adds the cloud height under the header Clouds. */
+    /** The column chance and the two spacing sliders. */
     private void populatePlacement(SettingsList list) {
         list.addRow(new StepSlider(PresetSliders.FRACTION_STEPS, this.sliders.fractionStep(this.placement().columnChance()),
                 step -> Component.translatable(KEY + "column_chance", this.sliders.percent(step)),
@@ -138,13 +138,6 @@ public class DimensionSettingsScreen extends Screen {
                     spacing[0].setStep(this.sliders.spacingStep(this.placement().minShaftSpacing()));
                 });
         list.addRow(spacing);
-
-        if (Level.OVERWORLD.equals(this.dimension)) {
-            list.addHeader(Component.translatable(KEY + "clouds"));
-            list.addRow(new StepSlider(PresetSliders.CLOUD_HEIGHT_STEPS, this.sliders.cloudHeightStep(this.settings.cloudHeight()),
-                    step -> Component.translatable(KEY + "cloud_height", this.sliders.cloudHeight(step)),
-                    step -> this.settings = this.settings.withCloudHeight(this.sliders.cloudHeight(step))));
-        }
     }
 
     private void editPlacement(UnaryOperator<ShaftPlacement> edit) {

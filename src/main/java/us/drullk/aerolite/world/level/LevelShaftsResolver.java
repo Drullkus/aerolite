@@ -22,7 +22,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 /**
- * Resolves the shaft data of a server level from the data maps, or from the settings of an Aerolite generator.
+ * Resolves the shaft data of a server level from the data maps, the pending settings of a new world, or the settings of an Aerolite generator.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
@@ -31,37 +31,49 @@ public final class LevelShaftsResolver {
 
     private final ShaftMazes mazes;
     private final DimensionShaftValues values;
+    private final PendingShaftSettings pending;
 
-    public LevelShaftsResolver(@Autowired ShaftMazes mazes, @Autowired DimensionShaftValues values) {
+    public LevelShaftsResolver(@Autowired ShaftMazes mazes, @Autowired DimensionShaftValues values, @Autowired PendingShaftSettings pending) {
         this.mazes = mazes;
         this.values = values;
+        this.pending = pending;
     }
 
-    /** The shaft data of the level, from its dimension, its generator and the loaded data maps. */
+    /** The shaft data of the level, from its dimension, the loaded data maps, the pending settings and its generator. */
     public LevelShafts resolve(ServerLevel level) {
-        return this.resolve(level, level.dimension(), level.getChunkSource().getGenerator(), this.values.get(level.dimension()));
+        return this.resolve(level, level.dimension(), level.getChunkSource().getGenerator(), this.values.get(level.dimension()), this.pending.claimed());
     }
 
     /**
      * The shaft data of a dimension of the level's world.
-     * A data map value wins. Without one, the generator settings for the dimension apply, with their cloud height.
+     * A data map value wins. Then the pending settings apply when they list the dimension. Then the generator settings apply.
+     * Pending settings give their cloud height to a level of the Aerolite Overworld type, whether they list the dimension or not.
      *
-     * @param value the data map value of the dimension, if one exists
+     * @param value   the data map value of the dimension, if one exists
+     * @param pending the settings that the server claimed for a new world, if any
      */
-    public LevelShafts resolve(ServerLevel level, ResourceKey<Level> dimension, ChunkGenerator generator, Optional<VariationList> value) {
+    public LevelShafts resolve(ServerLevel level, ResourceKey<Level> dimension, ChunkGenerator generator, Optional<VariationList> value,
+                               Optional<AeroliteSettings> pending) {
         ShaftLookup lookup = ShaftLookup.of(level.registryAccess());
         OptionalInt cloudHeight = this.cloudHeight(level);
+        boolean aeroliteOverworld = level.dimensionTypeRegistration().is(AeroliteWorldgen.OVERWORLD_TYPE);
         DimensionSettings settings = DimensionSettings.EMPTY;
         LevelShafts.Source source = LevelShafts.Source.NONE;
+        if (pending.isPresent() && aeroliteOverworld) {
+            cloudHeight = OptionalInt.of(pending.get().cloudHeight());
+        }
         if (value.isPresent()) {
             settings = lookup.dimension(dimension, value.get());
             source = LevelShafts.Source.DATA_MAP;
+        } else if (pending.isPresent() && pending.get().dimensions().containsKey(dimension)) {
+            settings = pending.get().dimension(dimension);
+            source = LevelShafts.Source.PENDING;
         } else if (generator instanceof AeroliteChunkGenerator aerolite) {
             AeroliteSettings generatorSettings = aerolite.aeroliteSettings(level.registryAccess());
             if (generatorSettings.dimensions().containsKey(dimension)) {
                 settings = generatorSettings.dimension(dimension);
                 source = LevelShafts.Source.GENERATOR;
-                if (level.dimensionTypeRegistration().is(AeroliteWorldgen.OVERWORLD_TYPE)) {
+                if (aeroliteOverworld) {
                     cloudHeight = OptionalInt.of(generatorSettings.cloudHeight());
                 }
             }

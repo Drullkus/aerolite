@@ -3,7 +3,7 @@
     "minecraft:overworld": {
       "type": "aerolite:overworld",
       "generator": {
-        "type": "aerolite:aerolite",
+        "type": "minecraft:noise",
         "biome_source": {
           "type": "minecraft:multi_noise",
           "preset": "minecraft:overworld"
@@ -14,7 +14,7 @@
     "minecraft:the_end": {
       "type": "minecraft:the_end",
       "generator": {
-        "type": "aerolite:aerolite",
+        "type": "minecraft:noise",
         "biome_source": {
           "type": "minecraft:the_end"
         },
@@ -24,7 +24,7 @@
     "minecraft:the_nether": {
       "type": "minecraft:the_nether",
       "generator": {
-        "type": "aerolite:aerolite",
+        "type": "minecraft:noise",
         "biome_source": {
           "type": "minecraft:multi_noise",
           "preset": "minecraft:nether"

@@ -5,24 +5,26 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
 import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * A button that shows one chosen dimension. A click opens a list of the candidates below the button.
- * A click on an entry picks it and closes the list.
+ * A button that shows one chosen candidate. A click opens a list of the candidates below the button.
+ * A click on an entry picks it and closes the list. A pick tells the pick listener.
  * The screen draws the list and sends clicks to it, so the list covers the rows below.
  * The list shows only while the button has focus.
  * With no candidate, the button is off and shows the empty text.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ *
+ * @param <T> the type of the candidates
  */
-public class DimensionDropdown extends AbstractButton {
+public class ChoiceDropdown<T> extends AbstractButton {
 
     private static final int ENTRY_HEIGHT = 14;
     private static final int ARROW_WIDTH = 7;
@@ -30,8 +32,10 @@ public class DimensionDropdown extends AbstractButton {
     private static final int HIGHLIGHT_COLOR = 0xFF404060;
     private static final int OUTLINE_COLOR = 0xFFA0A0A0;
 
-    private final List<ResourceKey<Level>> candidates;
-    private final Function<ResourceKey<Level>, Component> names;
+    private final List<T> candidates;
+    private final Function<T, Component> names;
+    private Consumer<T> onPick = picked -> {
+    };
     private int chosen;
     private int highlighted;
     private boolean open;
@@ -40,8 +44,7 @@ public class DimensionDropdown extends AbstractButton {
      * @param preferred the candidate to show first; the first candidate when it is absent
      * @param empty     the text when no candidate exists
      */
-    public DimensionDropdown(List<ResourceKey<Level>> candidates, @Nullable ResourceKey<Level> preferred,
-                             Function<ResourceKey<Level>, Component> names, Component empty) {
+    public ChoiceDropdown(List<T> candidates, @Nullable T preferred, Function<T, Component> names, Component empty) {
         super(0, 0, SettingsList.HALF_WIDTH, 20, empty);
         this.candidates = List.copyOf(candidates);
         this.names = names;
@@ -54,8 +57,23 @@ public class DimensionDropdown extends AbstractButton {
 
     /** The chosen candidate, or null when no candidate exists. */
     @Nullable
-    public ResourceKey<Level> chosen() {
+    public T chosen() {
         return this.candidates.isEmpty() ? null : this.candidates.get(this.chosen);
+    }
+
+    /** Sets the listener that a pick from the list calls. */
+    public ChoiceDropdown<T> onPick(Consumer<T> onPick) {
+        this.onPick = onPick;
+        return this;
+    }
+
+    /** Shows the candidate. A value outside the candidates changes nothing. It calls no pick listener. */
+    public void choose(T candidate) {
+        int index = this.candidates.indexOf(candidate);
+        if (index >= 0) {
+            this.chosen = index;
+            this.setMessage(this.names.apply(candidate));
+        }
     }
 
     /** True when the list shows. A refocus passes through unfocused, so focus is read here and not in {@code setFocused}. */
@@ -79,6 +97,7 @@ public class DimensionDropdown extends AbstractButton {
         this.chosen = index;
         this.setMessage(this.names.apply(this.candidates.get(index)));
         this.open = false;
+        this.onPick.accept(this.candidates.get(index));
     }
 
     private int listHeight() {

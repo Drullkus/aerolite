@@ -47,10 +47,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
- * Writes the generator settings of a world as the world data pack {@code aerolite_shafts}. The game enables the pack on the next world load.
+ * Writes the shaft settings of a world as the world data pack {@code aerolite_shafts}. The game enables the pack on the next world load.
+ * The settings come from the pending settings of a new world or from the Aerolite generators of a world of 0.2.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
@@ -70,13 +72,18 @@ public final class WorldShaftPack {
         this.values = values;
     }
 
-    /** Writes the pack unless the world holds a pack of that name. */
+    /** Writes the pack of the generator settings unless the world holds a pack of that name. */
     public void writeOnce(MinecraftServer server) {
+        this.writeOnce(server, () -> this.files(server.registryAccess()));
+    }
+
+    /** Writes the given files as the pack unless the world holds a pack of that name. */
+    public void writeOnce(MinecraftServer server, Supplier<Map<String, JsonElement>> pack) {
         Path target = server.getWorldPath(LevelResource.DATAPACK_DIR).resolve(NAME);
         if (Files.exists(target)) {
             return;
         }
-        Map<String, JsonElement> files = this.files(server.registryAccess());
+        Map<String, JsonElement> files = pack.get();
         // A partial pack stays outside the data pack folder.
         Path temporary = server.getWorldPath(LevelResource.ROOT).resolve(NAME + ".tmp");
         try {
@@ -88,7 +95,7 @@ public final class WorldShaftPack {
             }
             Files.createDirectories(target.getParent());
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
-            Aerolite.LOGGER.info("Wrote the shaft settings of the world generators to the data pack {}. It loads on the next world load.", target);
+            Aerolite.LOGGER.info("Wrote the shaft settings of the world to the data pack {}. It loads on the next world load.", target);
         } catch (IOException exception) {
             Aerolite.LOGGER.error("Could not write the data pack {}", target, exception);
         }
@@ -116,6 +123,20 @@ public final class WorldShaftPack {
             }
         }
         return this.files(registries, dimensions, cloudHeight);
+    }
+
+    /**
+     * The files of the pack for the pending settings of a new world.
+     * Each listed dimension without a data map value gets values. The pack always holds the cloud height of the settings.
+     */
+    public Map<String, JsonElement> files(HolderLookup.Provider registries, AeroliteSettings settings) {
+        Map<ResourceKey<Level>, DimensionSettings> dimensions = new LinkedHashMap<>();
+        settings.dimensions().forEach((dimension, values) -> {
+            if (this.values.get(dimension).isEmpty()) {
+                dimensions.put(dimension, values);
+            }
+        });
+        return this.files(registries, dimensions, OptionalInt.of(settings.cloudHeight()));
     }
 
     /**

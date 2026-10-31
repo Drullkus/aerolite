@@ -12,8 +12,9 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import java.util.Optional;
 
 /**
- * The noise-based generator of the preset. It carries the settings of the world creation menu.
- * The shafts step does not read the generator. A level reads its settings only when the data map has no value for it.
+ * The noise-based generator of the preset in 0.2. It carries the shaft settings of a world of 0.2, so it stays registered.
+ * A new world gets vanilla noise generators. The shafts step does not read the generator.
+ * A level reads its settings only when the data map has no value for it.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.

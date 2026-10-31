@@ -10,8 +10,6 @@ import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.biome.BiomeSource;
-import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -34,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
 
@@ -43,23 +42,21 @@ final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
     private final int minY;
     private final int height;
     private final boolean constantAmbientLight;
-    private final BiomeSource biomeSource;
-    private final Climate.Sampler sampler;
+    private final PreviewBiomes biomeLookup;
     private final Map<Long, Holder<Biome>> biomes = new ConcurrentHashMap<>();
     private final LevelLightEngine lightEngine;
 
     /**
      * @param chunks the chunks of the region around {@code center}, indexed by {@link RegionChunks#index}; the paint thread fills it
      */
-    PreviewBlockGetter(ProtoChunk[] chunks, ChunkPos center, int radius, int minY, int height, boolean constantAmbientLight, BiomeSource biomeSource, Climate.Sampler sampler) {
+    PreviewBlockGetter(ProtoChunk[] chunks, ChunkPos center, int radius, int minY, int height, boolean constantAmbientLight, PreviewBiomes biomeLookup) {
         this.chunks = chunks;
         this.center = center;
         this.radius = radius;
         this.minY = minY;
         this.height = height;
         this.constantAmbientLight = constantAmbientLight;
-        this.biomeSource = biomeSource;
-        this.sampler = sampler;
+        this.biomeLookup = biomeLookup;
         this.lightEngine = new LevelLightEngine(this, false, false);
     }
 
@@ -142,7 +139,7 @@ final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
         int quartY = QuartPos.fromBlock(pos.getY());
         int quartZ = QuartPos.fromBlock(pos.getZ());
         Holder<Biome> biome = this.biomes.computeIfAbsent(BlockPos.asLong(quartX, quartY, quartZ),
-                key -> this.biomeSource.getNoiseBiome(quartX, quartY, quartZ, this.sampler));
+                key -> this.biomeLookup.at(quartX, quartY, quartZ));
         return resolver.getColor(biome.value(), pos.getX(), pos.getZ());
     }
 

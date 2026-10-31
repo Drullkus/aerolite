@@ -11,6 +11,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.WorldPresetTags;
 import net.minecraft.world.level.ChunkPos;
@@ -22,6 +23,7 @@ import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.chunk.status.ChunkPyramid;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -326,21 +328,41 @@ public final class ShaftGameTests {
         return chunk.getBlockState(pos);
     }
 
+    /** The noise generator of one dimension of the preset. */
+    private static NoiseBasedChunkGenerator presetGenerator(ServerLevel level, ResourceKey<LevelStem> stem) {
+        Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
+        return (NoiseBasedChunkGenerator) preset.value().createWorldDimensions().dimensions().get(stem).generator();
+    }
+
+    /** An Aerolite generator of 0.2 over the noise settings and the biome source of the preset Overworld. */
+    private static AeroliteChunkGenerator shim(ServerLevel level, Optional<AeroliteSettings> settings) {
+        NoiseBasedChunkGenerator generator = presetGenerator(level, LevelStem.OVERWORLD);
+        return new AeroliteChunkGenerator(generator.getBiomeSource(), generator.generatorSettings(), settings);
+    }
+
     @GameTest(template = "empty")
-    public static void presetIsNormalAndBuildsShafts(GameTestHelper helper) {
+    public static void presetIsNormalAndUsesNoiseGenerators(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         Registry<WorldPreset> presets = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET);
         Holder<WorldPreset> preset = presets.getHolderOrThrow(AeroliteWorldgen.PRESET);
         helper.assertTrue(preset.is(WorldPresetTags.NORMAL), "The preset is not in the normal world type list");
         WorldDimensions dimensions = preset.value().createWorldDimensions();
         for (ResourceKey<LevelStem> stem : List.of(LevelStem.OVERWORLD, LevelStem.NETHER, LevelStem.END)) {
-            helper.assertTrue(dimensions.dimensions().get(stem).generator() instanceof AeroliteChunkGenerator, "A dimension of the preset has no Aerolite generator");
+            helper.assertTrue(dimensions.dimensions().get(stem).generator().getClass() == NoiseBasedChunkGenerator.class,
+                    "A dimension of the preset has no vanilla noise generator");
         }
-        AeroliteChunkGenerator generator = (AeroliteChunkGenerator) dimensions.dimensions().get(LevelStem.OVERWORLD).generator();
-        helper.assertTrue(generator.aeroliteSettings().isEmpty(), "The preset generator carries settings");
-        LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, generator, Optional.empty());
-        helper.assertTrue(shafts.source() == LevelShafts.Source.GENERATOR, "The preset generator gave no shaft settings");
-        helper.assertTrue(shafts.settings().equals(ShaftLookup.of(level.registryAccess()).defaults(Level.OVERWORLD)), "The preset generator did not take the default settings");
+        LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, presetGenerator(level, LevelStem.OVERWORLD), Optional.empty(), Optional.empty());
+        helper.assertTrue(shafts.source() == LevelShafts.Source.NONE, "The preset generator gave shaft settings");
+        helper.assertFalse(shafts.layout().hasShafts(), "The preset generator alone gave shafts");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void shimGeneratorBuildsDefaultShafts(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, shim(level, Optional.empty()), Optional.empty(), Optional.empty());
+        helper.assertTrue(shafts.source() == LevelShafts.Source.GENERATOR, "The generator of 0.2 gave no shaft settings");
+        helper.assertTrue(shafts.settings().equals(ShaftLookup.of(level.registryAccess()).defaults(Level.OVERWORLD)), "The generator of 0.2 did not take the default settings");
         ShaftLayout layout = shafts.layout();
         ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.X, 0).orElseThrow();
         ChunkPos pos = new ChunkPos(0, SectionPos.blockToSectionCoord(shaft.position()));
@@ -354,19 +376,50 @@ public final class ShaftGameTests {
     @GameTest(template = "empty")
     public static void dataMapValueWinsOverTheGenerator(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
-        AeroliteChunkGenerator generator = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
+        AeroliteChunkGenerator generator = shim(level, Optional.empty());
         ResourceKey<ShaftVariation> end = ResourceKey.create(ShaftRegistries.SHAFT_VARIATION, ShaftRegistries.id("end"));
         VariationList value = new VariationList(List.of(new VariationList.Entry(end, 1)));
-        LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, generator, Optional.of(value));
+        LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, generator, Optional.of(value), Optional.of(TestSettings.SETTINGS));
         helper.assertTrue(shafts.source() == LevelShafts.Source.DATA_MAP, "The data map value did not win");
         ShaftVariation endVariation = level.registryAccess().registryOrThrow(ShaftRegistries.SHAFT_VARIATION).getOrThrow(end);
         helper.assertTrue(shafts.layout().variation(shafts.layout().shaft(ShaftLayout.Axis.X, 0).orElseThrow()) == endVariation, "A shaft did not take the variation of the data map");
         ShaftPlacement placement = level.registryAccess().registryOrThrow(ShaftRegistries.SHAFT_PLACEMENT).getOrThrow(ShaftRegistries.placementOf(Level.OVERWORLD));
         helper.assertTrue(shafts.settings().placement().equals(placement), "The dimension did not take the placement under its id");
         ResourceKey<Level> elsewhere = ResourceKey.create(Registries.DIMENSION, ShaftRegistries.id("elsewhere"));
-        helper.assertTrue(resolver.resolve(level, elsewhere, generator, Optional.of(value)).settings().placement().equals(ShaftPlacement.DEFAULT),
+        helper.assertTrue(resolver.resolve(level, elsewhere, generator, Optional.of(value), Optional.empty()).settings().placement().equals(ShaftPlacement.DEFAULT),
                 "A dimension without a placement entry did not take the default placement");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void pendingSettingsWinOverTheGenerator(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        AeroliteChunkGenerator generator = shim(level, Optional.empty());
+        LevelShafts pending = resolver.resolve(level, Level.OVERWORLD, generator, Optional.empty(), Optional.of(TestSettings.SETTINGS));
+        helper.assertTrue(pending.source() == LevelShafts.Source.PENDING, "The pending settings did not win over the generator");
+        helper.assertTrue(pending.settings().equals(TestSettings.OVERWORLD), "The level did not take the pending settings of its dimension");
+        AeroliteSettings netherOnly = TestSettings.SETTINGS.withoutDimension(Level.OVERWORLD).withoutDimension(Level.END);
+        LevelShafts unlisted = resolver.resolve(level, Level.OVERWORLD, generator, Optional.empty(), Optional.of(netherOnly));
+        helper.assertTrue(unlisted.source() == LevelShafts.Source.GENERATOR, "Pending settings without the dimension blocked the generator");
+        LevelShafts vanilla = resolver.resolve(level, Level.OVERWORLD, presetGenerator(level, LevelStem.OVERWORLD), Optional.empty(), Optional.of(TestSettings.SETTINGS));
+        helper.assertTrue(vanilla.source() == LevelShafts.Source.PENDING && vanilla.layout().hasShafts(), "Pending settings gave no shafts to a vanilla generator");
+        LevelShafts none = resolver.resolve(level, Level.OVERWORLD, presetGenerator(level, LevelStem.OVERWORLD), Optional.empty(), Optional.of(netherOnly));
+        helper.assertTrue(none.source() == LevelShafts.Source.NONE && !none.layout().hasShafts(), "A vanilla generator got shafts from pending settings without its dimension");
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void worldPackOfPendingSettings(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ResourceKey<Level> twilight = ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath("twilightforest", "twilight_forest"));
+        AeroliteSettings settings = TestSettings.SETTINGS.withoutDimension(Level.END).withDimension(twilight, TestSettings.OVERWORLD).withCloudHeight(96);
+        Map<String, JsonElement> files = pack.files(level.registryAccess(), settings);
+        JsonObject values = files.get("data/aerolite/data_maps/dimension/shaft_variations.json").getAsJsonObject().getAsJsonObject("values");
+        helper.assertTrue(values.keySet().equals(Set.of("minecraft:overworld", "minecraft:the_nether", "twilightforest:twilight_forest")),
+                "The pack does not hold exactly the listed dimensions");
+        helper.assertTrue(files.containsKey("data/twilightforest/aerolite/shaft_placement/twilight_forest.json"), "The pack holds no placement of a modded dimension");
+        int cloudHeight = files.get("data/aerolite/data_maps/dimension_type/cloud_height.json").getAsJsonObject().getAsJsonObject("values").get("aerolite:overworld").getAsInt();
+        helper.assertTrue(cloudHeight == 96, "The pack does not hold the cloud height of the pending settings");
         helper.succeed();
     }
 
@@ -468,12 +521,10 @@ public final class ShaftGameTests {
     @GameTest(template = "empty")
     public static void unlistedDimensionGetsNoShafts(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        Holder<WorldPreset> preset = level.registryAccess().registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET);
-        AeroliteChunkGenerator presetGenerator = (AeroliteChunkGenerator) preset.value().createWorldDimensions().dimensions().get(LevelStem.OVERWORLD).generator();
         AeroliteSettings netherOnly = TestSettings.SETTINGS.withoutDimension(Level.OVERWORLD).withoutDimension(Level.END);
         helper.assertTrue(netherOnly.dimensions().keySet().equals(Set.of(Level.NETHER)), "The settings hold a dimension other than the Nether");
-        LevelShafts listed = resolver.resolve(level, Level.OVERWORLD, presetGenerator.withAeroliteSettings(TestSettings.SETTINGS), Optional.empty());
-        LevelShafts unlisted = resolver.resolve(level, Level.OVERWORLD, presetGenerator.withAeroliteSettings(netherOnly), Optional.empty());
+        LevelShafts listed = resolver.resolve(level, Level.OVERWORLD, shim(level, Optional.of(TestSettings.SETTINGS)), Optional.empty(), Optional.empty());
+        LevelShafts unlisted = resolver.resolve(level, Level.OVERWORLD, shim(level, Optional.of(netherOnly)), Optional.empty(), Optional.empty());
         helper.assertTrue(listed.layout().hasShafts(), "A listed dimension has no shafts");
         helper.assertTrue(unlisted.source() == LevelShafts.Source.NONE, "A dimension without variations took settings");
         helper.assertFalse(unlisted.layout().hasShafts(), "A dimension without variations has shafts");
