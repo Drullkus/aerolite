@@ -25,6 +25,7 @@ import javax.annotation.Nullable;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 @Configurable
 public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
@@ -80,7 +81,7 @@ public class AeroliteChunkGenerator extends NoiseBasedChunkGenerator {
         int maxY = level.getMaxBuildHeight();
         CachedLayout cached = this.cachedLayout;
         if (cached == null || cached.seed != seed || !cached.dimension.equals(dimension) || cached.minY != minY || cached.maxY != maxY) {
-            cached = new CachedLayout(seed, dimension, minY, maxY, new ShaftLayout(this.mazes, seed, dimension, minY, maxY, this.aeroliteSettings));
+            cached = new CachedLayout(seed, dimension, minY, maxY, new ShaftLayout(this.mazes, seed, dimension, minY, maxY, this.aeroliteSettings.dimension(dimension)));
             this.cachedLayout = cached;
         }
         return cached.layout;

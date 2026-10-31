@@ -3,16 +3,20 @@ package us.drullk.aerolite.world;
 import com.google.common.collect.ImmutableMap;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
+import com.mojang.serialization.DynamicOps;
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.MapLike;
+import com.mojang.serialization.RecordBuilder;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * The settings of the preset. The player sets them in the world creation menu.
@@ -20,155 +24,167 @@ import java.util.Map;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  *
- * @param minShaftSpacing the smallest center distance of two neighbor horizontal shafts on one axis
- * @param maxShaftSpacing the largest center distance of two neighbor horizontal shafts on one axis
- * @param columnChance    the chance that a crossing of two shafts in plan view gets a column
- * @param decayScale      the size of one decay region along a shaft, a power of two
- * @param decayThreshold  decay noise below the negative threshold keeps only maze walls, above it only maze paths
- * @param erosionThreshold decay noise beyond this threshold in either direction erodes shafts and junction boxes
- * @param cloudHeight     the Y level of the clouds in the Overworld
- * @param variations      the shaft variations of each listed dimension; a dimension outside the map gets no shafts
+ * @param cloudHeight the Y level of the clouds in the Overworld
+ * @param dimensions  the shaft settings of each listed dimension; a dimension outside the map gets no shafts
  */
-public record AeroliteSettings(
-        int minShaftSpacing,
-        int maxShaftSpacing,
-        float columnChance,
-        int decayScale,
-        float decayThreshold,
-        float erosionThreshold,
-        int cloudHeight,
-        Map<ResourceKey<Level>, List<ShaftVariation>> variations
-) {
+public record AeroliteSettings(int cloudHeight, Map<ResourceKey<Level>, DimensionSettings> dimensions) {
 
-    public static final int MIN_SHAFT_SPACING = 32;
-    public static final int MAX_SHAFT_SPACING = 1024;
-    public static final int MIN_DECAY_SCALE = 32;
-    public static final int MAX_DECAY_SCALE = 1024;
-    /** The smallest step from the decay threshold to the erosion threshold. */
-    public static final float THRESHOLD_STEP = 0.05F;
     public static final int MIN_CLOUD_HEIGHT = -64;
     public static final int MAX_CLOUD_HEIGHT = 320;
 
     public static final AeroliteSettings DEFAULT = new AeroliteSettings(
-            48,
-            80,
-            0.3F,
-            64,
-            0.35F,
-            0.5F,
             -32,
             ImmutableMap.of(
-                    Level.OVERWORLD, ShaftVariation.defaultList(Level.OVERWORLD),
-                    Level.NETHER, ShaftVariation.defaultList(Level.NETHER),
-                    Level.END, ShaftVariation.defaultList(Level.END)
+                    Level.OVERWORLD, DimensionSettings.defaults(Level.OVERWORLD),
+                    Level.NETHER, DimensionSettings.defaults(Level.NETHER),
+                    Level.END, DimensionSettings.defaults(Level.END)
             )
     );
 
-    private static final Codec<Integer> DECAY_SCALE_CODEC = Codec.intRange(MIN_DECAY_SCALE, MAX_DECAY_SCALE).validate(scale -> Mth.isPowerOfTwo(scale)
-            ? DataResult.success(scale)
-            : DataResult.error(() -> "Decay scale is not a power of two: " + scale));
+    private static final Codec<Integer> CLOUD_HEIGHT_CODEC = Codec.intRange(MIN_CLOUD_HEIGHT, MAX_CLOUD_HEIGHT);
 
-    private static final Codec<Integer> SPACING_CODEC = Codec.intRange(MIN_SHAFT_SPACING, MAX_SHAFT_SPACING);
+    private static final Codec<ResourceKey<Level>> DIMENSION_KEY_CODEC = ResourceKey.codec(Registries.DIMENSION);
 
-    private static final Codec<List<ShaftVariation>> VARIATION_LIST_CODEC = ShaftVariation.CODEC.listOf().validate(list -> list.stream().anyMatch(variation -> variation.weight() > 0)
-            ? DataResult.success(list)
-            : DataResult.error(() -> "A variation list holds no variation with a positive weight"));
+    /** The layout since 0.2.0. A save with the field {@code dimensions} uses it. */
+    private static final MapCodec<AeroliteSettings> CURRENT_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+            CLOUD_HEIGHT_CODEC.optionalFieldOf("cloud_height", DEFAULT.cloudHeight).forGetter(AeroliteSettings::cloudHeight),
+            Codec.unboundedMap(DIMENSION_KEY_CODEC, DimensionSettings.CODEC).fieldOf("dimensions").forGetter(AeroliteSettings::dimensions)
+    ).apply(instance, AeroliteSettings::new));
 
-    private static final Codec<Map<ResourceKey<Level>, List<ShaftVariation>>> VARIATIONS_CODEC = Codec.unboundedMap(ResourceKey.codec(Registries.DIMENSION), VARIATION_LIST_CODEC);
+    /** The top-level values of a 0.1.0 save. The placement and the decay values then apply to every dimension. */
+    private record LegacyValues(ShaftPlacement placement, int decayScale, float decayThreshold, float erosionThreshold, int cloudHeight) {
 
-    public static final Codec<AeroliteSettings> CODEC = RecordCodecBuilder.<AeroliteSettings>create(instance -> instance.group(
-            SPACING_CODEC.optionalFieldOf("min_shaft_spacing", DEFAULT.minShaftSpacing).forGetter(AeroliteSettings::minShaftSpacing),
-            SPACING_CODEC.optionalFieldOf("max_shaft_spacing", DEFAULT.maxShaftSpacing).forGetter(AeroliteSettings::maxShaftSpacing),
-            Codec.floatRange(0, 1).optionalFieldOf("column_chance", DEFAULT.columnChance).forGetter(AeroliteSettings::columnChance),
-            DECAY_SCALE_CODEC.optionalFieldOf("decay_scale", DEFAULT.decayScale).forGetter(AeroliteSettings::decayScale),
-            Codec.floatRange(0, 1).optionalFieldOf("decay_threshold", DEFAULT.decayThreshold).forGetter(AeroliteSettings::decayThreshold),
-            Codec.floatRange(THRESHOLD_STEP, 1).optionalFieldOf("erosion_threshold", DEFAULT.erosionThreshold).forGetter(AeroliteSettings::erosionThreshold),
-            Codec.intRange(MIN_CLOUD_HEIGHT, MAX_CLOUD_HEIGHT).optionalFieldOf("cloud_height", DEFAULT.cloudHeight).forGetter(AeroliteSettings::cloudHeight),
-            VARIATIONS_CODEC.optionalFieldOf("variations", DEFAULT.variations).forGetter(AeroliteSettings::variations)
-    ).apply(instance, AeroliteSettings::new)).validate(settings -> settings.minShaftSpacing <= settings.maxShaftSpacing
-            ? DataResult.success(settings)
-            : DataResult.error(() -> "Minimum shaft spacing exceeds maximum shaft spacing: " + settings.minShaftSpacing + " > " + settings.maxShaftSpacing)
-    ).xmap(AeroliteSettings::withErosionAboveDecay, settings -> settings);
+        private static final MapCodec<LegacyValues> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                ShaftPlacement.MAP_CODEC.forGetter(LegacyValues::placement),
+                ShaftVariation.DECAY_SCALE_CODEC.optionalFieldOf("decay_scale", ShaftVariation.DEFAULT_DECAY_SCALE).forGetter(LegacyValues::decayScale),
+                Codec.floatRange(0, 1).optionalFieldOf("decay_threshold", ShaftVariation.DEFAULT_DECAY_THRESHOLD).forGetter(LegacyValues::decayThreshold),
+                Codec.floatRange(ShaftVariation.THRESHOLD_STEP, 1).optionalFieldOf("erosion_threshold", ShaftVariation.DEFAULT_EROSION_THRESHOLD).forGetter(LegacyValues::erosionThreshold),
+                CLOUD_HEIGHT_CODEC.optionalFieldOf("cloud_height", DEFAULT.cloudHeight).forGetter(LegacyValues::cloudHeight)
+        ).apply(instance, LegacyValues::new));
 
-    /** A save from before the erosion threshold can hold a decay threshold above the default erosion threshold. */
-    private AeroliteSettings withErosionAboveDecay() {
-        float lowest = Math.min(1, this.decayThreshold + THRESHOLD_STEP);
-        return this.erosionThreshold >= lowest ? this : this.withErosionThreshold(lowest);
+        /** The erosion threshold of the save, at least one step above its decay threshold. */
+        private float foldedErosion() {
+            return Math.max(this.erosionThreshold, ShaftVariation.lowestErosion(this.decayThreshold));
+        }
+
+        /** The variation map codec of the save. A variation without decay fields takes the top-level values. */
+        private Codec<Map<ResourceKey<Level>, List<ShaftVariation>>> variationsCodec() {
+            Codec<ShaftVariation> variation = ShaftVariation.codec(this.decayScale, this.decayThreshold, this.foldedErosion());
+            return Codec.unboundedMap(DIMENSION_KEY_CODEC, DimensionSettings.variationListCodec(variation));
+        }
+
+        /** The default variations with the decay values of the save. */
+        private Map<ResourceKey<Level>, List<ShaftVariation>> defaultVariations() {
+            Map<ResourceKey<Level>, List<ShaftVariation>> map = new LinkedHashMap<>();
+            DEFAULT.dimensions.forEach((dimension, settings) -> map.put(dimension, settings.variations().stream()
+                    .map(variation -> variation.withDecayScale(this.decayScale).withDecayThreshold(this.decayThreshold).withErosionThreshold(this.foldedErosion()))
+                    .toList()));
+            return map;
+        }
+
+        private AeroliteSettings settings(Map<ResourceKey<Level>, List<ShaftVariation>> variations) {
+            Map<ResourceKey<Level>, DimensionSettings> dimensions = new LinkedHashMap<>();
+            variations.forEach((dimension, list) -> dimensions.put(dimension, new DimensionSettings(this.placement, list)));
+            return new AeroliteSettings(this.cloudHeight, ImmutableMap.copyOf(dimensions));
+        }
     }
 
-    /** The cell size of the jittered grid of shaft positions. */
-    public int meanShaftSpacing() {
-        return (this.minShaftSpacing + this.maxShaftSpacing) / 2;
+    /** Reads the 0.1.0 layout and the current layout. Writes only the current layout. */
+    private static final MapCodec<AeroliteSettings> MAP_CODEC = new MapCodec<>() {
+        @Override
+        public <T> Stream<T> keys(DynamicOps<T> ops) {
+            return CURRENT_CODEC.keys(ops);
+        }
+
+        @Override
+        public <T> DataResult<AeroliteSettings> decode(DynamicOps<T> ops, MapLike<T> input) {
+            return input.get("dimensions") != null ? CURRENT_CODEC.decode(ops, input) : decodeLegacy(ops, input);
+        }
+
+        @Override
+        public <T> RecordBuilder<T> encode(AeroliteSettings input, DynamicOps<T> ops, RecordBuilder<T> prefix) {
+            return CURRENT_CODEC.encode(input, ops, prefix);
+        }
+    };
+
+    public static final Codec<AeroliteSettings> CODEC = MAP_CODEC.codec();
+
+    private static <T> DataResult<AeroliteSettings> decodeLegacy(DynamicOps<T> ops, MapLike<T> input) {
+        return LegacyValues.CODEC.decode(ops, input).flatMap(values -> {
+            T variations = input.get("variations");
+            DataResult<Map<ResourceKey<Level>, List<ShaftVariation>>> lists = variations == null
+                    ? DataResult.success(values.defaultVariations())
+                    : values.variationsCodec().parse(ops, variations);
+            return lists.map(values::settings);
+        });
     }
 
-    public AeroliteSettings withShaftSpacing(int min, int max) {
-        return new AeroliteSettings(min, max, this.columnChance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.cloudHeight, this.variations);
-    }
-
-    public AeroliteSettings withColumnChance(float chance) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, chance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.cloudHeight, this.variations);
-    }
-
-    public AeroliteSettings withDecayScale(int scale) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, scale, this.decayThreshold, this.erosionThreshold, this.cloudHeight, this.variations);
-    }
-
-    public AeroliteSettings withErosionThreshold(float threshold) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, this.decayThreshold, threshold, this.cloudHeight, this.variations);
-    }
-
-    public AeroliteSettings withDecayThreshold(float threshold) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, threshold, this.erosionThreshold, this.cloudHeight, this.variations);
-    }
-
-    public AeroliteSettings withCloudHeight(int height) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, this.decayThreshold, this.erosionThreshold, height, this.variations);
+    /** The settings of a dimension. A dimension outside the map gets empty settings, so no shafts. */
+    public DimensionSettings dimension(ResourceKey<Level> dimension) {
+        return this.dimensions.getOrDefault(dimension, DimensionSettings.EMPTY);
     }
 
     /** The variations of a dimension. A dimension outside the map gets an empty list, so no shafts. */
     public List<ShaftVariation> variations(ResourceKey<Level> dimension) {
-        return this.variations.getOrDefault(dimension, List.of());
+        return this.dimension(dimension).variations();
     }
 
-    /** Puts the variation list of one dimension into the map. A listed dimension gets its list replaced. */
+    /** The placement of a dimension. A dimension outside the map gets the default placement. */
+    public ShaftPlacement placement(ResourceKey<Level> dimension) {
+        return this.dimension(dimension).placement();
+    }
+
+    public AeroliteSettings withCloudHeight(int height) {
+        return new AeroliteSettings(height, this.dimensions);
+    }
+
+    /** Puts the settings of one dimension into the map. A listed dimension gets its settings replaced. */
+    public AeroliteSettings withDimension(ResourceKey<Level> dimension, DimensionSettings settings) {
+        Map<ResourceKey<Level>, DimensionSettings> map = new LinkedHashMap<>(this.dimensions);
+        map.put(dimension, settings);
+        return new AeroliteSettings(this.cloudHeight, ImmutableMap.copyOf(map));
+    }
+
+    /** Puts the variation list of one dimension into the map. A dimension outside the map gets the default placement. */
     public AeroliteSettings withDimension(ResourceKey<Level> dimension, List<ShaftVariation> list) {
-        Map<ResourceKey<Level>, List<ShaftVariation>> map = new LinkedHashMap<>(this.variations);
-        map.put(dimension, List.copyOf(list));
-        return this.withVariationMap(map);
+        return this.withDimension(dimension, this.dimension(dimension).withVariations(list));
     }
 
-    /** Removes one dimension and its variations from the map, so the dimension gets no shafts. */
+    /** Removes one dimension and its settings from the map, so the dimension gets no shafts. */
     public AeroliteSettings withoutDimension(ResourceKey<Level> dimension) {
-        if (!this.variations.containsKey(dimension)) {
+        if (!this.dimensions.containsKey(dimension)) {
             return this;
         }
-        Map<ResourceKey<Level>, List<ShaftVariation>> map = new LinkedHashMap<>(this.variations);
+        Map<ResourceKey<Level>, DimensionSettings> map = new LinkedHashMap<>(this.dimensions);
         map.remove(dimension);
-        return this.withVariationMap(map);
+        return new AeroliteSettings(this.cloudHeight, ImmutableMap.copyOf(map));
     }
 
-    private AeroliteSettings withVariationMap(Map<ResourceKey<Level>, List<ShaftVariation>> map) {
-        return new AeroliteSettings(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, this.decayScale, this.decayThreshold, this.erosionThreshold, this.cloudHeight, ImmutableMap.copyOf(map));
+    /** Replaces the placement of a listed dimension. A dimension outside the map stays outside. */
+    public AeroliteSettings withPlacement(ResourceKey<Level> dimension, ShaftPlacement placement) {
+        DimensionSettings settings = this.dimensions.get(dimension);
+        return settings == null ? this : this.withDimension(dimension, settings.withPlacement(placement));
     }
 
     /** Replaces the variation at {@code index} in the list of one dimension. */
     public AeroliteSettings withVariation(ResourceKey<Level> dimension, int index, ShaftVariation variation) {
-        List<ShaftVariation> list = new ArrayList<>(this.variations.getOrDefault(dimension, List.of()));
+        List<ShaftVariation> list = new ArrayList<>(this.variations(dimension));
         list.set(index, variation);
         return this.withDimension(dimension, list);
     }
 
     /** Appends a variation to the list of one dimension. */
     public AeroliteSettings withAddedVariation(ResourceKey<Level> dimension, ShaftVariation variation) {
-        List<ShaftVariation> list = new ArrayList<>(this.variations.getOrDefault(dimension, List.of()));
+        List<ShaftVariation> list = new ArrayList<>(this.variations(dimension));
         list.add(variation);
         return this.withDimension(dimension, list);
     }
 
     /** Removes the variation at {@code index} from the list of one dimension. */
     public AeroliteSettings withoutVariation(ResourceKey<Level> dimension, int index) {
-        List<ShaftVariation> list = new ArrayList<>(this.variations.getOrDefault(dimension, List.of()));
+        List<ShaftVariation> list = new ArrayList<>(this.variations(dimension));
         list.remove(index);
         return this.withDimension(dimension, list);
     }

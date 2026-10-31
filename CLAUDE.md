@@ -26,7 +26,7 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Wilson's algorithm | The spanning tree sampler. A loop-erased random walk steps by edge weight until it hits the tree. |
 | Axis edge | An edge along the shaft axis. On a column the axis is Y. |
 | Ring edge | An edge around the shaft. |
-| Variation | One set of weight, maze bias, interior block, maze wall block and maze path block. Each shaft and column picks one. |
+| Variation | One set of weight, maze bias, decay scale, decay threshold, erosion threshold, interior block, maze wall block and maze path block. Each shaft and column picks one. |
 | Maze bias | The weight of axis edges in the maze sampler, 5% to 95%. Ring edges take the rest. 50% is uniform. |
 | Segment | One chunk length of a shaft. On a column it is one chunk section. Tree segments and connector segments alternate along the shaft. |
 | Tree segment | A segment whose nodes form one spanning tree. It has no crossing of its own. |
@@ -35,7 +35,7 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Crossing | A tree edge at a virtual node. It is the maze path between the two sampled parts. |
 | Junction segment | The segment that holds a junction. It spans the chunks with the nearest surviving ruling on each side of the box, two or three chunks. Its graph drops the box rulings and adds the shaft patch. |
 | Patch | One of the two exposed faces of a junction, a 7x7 node grid. The shaft patch is part of the junction segment of the horizontal shaft. The column patch is part of the junction segment of the column. |
-| Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. |
+| Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. Each variation sets its own decay scale and thresholds. |
 | Erosion | Removal of shaft and junction box blocks where decay noise passes the erosion threshold. It works from the surface toward the core. |
 | Shear | Noise that removes blocks from a column near one of its ends. |
 | Slot | One 16-block band of the build height. Each slot belongs to X shafts or to Z shafts. |
@@ -240,72 +240,102 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 
 ## World creation menu
 
-The player tweaks the settings in the world creation menu, like the superflat customize screen. The settings are:
+The player tweaks the settings in the world creation menu, like the superflat customize screen.
 
-| Setting | Default |
-|---|---|
-| Voronoi cell size | About 128 blocks |
-| Island fill fraction, lower bound | 0.3 |
-| Island fill fraction, upper bound | 0.9 |
-| Island height band | Y 0 to 128 |
-| Island type weights (landmass, biosphere, lake bowl, donut) | 8, 1, 1, 1 |
-| Minimum shaft spacing | 128 blocks |
-| Maximum shaft spacing | 384 blocks |
-| Column chance | 0.25 |
-| Maze decay scale | 256 blocks |
-| Maze decay threshold | 0.5 |
-| Shaft erosion threshold | 0.7 |
-| Overworld variations | Stone (stone, stone bricks, cobblestone), weight 7, maze bias 50%. Trial chamber (tuff, tuff bricks, oxidized copper), weight 1, maze bias 50%. |
-| Nether variations | Netherrack, nether bricks, red nether bricks. Weight 1, maze bias 50%. |
-| End variations | End stone, end stone bricks, purpur block. Weight 1, maze bias 50%. |
-| Bridge chance | 0.5 |
-| Allowed biome list | The vanilla biome list of the dimension |
-| Cloud height | Y -32 |
+### Settings
+
+- The cloud height is one setting of the whole preset. It is not a shaft placement value.
+- Each dimension has its own shaft settings: one shaft placement and one variation list.
+- The shaft placement holds the minimum shaft spacing, the maximum shaft spacing and the column chance.
+- Each variation holds its own decay scale, decay threshold and erosion threshold.
+
+| Setting | Scope | Default |
+|---|---|---|
+| Voronoi cell size | Preset | About 128 blocks |
+| Island fill fraction, lower bound | Preset | 0.3 |
+| Island fill fraction, upper bound | Preset | 0.9 |
+| Island height band | Preset | Y 0 to 128 |
+| Island type weights (landmass, biosphere, lake bowl, donut) | Preset | 8, 1, 1, 1 |
+| Bridge chance | Preset | 0.5 |
+| Allowed biome list | Preset | The vanilla biome list of the dimension |
+| Cloud height | Preset | Y -32 |
+| Minimum shaft spacing | Dimension | 48 blocks |
+| Maximum shaft spacing | Dimension | 80 blocks |
+| Column chance | Dimension | 0.3 |
+| Variation list | Dimension | The default list of the dimension in `ShaftVariation.java` |
+| Maze decay scale | Variation | 64 blocks |
+| Maze decay threshold | Variation | 0.35 |
+| Shaft erosion threshold | Variation | 0.5 |
 
 - Each island picks its fill fraction at random between the two bounds.
 - The island height band is the Y range of the island centers in the generating layer.
 - The shaft spacing is the center distance of two neighbor horizontal shafts on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a shaft.
-- The variations are a map from dimension to a list of variations. Every list holds at least one variation with a positive weight.
-- A dimension without a variations list gets no shafts.
+- The dimension settings are a map from dimension to shaft placement and variation list.
+- Every variation list holds at least one variation with a positive weight.
+- A dimension without an entry in the map gets no shafts.
 - A variation lists its blocks in the sequence interior block, maze wall block, maze path block.
-- The customize button opens the Aerolite screen when the preset is active. The screen edits every Aerolite dimension.
-- The screen has seven sliders: the column chance, the minimum shaft spacing, the maximum shaft spacing, the maze decay scale, the maze decay threshold, the shaft erosion threshold and the cloud height.
-- Each variation adds two sliders: the weight and the maze bias.
+- A save writes the layout of 0.2.0: the cloud height and the dimension map.
+- A save with a dimension map loads that map. It ignores the top-level fields of 0.1.0.
+- A 0.1.0 save holds the placement and the decay values at the top level, next to a map of variation lists.
+- A 0.1.0 save loads with its top-level placement in every dimension of its map.
+- In a 0.1.0 save, a variation without its own decay values takes the top-level decay values.
+- A 0.1.0 save without a variation map loads the default dimensions with its top-level values.
+- A variation with a decay threshold at or above its erosion threshold loads with the erosion threshold raised to the decay threshold plus 5%.
+- The other preset settings have no slider yet. They live in the generator settings with their defaults.
+
+### Aerolite screen
+
+- The customize button opens the Aerolite screen when the preset is active.
+- The Aerolite screen has the title "Aerolite Settings" and a footer.
+- Its list holds the add row first, then one row per configured dimension.
+- The add row holds a dropdown on the left and an Add button on the right.
+- The dropdown lists every level of the world being created that has no dimension settings.
+- A click on the dropdown opens its list. A pick closes the list.
+- The Add button adds the chosen dimension with its default settings.
+- The Overworld, the Nether and the End get their defaults. Any other dimension gets the default placement and one stone variation with weight 1.
+- When no dimension is left to add, the dropdown and the Add button are off. The dropdown reads "All dimensions configured".
+- The Overworld, the Nether and the End come first, then the others by id.
+- A dimension other than the three vanilla dimensions shows its id path as its name.
+- A dimension row holds the dimension name on the left. An arrow button and a minus button sit at the right end, in that sequence.
+- The arrow button is 20x20. It draws the server list sprite `server_list/join`, and `server_list/join_highlighted` on hover.
+- The arrow sprite draws at its own size of 32 pixels, centered on the arrow.
+- The arrow button opens the dimension screen. Its narration is "Configure" and the dimension name.
+- The minus button is 20x20. It removes the dimension and its settings.
+- An add or a remove of a dimension rebuilds the list and keeps the scroll position.
+- A return from the dimension screen or the preview rebuilds the list.
+
+### Dimension screen
+
+- The dimension screen edits a copy of the settings.
+- Its title is "Aerolite Settings: " and the dimension name. The title shows below the tab bar.
+- A tab bar at the top holds two tabs: Shaft Placement and Shaft Variations.
+- The footer holds Done and Cancel.
+- Done writes the edited settings back to the Aerolite screen. Cancel and Escape drop them.
+- The tab Shaft Placement holds the column chance slider, then the two spacing sliders in one row.
+- For the Overworld, the tab Shaft Placement adds the header Clouds and the cloud height slider.
+- The tab Shaft Variations holds the rows of each variation, then the Add Variation button.
+- The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the three block fields, and the Remove button.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.
-- The decay scale slider steps through the powers of two from 32 to 1024.
-- The decay threshold slider runs from 0% to 100% in steps of 5%. 100% is a threshold of 1.
-- The erosion threshold slider runs from 5% to 100% in steps of 5%.
-- The erosion threshold stays at least 5% above the decay threshold. A slider that passes the other pushes it along, so the decay threshold tops out at 95%.
-- A save with a decay threshold at or above its erosion threshold loads with the erosion threshold raised to the decay threshold plus 5%.
-- The cloud height slider is in the section Clouds, after the section Shaft Surface.
 - The cloud height slider runs from Y -64 to Y 320 in steps of 8.
-- The section Shaft Variations comes after the section Clouds.
-- Each configured dimension has a header with its name. The Overworld, the Nether and the End come first, then the others by id.
-- A dimension other than the three vanilla dimensions shows its id path as its name.
-- A Remove button at the right end of each dimension header removes the dimension and its variations.
-- Each variation has a row with a weight slider and a maze bias slider.
 - The weight slider runs from 0 to 16. The last positive weight of a dimension does not go below 1.
 - The maze bias slider runs from 5% to 95% in steps of 5%.
 - The maze bias label says "ringwise" below 50%, "uniform" at 50% and "lengthwise" above 50%.
-- Each variation has a row with three block fields. From left to right they are the maze wall block, the maze path block and the interior block.
-- In the menu, a text row above the block fields shows the label of each field. A block field has no tooltip.
+- The decay scale slider steps through the powers of two from 32 to 1024.
+- The decay threshold slider runs from 0% to 100% in steps of 5%. 100% is a threshold of 1.
+- The erosion threshold slider runs from 5% to 100% in steps of 5%.
+- The erosion threshold of a variation stays at least 5% above its decay threshold. A slider that passes the other pushes it along, so the decay threshold tops out at 95%.
+- The three block fields are, from left to right, the maze wall block, the maze path block and the interior block.
+- A text row above the block fields shows the label of each field. A block field has no tooltip.
 - A block field reads a block id or a block state string, such as `oxidized_copper` or `oak_log[axis=x]`.
 - Bad text gives the block field a red border. The field keeps its last good block.
 - While a block field has focus and text, a dropdown lists up to 8 blocks whose id or name holds the text. A click or Enter picks one.
 - The dropdown shows the item icon and the name of each block. It lists no air block.
-- Each variation has a Remove button. A dimension with one variation has its Remove button off.
-- An Add button after the rows of each dimension appends a copy of the first variation.
-- After the last dimension, an add row holds a dropdown on the left and an Add button on the right.
-- The dropdown lists every level of the world being created that has no variations list.
-- A click on the dropdown opens its list. A pick closes the list.
-- The Add button adds the chosen dimension with its default variation list.
-- The Overworld, the Nether and the End get their defaults. Any other dimension gets one stone variation with weight 1.
-- When no dimension is left to add, the dropdown and the Add button are off. The dropdown reads "All dimensions configured".
-- An add or a remove of a variation or a dimension rebuilds the list and keeps the scroll position.
-- The other settings have no slider yet. They live in the generator settings with their defaults.
+- A dimension with one variation has its Remove button off.
+- The Add Variation button appends a copy of the first variation.
+- An add or a remove of a variation rebuilds the tab and keeps the scroll position.
 
 ### Preview
 
@@ -318,12 +348,19 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The preview paints the shafts with the shaft step code into scratch proto chunks. The vanilla block renderer bakes the blocks.
 - An ImGui panel covers the right edge of the window. The game view fills the part left of the panel.
 - A splitter on the left edge of the panel sets the panel width, from 240 to 600 ImGui units.
-- The panel has the sections of the Aerolite screen, with the same slider steps and the same rules.
-- The panel shows its sections in this sequence: Preview, Shaft Placement, Shaft Surface, Clouds, Shaft Variations.
-- Under Shaft Variations, each dimension of the panel is a tree node that collapses. Each node starts open.
+- The panel edits the settings of the menu screens, with the same slider steps and the same rules.
+- The panel shows the Preview section, then one collapsing header per configured dimension, then the add row.
+- Each dimension header starts open.
+- The id of a dimension header does not change in a rebuild. So the header keeps its open state after an add or a remove.
+- Each dimension header holds two groups that start open: Shaft Placement and Shaft Variations.
+- The group Shaft Placement holds the column chance slider and the two spacing sliders.
+- For the Overworld, the group Shaft Placement adds the text Clouds and the cloud height slider.
+- The group Shaft Variations holds the variation rows and the Add Variation button.
+- Each variation row of the panel shows the sliders in the menu sequence: weight, maze bias, decay scale, decay threshold, erosion threshold.
+- The block fields and the Remove button follow the sliders.
 - A radio button left of each dimension name selects the previewed dimension.
 - The radio buttons and the dimension dropdown of the Preview section always show the same dimension.
-- A small Remove button sits at the right end of each dimension line in the panel.
+- A small Remove button sits at the right end of each dimension header in the panel.
 - After the dimensions, the panel has a combo of the dimensions to add and an Add button.
 - When no dimension is left to add, the combo and the Add button are off. The combo reads "All dimensions configured".
 - The panel shows the label of each block field left of the field. A block field has no tooltip.

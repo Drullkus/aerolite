@@ -3,7 +3,8 @@ package us.drullk.aerolite.world.shaft;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
-import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.DimensionSettings;
+import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
@@ -14,7 +15,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The placement of shafts, columns and junctions in one dimension. Every query is a pure function of the seed.
@@ -22,6 +25,7 @@ import java.util.Optional;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 public final class ShaftLayout {
 
@@ -80,7 +84,7 @@ public final class ShaftLayout {
     }
 
     private final ShaftMazes mazes;
-    private final AeroliteSettings settings;
+    private final ShaftPlacement placement;
     private final List<ShaftVariation> variations;
     private final int totalWeight;
     private final int minY;
@@ -93,28 +97,30 @@ public final class ShaftLayout {
     private final MixedRandomFactory columnMazeRandom;
     private final MixedRandomFactory shaftVariationRandom;
     private final MixedRandomFactory columnVariationRandom;
-    private final FractalNoise decayNoise;
+    private final MixedRandomFactory root;
+    /** One decay noise per decay scale. Every noise starts from the same seed hash. */
+    private final Map<Integer, FractalNoise> decayNoises = new ConcurrentHashMap<>();
     private final FractalNoise shearNoise;
 
     /**
      * @param dimension the dimension; its name makes the layout of each dimension differ
      * @param maxY      the top build limit, exclusive
      */
-    public ShaftLayout(ShaftMazes mazes, long seed, ResourceKey<Level> dimension, int minY, int maxY, AeroliteSettings settings) {
+    public ShaftLayout(ShaftMazes mazes, long seed, ResourceKey<Level> dimension, int minY, int maxY, DimensionSettings settings) {
         this.mazes = mazes;
-        this.settings = settings;
-        this.variations = settings.variations(dimension);
+        this.placement = settings.placement();
+        this.variations = settings.variations();
         this.totalWeight = this.variations.stream().mapToInt(ShaftVariation::weight).sum();
         this.minY = minY;
         this.maxY = maxY;
         MixedRandomFactory root = new MixedRandomFactory(seed).fork("aerolite:shafts/" + dimension.location());
+        this.root = root;
         this.shaftRandom = root.fork("shaft");
         this.columnRandom = root.fork("column");
         this.shaftMazeRandom = root.fork("shaft_maze");
         this.columnMazeRandom = root.fork("column_maze");
         this.shaftVariationRandom = root.fork("shaft_variation");
         this.columnVariationRandom = root.fork("column_variation");
-        this.decayNoise = new FractalNoise(root.fromHashOf("decay"), DECAY_OCTAVES, settings.decayScale());
         this.shearNoise = new FractalNoise(root.fromHashOf("shear"), SHEAR_OCTAVES, SHEAR_SCALE);
 
         // The bottom slot and the top slot hold no shaft.
@@ -134,8 +140,8 @@ public final class ShaftLayout {
         this.slotsZ = Arrays.stream(slots, slotCount / 2, slotCount).sorted().toArray();
     }
 
-    public AeroliteSettings settings() {
-        return this.settings;
+    public ShaftPlacement placement() {
+        return this.placement;
     }
 
     /** True when the dimension has at least one variation with a positive weight. */
@@ -168,8 +174,10 @@ public final class ShaftLayout {
         throw new IllegalStateException("The weights do not sum to the total weight");
     }
 
-    public FractalNoise decayNoise() {
-        return this.decayNoise;
+    /** The decay noise at the decay scale of a variation. */
+    public FractalNoise decayNoise(ShaftVariation variation) {
+        return this.decayNoises.computeIfAbsent(variation.decayScale(),
+                scale -> new FractalNoise(this.root.fromHashOf("decay"), DECAY_OCTAVES, scale));
     }
 
     public FractalNoise shearNoise() {
@@ -196,8 +204,8 @@ public final class ShaftLayout {
             return Optional.empty();
         }
         // A margin of half the minimum spacing keeps every neighbor distance between the minimum and the maximum.
-        int spacing = this.settings.meanShaftSpacing();
-        int margin = (this.settings.minShaftSpacing() + 1) / 2;
+        int spacing = this.placement.meanShaftSpacing();
+        int margin = (this.placement.minShaftSpacing() + 1) / 2;
         RandomSource random = this.shaftRandom.at(axis.ordinal(), cell, 0);
         int position = cell * spacing + margin + random.nextInt(Math.max(1, spacing - 2 * margin + 1));
         int slot = slots[random.nextInt(slots.length)];
@@ -208,7 +216,7 @@ public final class ShaftLayout {
     /** The shafts of the axis whose centers lie in a range of the cross axis. */
     public List<Shaft> shafts(Axis axis, int min, int max) {
         List<Shaft> found = new ArrayList<>();
-        int spacing = this.settings.meanShaftSpacing();
+        int spacing = this.placement.meanShaftSpacing();
         for (int cell = Math.floorDiv(min, spacing); cell <= Math.floorDiv(max, spacing); cell++) {
             this.shaft(axis, cell).filter(shaft -> shaft.position() >= min && shaft.position() <= max).ifPresent(found::add);
         }
@@ -227,7 +235,7 @@ public final class ShaftLayout {
             return Optional.empty();
         }
         RandomSource random = this.columnRandom.at(xCell, zCell, 0);
-        if (random.nextFloat() >= this.settings.columnChance()) {
+        if (random.nextFloat() >= this.placement.columnChance()) {
             return Optional.empty();
         }
         int xShaftSign = random.nextBoolean() ? 1 : -1;

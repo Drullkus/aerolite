@@ -7,6 +7,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.DimensionSettings;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.TestSettings;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_18-08_4c0300c8-1a76-4b8e-86b0-0cb9daa7d32a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 class ShaftLayoutTest {
 
@@ -44,7 +46,7 @@ class ShaftLayoutTest {
     private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
 
     private ShaftLayout layout(long seed, int minSpacing, int maxSpacing) {
-        return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, TestSettings.SETTINGS.withShaftSpacing(minSpacing, maxSpacing));
+        return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, TestSettings.OVERWORLD.withPlacement(TestSettings.PLACEMENT.withShaftSpacing(minSpacing, maxSpacing)));
     }
 
     @Test
@@ -124,7 +126,7 @@ class ShaftLayoutTest {
     /** The share of eligible crossings that get a column stays near the column chance on each single shaft. */
     @Test
     void columnShareMatchesTheChanceOnEachShaft() {
-        AeroliteSettings settings = TestSettings.SETTINGS.withShaftSpacing(32, 80).withColumnChance(0.9F);
+        DimensionSettings settings = TestSettings.OVERWORLD.withPlacement(TestSettings.PLACEMENT.withShaftSpacing(32, 80).withColumnChance(0.9F));
         ShaftLayout layout = new ShaftLayout(this.mazes, -777248163424996722L, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
         List<ShaftLayout.Shaft> crossings = layout.shafts(ShaftLayout.Axis.X, -6000, 6000);
         for (ShaftLayout.Shaft shaft : layout.shafts(ShaftLayout.Axis.Z, -1500, 1500)) {
@@ -151,12 +153,11 @@ class ShaftLayoutTest {
 
     private static final ShaftVariation NEVER = TestSettings.TUFF.withWeight(0);
     private static final ShaftVariation HEAVY = TestSettings.STONE.withWeight(3);
-    private static final ShaftVariation LIGHT = new ShaftVariation(1, 0.2F,
+    private static final ShaftVariation LIGHT = new ShaftVariation(1, 0.2F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
             Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.COBBLED_DEEPSLATE.defaultBlockState());
 
     private ShaftLayout pickLayout(long seed) {
-        AeroliteSettings settings = TestSettings.SETTINGS.withShaftSpacing(32, 64).withColumnChance(1)
-                .withDimension(Level.OVERWORLD, List.of(NEVER, HEAVY, LIGHT));
+        DimensionSettings settings = new DimensionSettings(TestSettings.PLACEMENT.withShaftSpacing(32, 64).withColumnChance(1), List.of(NEVER, HEAVY, LIGHT));
         return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
     }
 
@@ -205,14 +206,37 @@ class ShaftLayoutTest {
     @Test
     void unlistedDimensionHasNoShafts() {
         AeroliteSettings settings = TestSettings.SETTINGS;
-        ShaftLayout unlisted = new ShaftLayout(this.mazes, 1,
-                ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath("aerolite", "elsewhere")), MIN_Y, MAX_Y, settings);
+        ResourceKey<Level> elsewhere = ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath("aerolite", "elsewhere"));
+        ShaftLayout unlisted = new ShaftLayout(this.mazes, 1, elsewhere, MIN_Y, MAX_Y, settings.dimension(elsewhere));
         assertFalse(unlisted.hasShafts());
-        ShaftLayout nether = new ShaftLayout(this.mazes, 1, Level.NETHER, MIN_Y, MAX_Y, settings);
+        ShaftLayout nether = new ShaftLayout(this.mazes, 1, Level.NETHER, MIN_Y, MAX_Y, settings.dimension(Level.NETHER));
         assertTrue(nether.hasShafts());
         assertSame(TestSettings.NETHER, nether.variation(nether.shaft(ShaftLayout.Axis.X, 0).orElseThrow()));
-        ShaftLayout overworld = new ShaftLayout(this.mazes, 1, Level.OVERWORLD, MIN_Y, MAX_Y, settings);
+        ShaftLayout overworld = new ShaftLayout(this.mazes, 1, Level.OVERWORLD, MIN_Y, MAX_Y, settings.dimension(Level.OVERWORLD));
         assertNotSame(TestSettings.NETHER, overworld.variation(overworld.shaft(ShaftLayout.Axis.X, 0).orElseThrow()));
+    }
+
+    /** Each decay scale has one noise. Two variations at one scale share it. */
+    @Test
+    void decayNoiseFollowsTheScaleOfTheVariation() {
+        ShaftLayout layout = layout(3, 128, 384);
+        ShaftVariation small = TestSettings.STONE.withDecayScale(32);
+        ShaftVariation large = TestSettings.STONE.withDecayScale(1024);
+        assertSame(layout.decayNoise(small), layout.decayNoise(TestSettings.TUFF.withDecayScale(32)));
+        assertNotSame(layout.decayNoise(small), layout.decayNoise(large));
+        int changes = 0;
+        for (int x = 0; x < 64; x++) {
+            if (Math.signum(layout.decayNoise(small).sample(x, 0, 0)) != Math.signum(layout.decayNoise(small).sample(x + 1, 0, 0))) {
+                changes++;
+            }
+        }
+        int largeChanges = 0;
+        for (int x = 0; x < 64; x++) {
+            if (Math.signum(layout.decayNoise(large).sample(x, 0, 0)) != Math.signum(layout.decayNoise(large).sample(x + 1, 0, 0))) {
+                largeChanges++;
+            }
+        }
+        assertTrue(changes > largeChanges, "The small scale noise changes sign no more often than the large scale noise");
     }
 
 }

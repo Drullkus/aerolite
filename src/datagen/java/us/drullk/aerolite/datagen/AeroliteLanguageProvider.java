@@ -13,6 +13,7 @@ import us.drullk.aerolite.Aerolite;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -35,6 +36,10 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.clouds", "Clouds");
         this.add("createWorld.customize.aerolite.cloud_height", "Cloud Height: %s");
         this.add("createWorld.customize.aerolite.shaft_variations", "Shaft Variations");
+        this.add("createWorld.customize.aerolite.configure_dimension", "Configure");
+        this.add("createWorld.customize.aerolite.tab.shaft_placement", "Shaft Placement");
+        this.add("createWorld.customize.aerolite.tab.shaft_variations", "Shaft Variations");
+        this.add("createWorld.customize.aerolite.dimension_title", "Aerolite Settings: %s");
         this.add("createWorld.customize.aerolite.dimension.overworld", "Overworld");
         this.add("createWorld.customize.aerolite.dimension.the_nether", "The Nether");
         this.add("createWorld.customize.aerolite.dimension.the_end", "The End");

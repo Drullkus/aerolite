@@ -10,7 +10,6 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
@@ -24,10 +23,12 @@ import java.util.List;
  * The paint of the shafts, columns and junctions of one chunk.
  * Volumes come first, then maze paths, then decay, then erosion, then shear.
  * Each shaft and column paints with its own variation. A junction box paints with the variation of its horizontal shaft.
+ * Decay and erosion read the thresholds and the decay noise of the variation of each block.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 final class ChunkPaint {
 
@@ -45,13 +46,12 @@ final class ChunkPaint {
     private final ShaftFrames frames;
     private final ErosionResistance resistance;
     private final ShaftLayout layout;
-    private final AeroliteSettings settings;
     private final ChunkAccess chunk;
     private final int minX;
     private final int minZ;
     private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-    /** The maze grid blocks of shafts and columns, outside the junction boxes. */
-    private final LongSet shaftGrid = new LongOpenHashSet();
+    /** The maze grid blocks of shafts and columns outside the junction boxes, with the variation of each block. */
+    private final Long2ObjectMap<ShaftVariation> shaftGrid = new Long2ObjectOpenHashMap<>();
     /** The maze grid blocks of the patches. */
     private final Long2ObjectMap<PatchBlock> patchGrid = new Long2ObjectOpenHashMap<>();
     private final Long2ObjectMap<PaintedCarve> carves = new Long2ObjectOpenHashMap<>();
@@ -61,7 +61,6 @@ final class ChunkPaint {
         this.frames = frames;
         this.resistance = resistance;
         this.layout = layout;
-        this.settings = layout.settings();
         this.chunk = chunk;
         ChunkPos pos = chunk.getPos();
         this.minX = pos.getMinBlockX();
@@ -176,7 +175,7 @@ final class ChunkPaint {
                 boolean outer = Math.max(Math.abs(first), Math.abs(second)) == Ring.OUTER;
                 this.chunk.setBlockState(pos, outer ? variation.wall() : variation.interior(), false);
                 if (outer && grid) {
-                    this.shaftGrid.add(pos.asLong());
+                    this.shaftGrid.put(pos.asLong(), variation);
                 }
             }
         }
@@ -259,17 +258,17 @@ final class ChunkPaint {
      * On a patch, the box block that decay exposes becomes the maze path block.
      */
     private void decay() {
-        FractalNoise noise = this.layout.decayNoise();
-        double threshold = this.settings.decayThreshold();
-        LongSet grid = new LongOpenHashSet(this.shaftGrid);
+        LongSet grid = new LongOpenHashSet(this.shaftGrid.keySet());
         grid.addAll(this.patchGrid.keySet());
         for (long key : grid) {
             BlockPos pos = BlockPos.of(key);
-            double value = noise.sample(pos.getX(), pos.getY(), pos.getZ());
+            PatchBlock patch = this.patchGrid.get(key);
+            ShaftVariation variation = patch != null ? patch.variation() : this.shaftGrid.get(key);
+            double threshold = variation.decayThreshold();
+            double value = this.layout.decayNoise(variation).sample(pos.getX(), pos.getY(), pos.getZ());
             if (value >= -threshold && value <= threshold) {
                 continue;
             }
-            PatchBlock patch = this.patchGrid.get(key);
             PaintedCarve painted = this.carves.get(key);
             if (painted != null && value < -threshold) {
                 this.set(painted.carve().beneath(), AIR);
@@ -292,20 +291,22 @@ final class ChunkPaint {
     private void erode(List<ShaftLayout.Shaft> shafts, List<ShaftLayout.Column> columns) {
         for (ShaftLayout.Shaft shaft : shafts) {
             ShaftFrame frame = this.frames.of(shaft);
+            ShaftVariation variation = this.layout.variation(shaft);
             int alongMin = this.alongMin(shaft.axis());
             List<ShaftMaze.Box> boxes = this.layout.shaftMaze(shaft).boxesNear(alongMin, alongMin + 15);
             for (int along = alongMin; along < alongMin + 16; along++) {
                 int at = along;
                 if (boxes.stream().noneMatch(box -> box.covers(at))) {
-                    this.erodeSection(frame, along);
+                    this.erodeSection(frame, along, variation);
                 }
             }
         }
         for (ShaftLayout.Column column : columns) {
             ShaftFrame frame = this.frames.of(column);
+            ShaftVariation variation = this.layout.variation(column);
             for (int y = column.bottomEnd(); y < column.topEnd(); y++) {
                 if (!this.inBox(column, y)) {
-                    this.erodeSection(frame, y);
+                    this.erodeSection(frame, y, variation);
                 }
             }
             for (ColumnJunction junction : column.junctions()) {
@@ -315,17 +316,17 @@ final class ChunkPaint {
     }
 
     /** The share of the erodible layers that erosion removes at a block, from 0 to 1. */
-    private double erosionReach(BlockPos pos) {
-        double value = Math.abs(this.layout.decayNoise().sample(pos.getX(), pos.getY(), pos.getZ()));
-        double threshold = this.settings.erosionThreshold();
+    private double erosionReach(BlockPos pos, FractalNoise noise, double threshold) {
+        double value = Math.abs(noise.sample(pos.getX(), pos.getY(), pos.getZ()));
         return value <= threshold ? 0 : (value - threshold) / (1 - threshold);
     }
 
-    private void erodeSection(ShaftFrame frame, int along) {
+    private void erodeSection(ShaftFrame frame, int along, ShaftVariation variation) {
+        FractalNoise noise = this.layout.decayNoise(variation);
         for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
             for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
                 BlockPos pos = frame.at(along, first, second);
-                if (this.inChunk(pos) && this.erosionReach(pos) > this.resistance.section(first, second)) {
+                if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > this.resistance.section(first, second)) {
                     this.chunk.setBlockState(pos, AIR, false);
                 }
             }
@@ -333,11 +334,13 @@ final class ChunkPaint {
     }
 
     private void erodeBox(ShaftLayout.Column column, ColumnJunction junction) {
+        ShaftVariation variation = this.boxVariation(column, junction);
+        FractalNoise noise = this.layout.decayNoise(variation);
         for (int dx = -Ring.BOX; dx <= Ring.BOX; dx++) {
             for (int dy = -Ring.BOX; dy <= Ring.BOX; dy++) {
                 for (int dz = -Ring.BOX; dz <= Ring.BOX; dz++) {
                     BlockPos pos = new BlockPos(column.x() + dx, junction.center() + dy, column.z() + dz);
-                    if (this.inChunk(pos) && this.erosionReach(pos) > this.resistance.box(junction, dx, dy, dz)) {
+                    if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > this.resistance.box(junction, dx, dy, dz)) {
                         this.chunk.setBlockState(pos, AIR, false);
                     }
                 }

@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 public final class PreviewBuilder implements AutoCloseable {
 
@@ -279,7 +280,7 @@ public final class PreviewBuilder implements AutoCloseable {
 
         boolean shafts = !request.settings().variations(dimension.key()).isEmpty();
         ShaftLayout layout = shafts
-                ? new ShaftLayout(this.mazes, request.seed(), dimension.key(), dimension.minY(), dimension.maxY(), request.settings())
+                ? new ShaftLayout(this.mazes, request.seed(), dimension.key(), dimension.minY(), dimension.maxY(), request.settings().dimension(dimension.key()))
                 : null;
         ChunkPos[] spiral = spiral(radius);
         ProtoChunk[] chunks = new ProtoChunk[spiral.length];

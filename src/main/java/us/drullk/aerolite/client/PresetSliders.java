@@ -4,6 +4,7 @@ import net.minecraft.util.Mth;
 import net.neoforged.api.distmarker.Dist;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
 
 /**
@@ -11,12 +12,13 @@ import us.drullk.aerolite.world.ShaftVariation;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetSliders {
 
     public static final int SPACING_STEP = 16;
-    public static final int SPACING_STEPS = (AeroliteSettings.MAX_SHAFT_SPACING - AeroliteSettings.MIN_SHAFT_SPACING) / SPACING_STEP;
+    public static final int SPACING_STEPS = (ShaftPlacement.MAX_SHAFT_SPACING - ShaftPlacement.MIN_SHAFT_SPACING) / SPACING_STEP;
     /** Steps of 0.05 from 0 to 1. */
     public static final int FRACTION_STEPS = 20;
     public static final int CLOUD_HEIGHT_STEP = 8;
@@ -25,8 +27,8 @@ public final class PresetSliders {
     public static final int BIAS_STEPS = Math.round((ShaftVariation.MAX_BIAS - ShaftVariation.MIN_BIAS) * FRACTION_STEPS);
     /** The bias step of a uniform maze. */
     public static final int UNIFORM_BIAS_STEP = Math.round((ShaftVariation.UNIFORM_BIAS - ShaftVariation.MIN_BIAS) * FRACTION_STEPS);
-    public static final int MIN_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MIN_DECAY_SCALE);
-    public static final int MAX_SCALE_EXPONENT = Mth.log2(AeroliteSettings.MAX_DECAY_SCALE);
+    public static final int MIN_SCALE_EXPONENT = Mth.log2(ShaftVariation.MIN_DECAY_SCALE);
+    public static final int MAX_SCALE_EXPONENT = Mth.log2(ShaftVariation.MAX_DECAY_SCALE);
     /** One step per power of two from the smallest to the largest decay scale. */
     public static final int DECAY_SCALE_STEPS = MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT;
     /** The erosion slider skips the 0% step, so its steps run from 1 to {@link #FRACTION_STEPS}. */
@@ -53,11 +55,11 @@ public final class PresetSliders {
     }
 
     public int spacing(int step) {
-        return AeroliteSettings.MIN_SHAFT_SPACING + SPACING_STEP * step;
+        return ShaftPlacement.MIN_SHAFT_SPACING + SPACING_STEP * step;
     }
 
     public int spacingStep(int spacing) {
-        return Math.round((spacing - AeroliteSettings.MIN_SHAFT_SPACING) / (float) SPACING_STEP);
+        return Math.round((spacing - ShaftPlacement.MIN_SHAFT_SPACING) / (float) SPACING_STEP);
     }
 
     public int cloudHeight(int step) {

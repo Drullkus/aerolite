@@ -29,6 +29,7 @@ import us.drullk.aerolite.client.preview.PreviewDimension;
 import us.drullk.aerolite.client.preview.PreviewPanel;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
 
 import javax.annotation.Nullable;
@@ -41,13 +42,15 @@ import java.util.function.Function;
 /**
  * The ImGui panel on the right edge of the preview screen. It edits the settings with the steps and rules of the vanilla screen.
  * Only the bean method of {@link PreviewPanel} creates it, and only when imgui-mc is present.
- * The sections are Preview, Shaft Placement, Shaft Surface, Clouds and Shaft Variations, in this sequence.
+ * The Preview section comes first. One collapsing header per configured dimension follows, then the add row.
+ * Each dimension header holds the groups Shaft Placement and Shaft Variations.
  * A radio left of each dimension name and the dimension combo of the Preview section select the previewed dimension.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_21-56_ad766c27-abc7-4f8b-ae6a-53b92f85435c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -272,84 +275,32 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return -1;
     }
 
+    /** The Preview section, one header per configured dimension, then the add row. */
     private void drawContent(PreviewScreen screen) {
         if (ImGui.collapsingHeader(text("preview.section"), ImGuiTreeNodeFlags.DefaultOpen)) {
             this.drawPreview(screen);
         }
 
         AeroliteSettings settings = screen.settings();
-        AeroliteSettings edited = settings;
-
-        if (ImGui.collapsingHeader(text("shaft_placement"), ImGuiTreeNodeFlags.DefaultOpen)) {
-            int column = this.stepSlider("##column_chance", this.tools().sliders().fractionStep(edited.columnChance()), PresetSliders.FRACTION_STEPS,
-                    text("column_chance", this.tools().sliders().percent(this.tools().sliders().fractionStep(edited.columnChance()))));
-            if (column >= 0) {
-                edited = edited.withColumnChance(this.tools().sliders().fraction(column));
-            }
-            int min = this.stepSlider("##min_spacing", this.tools().sliders().spacingStep(edited.minShaftSpacing()), PresetSliders.SPACING_STEPS,
-                    text("min_shaft_spacing", edited.minShaftSpacing()));
-            if (min >= 0) {
-                edited = this.tools().edits().withMinSpacingStep(edited, min);
-            }
-            int max = this.stepSlider("##max_spacing", this.tools().sliders().spacingStep(edited.maxShaftSpacing()), PresetSliders.SPACING_STEPS,
-                    text("max_shaft_spacing", edited.maxShaftSpacing()));
-            if (max >= 0) {
-                edited = this.tools().edits().withMaxSpacingStep(edited, max);
-            }
-        }
-
-        if (ImGui.collapsingHeader(text("shaft_surface"), ImGuiTreeNodeFlags.DefaultOpen)) {
-            int scale = this.stepSlider("##decay_scale", this.tools().sliders().decayScaleStep(edited.decayScale()), PresetSliders.DECAY_SCALE_STEPS,
-                    text("decay_scale", edited.decayScale()));
-            if (scale >= 0) {
-                edited = edited.withDecayScale(this.tools().sliders().decayScale(scale));
-            }
-            int decayStep = this.tools().edits().decayStep(edited);
-            int decay = this.stepSlider("##decay_threshold", decayStep, PresetSliders.FRACTION_STEPS,
-                    text("decay_threshold", this.tools().sliders().percent(decayStep)));
-            if (decay >= 0) {
-                edited = this.tools().edits().withDecayStep(edited, decay);
-            }
-            int erosionStep = this.tools().edits().erosionStep(edited);
-            int erosion = this.stepSlider("##erosion_threshold", erosionStep - 1, PresetSliders.EROSION_STEPS,
-                    text("erosion_threshold", this.tools().sliders().percent(erosionStep)));
-            if (erosion >= 0) {
-                edited = this.tools().edits().withErosionStep(edited, erosion + 1);
-            }
-        }
-
-        if (ImGui.collapsingHeader(text("clouds"))) {
-            int cloud = this.stepSlider("##cloud_height", this.tools().sliders().cloudHeightStep(edited.cloudHeight()), PresetSliders.CLOUD_HEIGHT_STEPS,
-                    text("cloud_height", edited.cloudHeight()));
-            if (cloud >= 0) {
-                edited = edited.withCloudHeight(this.tools().sliders().cloudHeight(cloud));
-            }
-        }
-
-        if (ImGui.collapsingHeader(text("shaft_variations"))) {
-            edited = this.drawVariations(screen, edited);
-        }
-
+        AeroliteSettings edited = this.drawVariations(screen, settings);
         if (!edited.equals(settings)) {
             screen.setSettings(edited);
         }
     }
 
-    /** One collapsible node per configured dimension, then the add row. A removal applies after the loop. */
+    /** One collapsing header per configured dimension, then the add row. A removal applies after the loop. */
     private AeroliteSettings drawVariations(PreviewScreen screen, AeroliteSettings settings) {
         AeroliteSettings edited = settings;
         ResourceKey<Level> removed = null;
         for (ResourceKey<Level> dimension : this.tools().edits().configuredDimensions(settings)) {
             String id = dimension.location().toString();
             ImGui.pushID(id);
+            float right = ImGui.getCursorPosX() + ImGui.getContentRegionAvailX();
             boolean open = this.drawDimensionNode(screen, dimension);
-            if (this.drawRemoveDimension()) {
+            if (this.drawRemoveDimension(right)) {
                 removed = dimension;
             } else if (open) {
                 edited = this.drawDimensionRows(edited, dimension, id);
-            }
-            if (open) {
-                ImGui.treePop();
             }
             ImGui.popID();
         }
@@ -359,7 +310,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return this.drawAddDimension(screen, edited);
     }
 
-    /** Draws the radio and the node of one dimension. Returns true when the node is open. */
+    /**
+     * Draws the radio and the collapsing header of one dimension. Returns true when the header is open.
+     * The header id ignores the name, so the open state follows the dimension through every rebuild.
+     */
     private boolean drawDimensionNode(PreviewScreen screen, ResourceKey<Level> dimension) {
         ImGui.beginDisabled(screen.dimensionIndex(dimension) < 0);
         if (ImGui.radioButton("##preview_dimension", dimension.equals(screen.dimensionKey()))) {
@@ -370,34 +324,74 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             ImGui.setTooltip(text("preview.show_dimension"));
         }
         ImGui.sameLine();
-        return ImGui.treeNodeEx("##dimension", ImGuiTreeNodeFlags.DefaultOpen, format(this.tools().edits().dimensionName(dimension)));
+        return ImGui.collapsingHeader(format(this.tools().edits().dimensionName(dimension)) + "###dimension",
+                ImGuiTreeNodeFlags.DefaultOpen | ImGuiTreeNodeFlags.AllowOverlap);
     }
 
-    /** A small Remove button at the right end of the node line. Returns true when it was pressed. */
-    private boolean drawRemoveDimension() {
+    /** A small Remove button at the right end of the header line. Returns true when it was pressed. */
+    private boolean drawRemoveDimension(float right) {
         String remove = text("remove_dimension");
         float removeWidth = ImGui.calcTextSize(remove).x + 2 * ImGui.getStyle().getFramePaddingX();
         ImGui.sameLine();
-        ImGui.setCursorPosX(ImGui.getCursorPosX() + Math.max(0, ImGui.getContentRegionAvailX() - removeWidth));
+        ImGui.setCursorPosX(right - removeWidth - ImGui.getStyle().getFramePaddingX());
         return ImGui.smallButton(remove + "##remove_dimension");
     }
 
+    /** The groups Shaft Placement and Shaft Variations of one dimension. Both start open. */
     private AeroliteSettings drawDimensionRows(AeroliteSettings settings, ResourceKey<Level> dimension, String id) {
         AeroliteSettings edited = settings;
-        List<ShaftVariation> variations = this.tools().edits().variations(edited, dimension);
-        for (int index = 0; index < variations.size(); index++) {
-            ImGui.pushID(index);
-            edited = this.drawVariation(edited, dimension, index, id + "/" + index);
-            ImGui.popID();
-            ImGui.spacing();
+        if (ImGui.treeNodeEx("##shaft_placement", ImGuiTreeNodeFlags.DefaultOpen, text("shaft_placement"))) {
+            edited = this.drawPlacement(edited, dimension);
+            ImGui.treePop();
         }
-        if (ImGui.button(text("add_variation") + "##add_variation")) {
-            edited = this.tools().edits().withAddedVariation(edited, dimension);
+        if (ImGui.treeNodeEx("##shaft_variations", ImGuiTreeNodeFlags.DefaultOpen, text("shaft_variations"))) {
+            List<ShaftVariation> variations = this.tools().edits().variations(edited, dimension);
+            for (int index = 0; index < variations.size(); index++) {
+                ImGui.pushID(index);
+                edited = this.drawVariation(edited, dimension, index, id + "/" + index);
+                ImGui.popID();
+                ImGui.spacing();
+            }
+            if (ImGui.button(text("add_variation") + "##add_variation")) {
+                edited = this.tools().edits().withAddedVariation(edited, dimension);
+            }
+            ImGui.treePop();
         }
         return edited;
     }
 
-    /** A combo of the levels without variations and an Add button. Both are off when every level has variations. */
+    /** The column chance and the two spacing sliders. The Overworld adds the cloud height under the text Clouds. */
+    private AeroliteSettings drawPlacement(AeroliteSettings settings, ResourceKey<Level> dimension) {
+        PresetSliders sliders = this.tools().sliders();
+        ShaftPlacement placement = settings.placement(dimension);
+        int chanceStep = sliders.fractionStep(placement.columnChance());
+        int column = this.stepSlider("##column_chance", chanceStep, PresetSliders.FRACTION_STEPS, text("column_chance", sliders.percent(chanceStep)));
+        if (column >= 0) {
+            placement = placement.withColumnChance(sliders.fraction(column));
+        }
+        int min = this.stepSlider("##min_spacing", sliders.spacingStep(placement.minShaftSpacing()), PresetSliders.SPACING_STEPS,
+                text("min_shaft_spacing", placement.minShaftSpacing()));
+        if (min >= 0) {
+            placement = this.tools().edits().withMinSpacingStep(placement, min);
+        }
+        int max = this.stepSlider("##max_spacing", sliders.spacingStep(placement.maxShaftSpacing()), PresetSliders.SPACING_STEPS,
+                text("max_shaft_spacing", placement.maxShaftSpacing()));
+        if (max >= 0) {
+            placement = this.tools().edits().withMaxSpacingStep(placement, max);
+        }
+        AeroliteSettings edited = settings.withPlacement(dimension, placement);
+        if (Level.OVERWORLD.equals(dimension)) {
+            ImGui.text(text("clouds"));
+            int cloud = this.stepSlider("##cloud_height", sliders.cloudHeightStep(edited.cloudHeight()), PresetSliders.CLOUD_HEIGHT_STEPS,
+                    text("cloud_height", edited.cloudHeight()));
+            if (cloud >= 0) {
+                edited = edited.withCloudHeight(sliders.cloudHeight(cloud));
+            }
+        }
+        return edited;
+    }
+
+    /** A combo of the levels without settings and an Add button. Both are off when every level has settings. */
     private AeroliteSettings drawAddDimension(PreviewScreen screen, AeroliteSettings settings) {
         List<ResourceKey<Level>> candidates = this.tools().edits().addableDimensions(settings, screen.levels());
         if (this.addChoice == null || !candidates.contains(this.addChoice)) {
@@ -427,19 +421,36 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return edited;
     }
 
+    /** The sliders in the sequence of the menu, then the block fields and the Remove button. */
     private AeroliteSettings drawVariation(AeroliteSettings settings, ResourceKey<Level> dimension, int index, String fieldKey) {
+        PresetSliders sliders = this.tools().sliders();
         AeroliteSettings edited = settings;
         ShaftVariation variation = this.tools().edits().variations(edited, dimension).get(index);
         int weight = this.stepSlider("##weight", variation.weight(), ShaftVariation.MAX_WEIGHT, text("weight", variation.weight()));
         if (weight >= 0) {
             edited = this.tools().edits().withWeight(edited, dimension, index, weight);
         }
-        int biasStep = this.tools().sliders().biasStep(variation.bias());
-        int bias = this.stepSlider("##bias", biasStep, PresetSliders.BIAS_STEPS,
-                text("maze_bias", this.tools().sliders().biasLabel(biasStep).getString()));
+        int biasStep = sliders.biasStep(variation.bias());
+        int bias = this.stepSlider("##bias", biasStep, PresetSliders.BIAS_STEPS, text("maze_bias", sliders.biasLabel(biasStep).getString()));
         if (bias >= 0) {
-            float chosen = this.tools().sliders().bias(bias);
+            float chosen = sliders.bias(bias);
             edited = this.editVariation(edited, dimension, index, current -> current.withBias(chosen));
+        }
+        int scale = this.stepSlider("##decay_scale", sliders.decayScaleStep(variation.decayScale()), PresetSliders.DECAY_SCALE_STEPS,
+                text("decay_scale", variation.decayScale()));
+        if (scale >= 0) {
+            int chosen = sliders.decayScale(scale);
+            edited = this.editVariation(edited, dimension, index, current -> current.withDecayScale(chosen));
+        }
+        int decayStep = this.tools().edits().decayStep(variation);
+        int decay = this.stepSlider("##decay_threshold", decayStep, PresetSliders.FRACTION_STEPS, text("decay_threshold", sliders.percent(decayStep)));
+        if (decay >= 0) {
+            edited = this.editVariation(edited, dimension, index, current -> this.tools().edits().withDecayStep(current, decay));
+        }
+        int erosionStep = this.tools().edits().erosionStep(this.tools().edits().variations(edited, dimension).get(index));
+        int erosion = this.stepSlider("##erosion_threshold", erosionStep - 1, PresetSliders.EROSION_STEPS, text("erosion_threshold", sliders.percent(erosionStep)));
+        if (erosion >= 0) {
+            edited = this.editVariation(edited, dimension, index, current -> this.tools().edits().withErosionStep(current, erosion + 1));
         }
         float labelWidth = 0;
         for (String key : BLOCK_LABELS) {

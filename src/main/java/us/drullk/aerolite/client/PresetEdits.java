@@ -6,6 +6,8 @@ import net.neoforged.api.distmarker.Dist;
 import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.DimensionSettings;
+import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
 
 import java.util.Collection;
@@ -18,6 +20,7 @@ import java.util.List;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_e43f73bd-d689-4553-8382-7b011c0c142a.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetEdits {
@@ -32,51 +35,51 @@ public final class PresetEdits {
     }
 
     /** A minimum spacing above the maximum spacing pushes the maximum along. */
-    public AeroliteSettings withMinSpacingStep(AeroliteSettings settings, int step) {
+    public ShaftPlacement withMinSpacingStep(ShaftPlacement placement, int step) {
         int min = this.sliders.spacing(step);
-        return settings.withShaftSpacing(min, Math.max(min, settings.maxShaftSpacing()));
+        return placement.withShaftSpacing(min, Math.max(min, placement.maxShaftSpacing()));
     }
 
     /** A maximum spacing below the minimum spacing pushes the minimum along. */
-    public AeroliteSettings withMaxSpacingStep(AeroliteSettings settings, int step) {
+    public ShaftPlacement withMaxSpacingStep(ShaftPlacement placement, int step) {
         int max = this.sliders.spacing(step);
-        return settings.withShaftSpacing(Math.min(max, settings.minShaftSpacing()), max);
+        return placement.withShaftSpacing(Math.min(max, placement.minShaftSpacing()), max);
     }
 
-    public int decayStep(AeroliteSettings settings) {
-        return this.sliders.fractionStep(settings.decayThreshold());
+    public int decayStep(ShaftVariation variation) {
+        return this.sliders.fractionStep(variation.decayThreshold());
     }
 
     /** The erosion step runs from 1 to {@link PresetSliders#FRACTION_STEPS}. */
-    public int erosionStep(AeroliteSettings settings) {
-        return this.sliders.fractionStep(settings.erosionThreshold());
+    public int erosionStep(ShaftVariation variation) {
+        return this.sliders.fractionStep(variation.erosionThreshold());
     }
 
     /** The erosion threshold stays at least one step above the decay threshold. */
-    public AeroliteSettings withDecayStep(AeroliteSettings settings, int step) {
+    public ShaftVariation withDecayStep(ShaftVariation variation, int step) {
         int decay = Math.min(step, PresetSliders.FRACTION_STEPS - 1);
-        int erosion = Math.max(decay + 1, this.erosionStep(settings));
-        return settings.withDecayThreshold(this.sliders.fraction(decay)).withErosionThreshold(this.sliders.fraction(erosion));
+        int erosion = Math.max(decay + 1, this.erosionStep(variation));
+        return variation.withDecayThreshold(this.sliders.fraction(decay)).withErosionThreshold(this.sliders.fraction(erosion));
     }
 
     /** The decay threshold stays at least one step below the erosion threshold. */
-    public AeroliteSettings withErosionStep(AeroliteSettings settings, int erosion) {
-        int decay = Math.min(erosion - 1, this.decayStep(settings));
-        return settings.withDecayThreshold(this.sliders.fraction(decay)).withErosionThreshold(this.sliders.fraction(erosion));
+    public ShaftVariation withErosionStep(ShaftVariation variation, int erosion) {
+        int decay = Math.min(erosion - 1, this.decayStep(variation));
+        return variation.withDecayThreshold(this.sliders.fraction(decay)).withErosionThreshold(this.sliders.fraction(erosion));
     }
 
     public List<ShaftVariation> variations(AeroliteSettings settings, ResourceKey<Level> dimension) {
         return settings.variations(dimension);
     }
 
-    /** The dimensions of the variation map. The Overworld, the Nether and the End come first, then the rest by id. */
+    /** The dimensions of the settings map. The Overworld, the Nether and the End come first, then the rest by id. */
     public List<ResourceKey<Level>> configuredDimensions(AeroliteSettings settings) {
-        return this.sorted(settings.variations().keySet());
+        return this.sorted(settings.dimensions().keySet());
     }
 
-    /** The dimensions of {@code all} that the variation map does not hold, in the sequence of {@link #configuredDimensions}. */
+    /** The dimensions of {@code all} that the settings map does not hold, in the sequence of {@link #configuredDimensions}. */
     public List<ResourceKey<Level>> addableDimensions(AeroliteSettings settings, Collection<ResourceKey<Level>> all) {
-        return this.sorted(all.stream().filter(dimension -> !settings.variations().containsKey(dimension)).toList());
+        return this.sorted(all.stream().filter(dimension -> !settings.dimensions().containsKey(dimension)).toList());
     }
 
     /** The name of a dimension. A dimension other than the three vanilla ones shows its id path. */
@@ -86,12 +89,12 @@ public final class PresetEdits {
                 : net.minecraft.network.chat.Component.literal(dimension.location().getPath());
     }
 
-    /** Adds a dimension with its default variation list. A configured dimension stays as it is. */
+    /** Adds a dimension with its default placement and variation list. A configured dimension stays as it is. */
     public AeroliteSettings withAddedDimension(AeroliteSettings settings, ResourceKey<Level> dimension) {
-        return settings.variations().containsKey(dimension) ? settings : settings.withDimension(dimension, ShaftVariation.defaultList(dimension));
+        return settings.dimensions().containsKey(dimension) ? settings : settings.withDimension(dimension, DimensionSettings.defaults(dimension));
     }
 
-    /** Removes a dimension and its variations. The dimension then gets no shafts. */
+    /** Removes a dimension and its settings. The dimension then gets no shafts. */
     public AeroliteSettings withoutDimension(AeroliteSettings settings, ResourceKey<Level> dimension) {
         return settings.withoutDimension(dimension);
     }
