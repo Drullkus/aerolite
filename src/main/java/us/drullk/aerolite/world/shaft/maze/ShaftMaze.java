@@ -16,6 +16,7 @@ import java.util.stream.IntStream;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  */
 public final class ShaftMaze {
 
@@ -60,7 +61,7 @@ public final class ShaftMaze {
         return this.bias;
     }
 
-    /** How the 7x7 patch of a box sits on the shaft. */
+    /** How the patch of a box sits on the shaft. */
     public enum Patching {
         /** A horizontal shaft. Patch index i runs along the shaft. */
         SHAFT,
@@ -93,6 +94,28 @@ public final class ShaftMaze {
             case COLUMN_ALONG_X -> this.ring.block(2 * k, Ring.OUTER * box.sign()) / 2;
             case COLUMN_ALONG_Z -> this.ring.block(Ring.OUTER * box.sign(), 2 * k) / 2;
         };
+    }
+
+    /**
+     * A possible crossing between a patch border node and the nearest ruling on one side of the box.
+     *
+     * @param along  the patch index along the shaft
+     * @param across the patch index across the shaft
+     * @param ruling the block of the ruling along the shaft
+     * @param node   the ring node on the ruling
+     */
+    record Crossing(int along, int across, int ruling, int node) {
+    }
+
+    /** The possible crossings of a box. A patch corner node gets no crossing. */
+    List<Crossing> crossings(Box box) {
+        List<Crossing> crossings = new ArrayList<>();
+        for (int k = 1 - Ring.PATCH_INDEX; k < Ring.PATCH_INDEX; k++) {
+            int v = this.crossingNode(box, k);
+            crossings.add(new Crossing(-Ring.PATCH_INDEX, k, this.lastRulingBefore(box), v));
+            crossings.add(new Crossing(Ring.PATCH_INDEX, k, this.firstRulingAfter(box), v));
+        }
+        return crossings;
     }
 
     /** The graph node of the patch node at an index along the shaft and an index across it. */
@@ -203,15 +226,9 @@ public final class ShaftMaze {
         RulingGraph graph = new RulingGraph(this.ring, rulings);
         for (Box box : members) {
             int patch = graph.addPatch(box.center(), box.patching() == Patching.SHAFT);
-            int before = this.lastRulingBefore(box);
-            int after = this.firstRulingAfter(box);
-            for (int k = -2; k <= 2; k++) {
-                int v = this.crossingNode(box, k);
-                if (graph.has(before)) {
-                    graph.graph.addEdge(this.patchNode(graph, box, patch, -3, k), graph.node(before, v), true);
-                }
-                if (graph.has(after)) {
-                    graph.graph.addEdge(this.patchNode(graph, box, patch, 3, k), graph.node(after, v), true);
+            for (Crossing crossing : this.crossings(box)) {
+                if (graph.has(crossing.ruling())) {
+                    graph.graph.addEdge(this.patchNode(graph, box, patch, crossing.along(), crossing.across()), graph.node(crossing.ruling(), crossing.node()), true);
                 }
             }
         }

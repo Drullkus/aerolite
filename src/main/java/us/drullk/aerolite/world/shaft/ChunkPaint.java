@@ -23,6 +23,7 @@ import java.util.List;
  * The paint of the shafts, columns and junctions of one chunk.
  * Volumes come first, then maze paths, then decay, then erosion, then shear.
  * Each shaft and column paints with its own variation. A junction box paints with the variation of its horizontal shaft.
+ * The bezel of each patch face is the junction block. The patch area inside it is the maze wall block over the box.
  * Decay and erosion read the thresholds and the decay noise of the variation of each block.
  * The maze grid of the chunk holds the grid blocks up to two blocks outside the chunk. Their maze path blocks and decay writes can lie in the chunk.
  * Every step writes to a buffer of the finished shaft blocks. The chunk gets only the solid blocks of the buffer.
@@ -235,16 +236,18 @@ final class ChunkPaint {
                 }
             }
             MazeCarver.PatchFace columnFace = this.carver.columnPatchFace(column, junction.box());
-            this.addPatchGrid(columnFace, variation);
-            this.addPatchGrid(new MazeCarver.PatchFace(columnFace.frame(), -columnFace.sign(), columnFace.center()), variation);
+            this.fillPatchFace(columnFace, variation);
+            this.fillPatchFace(new MazeCarver.PatchFace(columnFace.frame(), -columnFace.sign(), columnFace.center()), variation);
         }
     }
 
-    /** Adds the 13x13 inside of a patch face to the maze grid. The rim stays wall. */
-    private void addPatchGrid(MazeCarver.PatchFace face, ShaftVariation variation) {
-        for (int along = -Ring.OUTER; along <= Ring.OUTER; along++) {
-            for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
+    /** Paints one patch face and adds all of it to the maze grid. The bezel joins the grid as maze wall. */
+    private void fillPatchFace(MazeCarver.PatchFace face, ShaftVariation variation) {
+        for (int along = -Ring.BOX; along <= Ring.BOX; along++) {
+            for (int first = -Ring.BOX; first <= Ring.BOX; first++) {
                 MazeCarver.Carve carve = face.carve(face.center() + along, first);
+                boolean bezel = Ring.BOX - Math.max(Math.abs(along), Math.abs(first)) < Ring.BEZEL;
+                this.set(carve.surface(), bezel ? variation.junction() : variation.wall());
                 if (this.nearChunk(carve.surface())) {
                     this.patchGrid.put(carve.surface().asLong(), new PatchBlock(carve.normal(), variation));
                 }
@@ -299,7 +302,7 @@ final class ChunkPaint {
 
     /**
      * Far negative decay noise keeps only maze walls. Far positive decay noise keeps only maze paths.
-     * On a patch, the box block that decay exposes becomes the maze path block.
+     * A removed maze wall exposes the block beneath it. On a patch, a removed maze path exposes the maze path block.
      */
     private void decay() {
         LongSet grid = new LongOpenHashSet(this.shaftGrid.keySet());
@@ -321,9 +324,6 @@ final class ChunkPaint {
                 }
             } else if (painted == null && value > threshold) {
                 this.set(pos, AIR);
-                if (patch != null) {
-                    this.set(pos.relative(patch.normal().getOpposite()), patch.variation().path());
-                }
             }
         }
     }

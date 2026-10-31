@@ -62,7 +62,7 @@ import java.util.function.Function;
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
     private static final String KEY = "createWorld.customize.aerolite.";
-    private static final List<String> BLOCK_LABELS = List.of("wall_block", "path_block", "interior_block");
+    private static final List<String> BLOCK_LABELS = List.of("wall_block", "path_block", "interior_block", "junction_block");
     private static final float SPLITTER_WIDTH = 6;
     private static final int SEED_CAPACITY = 256;
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoTitleBar
@@ -549,6 +549,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         edited = this.blockField(edited, dimension, index, fieldKey + "/wall", BLOCK_LABELS.get(0), fieldStart, variation.wall(), ShaftVariation::withWall);
         edited = this.blockField(edited, dimension, index, fieldKey + "/path", BLOCK_LABELS.get(1), fieldStart, variation.path(), ShaftVariation::withPath);
         edited = this.blockField(edited, dimension, index, fieldKey + "/interior", BLOCK_LABELS.get(2), fieldStart, variation.interior(), ShaftVariation::withInterior);
+        edited = this.blockField(edited, dimension, index, fieldKey + "/junction", BLOCK_LABELS.get(3), fieldStart, variation.junction(), ShaftVariation::withJunction);
         return this.drawVariationClipboard(edited, dimension, index);
     }
 

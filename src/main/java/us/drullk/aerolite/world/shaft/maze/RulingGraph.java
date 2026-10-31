@@ -14,6 +14,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  */
 final class RulingGraph {
 
@@ -70,24 +71,24 @@ final class RulingGraph {
     }
 
     /**
-     * Adds the 7x7 patch nodes of one junction box and their grid edges. Returns the node of (-3, -3).
+     * Adds the patch nodes of one junction box and their grid edges. Returns the node of the lowest indices.
      *
      * @param iAlongAxis true when patch index i runs along the shaft axis, false when index j does
      */
     int addPatch(int owner, boolean iAlongAxis) {
         int first = this.graph.size();
-        for (int i = -3; i <= 3; i++) {
-            for (int j = -3; j <= 3; j++) {
+        for (int i = -Ring.PATCH_INDEX; i <= Ring.PATCH_INDEX; i++) {
+            for (int j = -Ring.PATCH_INDEX; j <= Ring.PATCH_INDEX; j++) {
                 this.add(new MazeNode.Patch(owner, i, j));
             }
         }
-        for (int i = -3; i <= 3; i++) {
-            for (int j = -3; j <= 3; j++) {
+        for (int i = -Ring.PATCH_INDEX; i <= Ring.PATCH_INDEX; i++) {
+            for (int j = -Ring.PATCH_INDEX; j <= Ring.PATCH_INDEX; j++) {
                 int n = this.patchNode(first, i, j);
-                if (i < 3) {
+                if (i < Ring.PATCH_INDEX) {
                     this.graph.addEdge(n, this.patchNode(first, i + 1, j), iAlongAxis);
                 }
-                if (j < 3) {
+                if (j < Ring.PATCH_INDEX) {
                     this.graph.addEdge(n, this.patchNode(first, i, j + 1), !iAlongAxis);
                 }
             }
@@ -96,7 +97,7 @@ final class RulingGraph {
     }
 
     int patchNode(int first, int i, int j) {
-        return first + (i + 3) * 7 + (j + 3);
+        return first + (i + Ring.PATCH_INDEX) * Ring.PATCH_NODES + (j + Ring.PATCH_INDEX);
     }
 
     MazeNode[] names() {

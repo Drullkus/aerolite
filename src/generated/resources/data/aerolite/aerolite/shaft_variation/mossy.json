@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:mossy_cobblestone"
   },
+  "junction": {
+    "Name": "minecraft:mossy_cobblestone"
+  },
   "path": {
     "Name": "minecraft:moss_block"
   },

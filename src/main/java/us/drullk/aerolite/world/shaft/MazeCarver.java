@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  */
 @Component
 public final class MazeCarver {
@@ -122,8 +123,8 @@ public final class MazeCarver {
     }
 
     private void patchNodes(PatchFace face, Consumer<Carve> out) {
-        for (int i = -3; i <= 3; i++) {
-            for (int j = -3; j <= 3; j++) {
+        for (int i = -Ring.PATCH_INDEX; i <= Ring.PATCH_INDEX; i++) {
+            for (int j = -Ring.PATCH_INDEX; j <= Ring.PATCH_INDEX; j++) {
                 out.accept(face.node(i, j));
             }
         }
@@ -151,7 +152,7 @@ public final class MazeCarver {
 
     /**
      * Carves a crossing from a patch border node onto the nearest ruling.
-     * It runs along the outer layer of the ruling's shaft, then steps up onto the box face.
+     * It runs along the outer layer of the ruling's shaft, then notches through the bezel of the box face.
      */
     private void crossing(ShaftFrame frame, PatchFace face, MazeNode.Patch patch, MazeNode.Ruling ruling, Consumer<Carve> out) {
         out.accept(face.node(patch.i(), patch.j()));
@@ -160,16 +161,15 @@ public final class MazeCarver {
         int faceAlong = face.center() + 2 * patch.i();
         int faceFirst = 2 * patch.j();
         int ringBlock = 2 * ruling.node();
-        if (ruling.along() < boxCenter) {
-            for (int along = ruling.along() + 1; along < boxCenter - Ring.BOX; along++) {
-                out.accept(this.block(frame, along, ringBlock));
-            }
-            out.accept(column ? face.carve(faceAlong, -Ring.BOX) : face.carve(boxCenter - Ring.BOX, faceFirst));
-        } else {
-            for (int along = boxCenter + Ring.BOX + 1; along < ruling.along(); along++) {
-                out.accept(this.block(frame, along, ringBlock));
-            }
-            out.accept(column ? face.carve(faceAlong, Ring.BOX) : face.carve(boxCenter + Ring.BOX, faceFirst));
+        int side = ruling.along() < boxCenter ? -1 : 1;
+        int start = Math.min(ruling.along(), boxCenter + side * Ring.BOX) + 1;
+        int end = Math.max(ruling.along(), boxCenter + side * Ring.BOX) - 1;
+        for (int along = start; along <= end; along++) {
+            out.accept(this.block(frame, along, ringBlock));
+        }
+        for (int step = 0; step < Ring.BEZEL; step++) {
+            int offset = side * (Ring.BOX - step);
+            out.accept(column ? face.carve(faceAlong, offset) : face.carve(boxCenter + offset, faceFirst));
         }
     }
 

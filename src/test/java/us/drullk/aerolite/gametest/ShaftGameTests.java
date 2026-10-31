@@ -2,6 +2,7 @@ package us.drullk.aerolite.gametest;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -572,9 +573,10 @@ public final class ShaftGameTests {
 
     /** Settings whose Overworld variations differ in every block, without decay and erosion. */
     private static DimensionSettings twoVariations() {
+        ShaftVariation stone = TestSettings.STONE.withJunction(Blocks.CHISELED_STONE_BRICKS.defaultBlockState());
         ShaftVariation deepslate = new ShaftVariation(0.8F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
-                Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
-        return TestSettings.withDecay(TestSettings.OVERWORLD.withVariations(List.of(TestSettings.one(TestSettings.STONE), TestSettings.one(deepslate))),
+                Blocks.DEEPSLATE.defaultBlockState(), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
+        return TestSettings.withDecay(TestSettings.OVERWORLD.withVariations(List.of(TestSettings.one(stone), TestSettings.one(deepslate))),
                 TestSettings.DECAY_SCALE, 1, 1);
     }
 
@@ -598,8 +600,11 @@ public final class ShaftGameTests {
                     if (boxVariation != columnVariation) {
                         mixed++;
                     }
+                    // A box corner is a bezel block of a patch face.
                     BlockPos boxEdge = new BlockPos(column.x() + Ring.BOX, junction.center() + Ring.BOX, column.z() + Ring.BOX);
-                    helper.assertTrue(paintedAt(chunks, layout, level, boxEdge) == boxVariation.interior(), "A junction box block is not the interior block of its horizontal shaft");
+                    helper.assertTrue(paintedAt(chunks, layout, level, boxEdge) == boxVariation.junction(), "A box corner is not the junction block of its horizontal shaft");
+                    BlockPos boxInside = new BlockPos(column.x() + Ring.BOX - 1, junction.center() + Ring.BOX - 1, column.z() + Ring.BOX - 1);
+                    helper.assertTrue(paintedAt(chunks, layout, level, boxInside) == boxVariation.interior(), "A junction box block is not the interior block of its horizontal shaft");
                 }
                 // An even Y between the boxes holds no ruling, so ring block 1 there is always maze wall.
                 int between = (column.junctions().getFirst().center() + column.junctions().getLast().center()) / 2 & ~1;
@@ -611,6 +616,115 @@ public final class ShaftGameTests {
         }
         helper.assertTrue(columns > 0, "The layout has no column");
         helper.assertTrue(mixed > 0, "No junction box differs in variation from its column");
+        helper.succeed();
+    }
+
+    /** The counts of the patch face blocks of the checked junctions. */
+    private record FaceCounts(int bezel, int notch, int wall, int path, int decayed) {
+    }
+
+    /** The horizontal shaft frame at a junction box. Its second offset points at the patch faces. */
+    private static ShaftFrame boxFrame(ShaftLayout.Column column, ColumnJunction junction) {
+        return junction.alongX()
+                ? new ShaftFrame(ShaftFrame.Kind.ALONG_X, junction.center(), column.z())
+                : new ShaftFrame(ShaftFrame.Kind.ALONG_Z, junction.center(), column.x());
+    }
+
+    /**
+     * Checks both patch faces of the junctions of the columns in the first cells.
+     * Without decay, every face block and the block one in must match the paint rules exactly.
+     * With decay, a bezel block can be air, and only the notches hold a maze path block one in.
+     */
+    private static FaceCounts checkPatchFaces(GameTestHelper helper, ShaftLayout layout, int cells, boolean decay) {
+        ServerLevel level = helper.getLevel();
+        Map<Long, ProtoChunk> chunks = new HashMap<>();
+        int bezel = 0;
+        int notch = 0;
+        int wall = 0;
+        int path = 0;
+        int decayed = 0;
+        for (int cell = 0; cell < cells; cell++) {
+            for (int other = 0; other < cells; other++) {
+                ShaftLayout.Column column = layout.column(cell, other).orElse(null);
+                if (column == null) {
+                    continue;
+                }
+                for (ColumnJunction junction : column.junctions()) {
+                    ShaftVariation variation = layout.variation(junction.alongX() ? column.xShaft() : column.zShaft());
+                    ShaftFrame frame = boxFrame(column, junction);
+                    int center = junction.alongX() ? column.x() : column.z();
+                    for (int sign : new int[]{-1, 1}) {
+                        // The column patch notches along Y. The shaft patch notches along the shaft.
+                        boolean columnPatch = sign == junction.sign();
+                        for (int a = -Ring.BOX; a <= Ring.BOX; a++) {
+                            for (int f = -Ring.BOX; f <= Ring.BOX; f++) {
+                                BlockState face = paintedAt(chunks, layout, level, frame.at(center + a, f, Ring.BOX * sign));
+                                BlockState beneath = paintedAt(chunks, layout, level, frame.at(center + a, f, (Ring.BOX - 1) * sign));
+                                int depth = Math.abs(columnPatch ? f : a);
+                                int cross = columnPatch ? a : f;
+                                boolean inBezel = Math.max(Math.abs(a), Math.abs(f)) > Ring.PATCH_EDGE;
+                                boolean notchSpot = depth > Ring.PATCH_EDGE && Math.abs(cross) < Ring.PATCH_EDGE && cross % 2 == 0;
+                                if (inBezel) {
+                                    if (!face.isAir()) {
+                                        helper.assertTrue(face == variation.junction(), "A bezel block is not the junction block of its box");
+                                        bezel++;
+                                    }
+                                    if (!notchSpot) {
+                                        helper.assertTrue(beneath != variation.path(), "A bezel block outside a notch has a maze path block under it");
+                                    }
+                                    if (face.isAir() && notchSpot && beneath == variation.path()) {
+                                        notch++;
+                                    } else if (face.isAir()) {
+                                        helper.assertTrue(decay, "A bezel block is air outside a notch without decay");
+                                        decayed++;
+                                    }
+                                } else if (face.isAir()) {
+                                    helper.assertTrue(decay || beneath == variation.path(), "A patch maze path has no maze path block under it");
+                                    path++;
+                                } else {
+                                    helper.assertTrue(face == variation.wall(), "A patch block is not the maze wall block or air");
+                                    wall++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return new FaceCounts(bezel, notch, wall, path, decayed);
+    }
+
+    @GameTest(template = "empty")
+    public static void junctionFacesHoldBezelsAndPatchWalls(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        DimensionSettings settings = twoVariations().withPlacement(TestSettings.PLACEMENT.withColumnChance(1));
+        ShaftLayout layout = new ShaftLayout(mazes, 7, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        FaceCounts counts = checkPatchFaces(helper, layout, 5, false);
+        helper.assertTrue(counts.bezel() > 0 && counts.notch() > 0 && counts.wall() > 0 && counts.path() > 0, "The patch faces miss a kind of block: " + counts);
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void decayKeepsMazePathBlocksOutOfTheBezel(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        DimensionSettings settings = TestSettings.withDecay(twoVariations(), 32, 0.2F, 0.6F).withPlacement(TestSettings.PLACEMENT.withColumnChance(1));
+        ShaftLayout layout = new ShaftLayout(mazes, 7, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        FaceCounts counts = checkPatchFaces(helper, layout, 5, true);
+        helper.assertTrue(counts.bezel() > 0 && counts.decayed() > 0, "Decay removed no bezel block or kept none: " + counts);
+        helper.succeed();
+    }
+
+    @GameTest(template = "empty")
+    public static void variationWithoutJunctionPaintsTheBezelWithItsInterior(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        String json = "{\"interior\": {\"Name\": \"minecraft:tuff\"}, \"wall\": {\"Name\": \"minecraft:tuff_bricks\"}, \"path\": {\"Name\": \"minecraft:polished_tuff\"}}";
+        ShaftVariation tuff = ShaftVariation.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(json)).getOrThrow();
+        helper.assertTrue(tuff.junction() == Blocks.TUFF.defaultBlockState(), "A variation without a junction block did not take its interior block");
+        DimensionSettings settings = TestSettings.withDecay(TestSettings.OVERWORLD.withVariations(List.of(TestSettings.one(tuff))), TestSettings.DECAY_SCALE, 1, 1)
+                .withPlacement(TestSettings.PLACEMENT.withColumnChance(1));
+        ShaftLayout layout = new ShaftLayout(mazes, 7, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        FaceCounts counts = checkPatchFaces(helper, layout, 3, false);
+        helper.assertTrue(counts.bezel() > 0, "No bezel block was checked");
         helper.succeed();
     }
 

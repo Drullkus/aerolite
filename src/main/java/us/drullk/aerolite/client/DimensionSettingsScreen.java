@@ -207,12 +207,14 @@ public class DimensionSettingsScreen extends Screen {
         list.addLabels(
                 Component.translatable(KEY + "wall_block"),
                 Component.translatable(KEY + "path_block"),
-                Component.translatable(KEY + "interior_block")
+                Component.translatable(KEY + "interior_block"),
+                Component.translatable(KEY + "junction_block")
         );
         list.addRow(
                 this.blockField(variation.wall(), KEY + "wall_block", state -> this.editVariation(index, current -> current.withWall(state))),
                 this.blockField(variation.path(), KEY + "path_block", state -> this.editVariation(index, current -> current.withPath(state))),
-                this.blockField(variation.interior(), KEY + "interior_block", state -> this.editVariation(index, current -> current.withInterior(state)))
+                this.blockField(variation.interior(), KEY + "interior_block", state -> this.editVariation(index, current -> current.withInterior(state))),
+                this.blockField(variation.junction(), KEY + "junction_block", state -> this.editVariation(index, current -> current.withJunction(state)))
         );
 
         Button remove = Button.builder(Component.translatable(KEY + "remove_variation"), button -> {

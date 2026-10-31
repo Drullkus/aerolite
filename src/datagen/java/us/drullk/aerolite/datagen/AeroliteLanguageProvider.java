@@ -69,6 +69,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.maze_bias.uniform", "%s (uniform)");
         this.add("createWorld.customize.aerolite.maze_bias.lengthwise", "%s (lengthwise)");
         this.add("createWorld.customize.aerolite.interior_block", "Interior Block");
+        this.add("createWorld.customize.aerolite.junction_block", "Junction Block");
         this.add("createWorld.customize.aerolite.wall_block", "Maze Wall Block");
         this.add("createWorld.customize.aerolite.path_block", "Maze Path Block");
         this.add("createWorld.customize.aerolite.add_variation", "Add Variation");

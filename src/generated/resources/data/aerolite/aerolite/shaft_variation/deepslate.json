@@ -9,6 +9,12 @@
       "axis": "y"
     }
   },
+  "junction": {
+    "Name": "minecraft:deepslate",
+    "Properties": {
+      "axis": "y"
+    }
+  },
   "path": {
     "Name": "minecraft:polished_deepslate"
   },

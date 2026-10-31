@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:packed_mud"
   },
+  "junction": {
+    "Name": "minecraft:packed_mud"
+  },
   "path": {
     "Name": "minecraft:moss_block"
   },

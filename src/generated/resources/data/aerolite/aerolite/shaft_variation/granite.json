@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:granite"
   },
+  "junction": {
+    "Name": "minecraft:granite"
+  },
   "path": {
     "Name": "minecraft:polished_andesite"
   },

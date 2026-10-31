@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:end_stone"
   },
+  "junction": {
+    "Name": "minecraft:end_stone"
+  },
   "path": {
     "Name": "minecraft:purpur_block"
   },

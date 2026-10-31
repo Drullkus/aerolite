@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:smooth_quartz"
   },
+  "junction": {
+    "Name": "minecraft:smooth_quartz"
+  },
   "path": {
     "Name": "minecraft:quartz_block"
   },

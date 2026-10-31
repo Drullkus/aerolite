@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:soul_soil"
   },
+  "junction": {
+    "Name": "minecraft:soul_soil"
+  },
   "path": {
     "Name": "minecraft:warped_wart_block"
   },

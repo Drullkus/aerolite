@@ -22,6 +22,7 @@
   "createWorld.customize.aerolite.erosion_threshold": "Erosion Threshold: %s",
   "createWorld.customize.aerolite.import_failed": "Import failed",
   "createWorld.customize.aerolite.interior_block": "Interior Block",
+  "createWorld.customize.aerolite.junction_block": "Junction Block",
   "createWorld.customize.aerolite.max_shaft_spacing": "Maximum Shaft Spacing: %s",
   "createWorld.customize.aerolite.maze_bias": "Maze Bias: %s",
   "createWorld.customize.aerolite.maze_bias.lengthwise": "%s (lengthwise)",

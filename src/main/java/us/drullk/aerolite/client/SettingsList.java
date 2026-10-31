@@ -25,6 +25,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  */
 public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entry> {
 
@@ -38,6 +39,8 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
     private static final int TRAILING_SPACING = 4;
     /** The width of the title of a value row. */
     private static final int VALUE_TITLE_WIDTH = 80;
+    /** The most widgets of one row. */
+    private static final int MAX_COLUMNS = 4;
     private static final int ITEM_HEIGHT = 24;
     private static final int LABEL_COLOR = 0xFFA0A0A0;
 
@@ -92,7 +95,7 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         this.addEntry(new ValueEntry(titleText, valueText, List.of(trailing)));
     }
 
-    /** Adds a row of one to three labels at the column widths of {@link #addRow} with as many widgets. */
+    /** Adds a row of one to four labels at the column widths of {@link #addRow} with as many widgets. */
     public void addLabels(Component... labels) {
         int width = columnWidth(labels.length);
         List<StringWidget> widgets = new ArrayList<>();
@@ -102,7 +105,7 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         this.addEntry(new LabelEntry(widgets));
     }
 
-    /** Adds a row of one to three widgets of equal width. The row sets the widget widths. */
+    /** Adds a row of one to four widgets of equal width. The row sets the widget widths. */
     public void addRow(AbstractWidget... widgets) {
         int width = columnWidth(widgets.length);
         for (AbstractWidget widget : widgets) {
@@ -112,8 +115,8 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
     }
 
     private static int columnWidth(int columns) {
-        if (columns < 1 || columns > 3) {
-            throw new IllegalArgumentException("A row holds one to three columns, not " + columns);
+        if (columns < 1 || columns > MAX_COLUMNS) {
+            throw new IllegalArgumentException("A row holds one to " + MAX_COLUMNS + " columns, not " + columns);
         }
         return (ROW_WIDTH - (columns - 1) * ROW_SPACING) / columns;
     }

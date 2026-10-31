@@ -30,7 +30,8 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Wilson's algorithm | The spanning tree sampler. A loop-erased random walk steps by edge weight until it hits the tree. |
 | Axis edge | An edge along the shaft axis. On a column the axis is Y. |
 | Ring edge | An edge around the shaft. |
-| Variation | One set of maze bias, decay scale, decay threshold, erosion threshold, interior block, maze wall block and maze path block. Each shaft and column picks one. |
+| Variation | One set of maze bias, decay scale, decay threshold, erosion threshold, interior block, junction block, maze wall block and maze path block. Each shaft and column picks one. |
+| Junction block | The block of the bezel of a junction. It defaults to the interior block. |
 | Variation list | A map of variation id to weight. Its key sequence is the pick sequence. |
 | Shaft data | The placement and the weighted variations of one dimension. |
 | Data map | A NeoForge data map. It attaches a value to a registry entry by id. |
@@ -42,7 +43,8 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Virtual node | A stand-in for one neighbor tree during sampling. It touches every interior node of that tree on the facing ruling. |
 | Crossing | A tree edge at a virtual node. It is the maze path between the two sampled parts. |
 | Junction segment | The segment that holds a junction. It spans the chunks with the nearest surviving ruling on each side of the box, two or three chunks. Its graph drops the box rulings and adds the shaft patch. |
-| Patch | One of the two exposed faces of a junction, a 7x7 node grid. The shaft patch is part of the junction segment of the horizontal shaft. The column patch is part of the junction segment of the column. |
+| Bezel | The 3-block frame of an exposed junction face. It is the junction block. |
+| Patch | One of the two exposed faces of a junction, a 5x5 node grid inside the bezel. The shaft patch is part of the junction segment of the horizontal shaft. The column patch is part of the junction segment of the column. |
 | Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. Each variation sets its own decay scale and thresholds. |
 | Erosion | Removal of shaft and junction box blocks where decay noise passes the erosion threshold. It works from the surface toward the core. |
 | Shear | Noise that removes blocks from a column near one of its ends. |
@@ -305,6 +307,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 | Maze decay scale | Variation | 64 blocks |
 | Maze decay threshold | Variation | 0.35 |
 | Shaft erosion threshold | Variation | 0.5 |
+| Junction block | Variation | The interior block of the variation |
 
 - Each island picks its fill fraction at random between the two bounds.
 - The island height band is the Y range of the island centers in the generating layer.
@@ -313,7 +316,8 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The dimension settings are a map from dimension to shaft placement and variation list.
 - Every variation list holds at least one variation with a positive weight.
 - A dimension without an entry in the map gets no shafts.
-- A variation lists its blocks in the sequence interior block, maze wall block, maze path block.
+- A variation lists its blocks in the sequence interior block, junction block, maze wall block, maze path block.
+- A variation without a junction block takes its interior block as its junction block.
 - A save writes the layout of 0.2.0: the cloud height and the dimension map.
 - A save with a dimension map loads that map. It ignores the top-level fields of 0.1.0.
 - A 0.1.0 save holds the placement and the decay values at the top level, next to a map of variation lists.
@@ -465,7 +469,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - Done writes the edited settings back to the shafts screen. Cancel and Escape drop them.
 - The tab Shaft Placement holds the column chance slider, then the two spacing sliders in one row.
 - The tab Shaft Variations holds the rows of each variation, then the Add Variation button.
-- The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the three block fields, and the button row.
+- The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the four block fields, and the button row.
 - The button row holds the Copy button (export), the Paste button (import) and the Remove button, in that sequence.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
@@ -477,7 +481,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The decay threshold slider runs from 0% to 100% in steps of 5%. 100% is a threshold of 1.
 - The erosion threshold slider runs from 5% to 100% in steps of 5%.
 - The erosion threshold of a variation stays at least 5% above its decay threshold. A slider that passes the other pushes it along, so the decay threshold tops out at 95%.
-- The three block fields are, from left to right, the maze wall block, the maze path block and the interior block.
+- The four block fields are, from left to right, the maze wall block, the maze path block, the interior block and the junction block.
 - A text row above the block fields shows the label of each field. A block field has no tooltip.
 - A block field reads a block id or a block state string, such as `oxidized_copper` or `oak_log[axis=x]`.
 - Bad text gives the block field a red border. The field keeps its last good block.
@@ -485,7 +489,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The dropdown shows the item icon and the name of each block. It lists no air block.
 - A dimension with one variation has its Remove button off.
 - Export writes one variation to the system clipboard as one line of JSON.
-- The JSON of one variation has the fields of a variation entry: bias, decay_scale, decay_threshold, erosion_threshold, interior, wall and path.
+- The JSON of one variation has the fields of a variation entry: bias, decay_scale, decay_threshold, erosion_threshold, interior, junction, wall and path.
 - The JSON of one variation holds no weight. Only the variation codec knows the fields.
 - The variation codec writes every field.
 - Import parses the clipboard at once as one variation.
@@ -624,7 +628,10 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 
 - Three datapack registries hold the shaft data. They do not sync to the client.
 - `aerolite:shaft_variation` holds the variations. The shipped entries are `aerolite:stone`, `aerolite:tuff` and the others in `AeroliteShaftEntries.java`.
-- A variation entry holds `bias`, `decay_scale`, `decay_threshold`, `erosion_threshold`, `interior`, `wall` and `path`. It holds no weight.
+- A variation entry holds `bias`, `decay_scale`, `decay_threshold`, `erosion_threshold`, `interior`, `junction`, `wall` and `path`. It holds no weight.
+- The codec writes `junction` right after `interior`. An entry without `junction` takes its interior block.
+- Each shipped variation takes its interior block as its junction block.
+- A save of 0.2 holds no junction block. So its variation still equals the shipped entry with the same other fields.
 - The variation codec clamps the bias to the slider range.
 - The variation codec raises an erosion threshold at or below the decay threshold to the decay threshold plus 5%.
 - `aerolite:shaft_placement` holds the placements. A dimension takes the entry under its own dimension id.
@@ -706,7 +713,10 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - Each column end picks its shear band height at random, from 8 to 64 blocks.
 - The shear band shrinks so at least 8 blocks of full column stay between the band and the outermost junction box.
 - Shear does not touch a junction box.
-- Where a column crosses a horizontal shaft, a junction joins them. The junction is a 15x15x15 box of the shaft interior block, centered on the crossing.
+- Where a column crosses a horizontal shaft, a junction joins them. The junction is a 15x15x15 box, centered on the crossing.
+- The box is the interior block of its variation.
+- The bezel of each exposed face is the junction block of its variation.
+- The patch area inside the bezel is the maze wall block over the interior block.
 - Every horizontal shaft and every column picks one variation by weight. A weight of 0 never picks.
 - The pick walks the variation list in its sequence. The same seed, weights and sequence give the same shafts.
 - A horizontal shaft picks with a random at its axis and cell. A column picks with a random at the cells of its two shafts.
@@ -746,11 +756,18 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - At a build limit, a segment gets no virtual node on the outer side.
 - A junction cuts the maze grid of both shafts. The one-block rim around each shaft attachment sits on even positions, so it is wall.
 - A junction exposes two patches, the faces that no shaft covers. The seed picks one patch for the horizontal shaft. The other patch serves the column.
-- A junction segment replaces the chunks that hold the nearest surviving ruling on each side of the box. Its graph is those rulings minus the box rulings, plus the shaft patch nodes, plus a crossing from each interior patch border node onto the nearest ruling. One tree spans all of it, so no part strands.
+- The bezel holds the face offsets 5, 6 and 7 in both face directions. The patch area inside it is 9x9.
+- The patch nodes sit at the face offsets -4, -2, 0, 2 and 4. Patch edges sit between neighbor patch nodes.
+- `Ring.PATCH_NODES` sets the patch size. The bezel thickness derives from it and `Ring.BOX`.
+- A junction segment replaces the chunks that hold the nearest surviving ruling on each side of the box. Its graph is those rulings minus the box rulings, plus the shaft patch nodes, plus a crossing from each patch border node that faces the shaft, without the patch corner nodes, onto the nearest ruling. One tree spans all of it, so no part strands.
 - The junction segment keeps the chunk alternation. An end chunk with an odd index gives it a virtual node on that side.
 - When the junction segments of two boxes share a chunk, one junction segment spans both boxes. It holds one shaft patch per box.
-- The column patch is part of a column junction segment. Crossings run from its interior border nodes onto the nearest ruling above and below.
-- A crossing onto a patch steps up one block, from the shaft outer layer onto the junction face.
+- The column patch is part of a column junction segment. Crossings run from its border nodes above and below, without the patch corner nodes, onto the nearest ruling.
+- In the graph, each of the 3 border nodes between the corners of one patch side has one crossing edge. The sampled tree holds a subset of those edges.
+- A patch corner node gets no crossing. It keeps its two patch edges. No patch corner node is dropped.
+- A crossing runs along the shaft outer layer up to the box. Then it notches through the bezel at the face offsets 7, 6 and 5, onto a border node at offset 4.
+- A border node and its ring node sit at the same offset across the shaft axis. So the notch runs straight.
+- Each notch block is a maze path. The block one in is the maze path block.
 - Each shaft is one tree over its full length. No tree touches another shaft. The maze has no loops.
 - A maze wall keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.
 - A maze path has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
@@ -759,7 +776,11 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - Decay is one fractal Brownian simplex noise over the shaft. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
 - The decay threshold t sets the regimes. Noise below -t keeps only maze walls. Noise above t keeps only maze paths.
 - A maze wall or maze path block that decay removes leaves no shaft block. A removed path exposes the interior block.
-- Decay acts on the 13x13 inside of each patch. On a patch, the box block that decay exposes becomes the maze path block.
+- Decay acts on the whole 15x15 face of each patch. The bezel joins the maze grid of the patch as maze wall.
+- Decay removes a bezel block where the noise passes the decay threshold, like a maze wall. The interior block beneath it shows.
+- A removed patch maze wall exposes the interior block, like a removed shaft maze wall.
+- A removed patch maze path also removes its maze path block. The block one further in becomes the maze path block.
+- A notch block decays like a maze path.
 - Erosion starts where the absolute decay noise passes the erosion threshold, at either end of the noise.
 - The reach is the absolute noise, normalized from the erosion threshold to 1.
 - Each block has an erosion resistance from 0 to 1. Erosion removes a block when the reach exceeds its resistance.
@@ -768,7 +789,6 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - A box block takes the largest of the box resistance and the resistance of each shaft whose cross section holds it. So erosion never cuts a shaft at a junction.
 - Erosion samples the noise at each block, so one side of a shaft can erode deeper than the other.
 - Erosion runs after decay and before shear. An eroded block leaves no shaft block.
-- The rim of a patch face stays wall. Decay does not touch it.
 - The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
 - The prototype keeps Origin Shift and its start trees for comparison. The mod uses only Wilson's algorithm.
 

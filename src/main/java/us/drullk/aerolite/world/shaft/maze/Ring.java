@@ -9,6 +9,7 @@ import tamaized.beanification.Component;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  */
 @Component
 public final class Ring {
@@ -20,6 +21,14 @@ public final class Ring {
     public static final int OUTER = 6;
     /** The offset of the junction box face from the junction center. */
     public static final int BOX = 7;
+    /** The nodes along one side of a junction patch. */
+    public static final int PATCH_NODES = 5;
+    /** The largest patch node index. The indices run from minus this value to this value. */
+    public static final int PATCH_INDEX = PATCH_NODES / 2;
+    /** The largest face offset of the patch area. The patch border nodes sit on it. */
+    public static final int PATCH_EDGE = 2 * PATCH_INDEX;
+    /** The thickness of the bezel, the frame between the patch area and the box edge. */
+    public static final int BEZEL = BOX - PATCH_EDGE;
 
     public boolean isCorner(int node) {
         return node % FACE_NODES == 0;

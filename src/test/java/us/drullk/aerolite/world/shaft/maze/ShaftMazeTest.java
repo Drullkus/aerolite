@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  */
 class ShaftMazeTest {
 
@@ -134,8 +135,48 @@ class ShaftMazeTest {
                             .filter(MazeNode.Patch.class::isInstance)
                             .distinct()
                             .count();
-                    assertEquals(49, patchNodes, "The tree misses a patch node at bias " + bias);
+                    assertEquals(Ring.PATCH_NODES * Ring.PATCH_NODES, patchNodes, "The tree misses a patch node at bias " + bias);
                     assertTrue(nodes > patchNodes);
+                }
+            }
+        }
+    }
+
+    /** The patch border nodes that face the shaft get a crossing each. The patch corner nodes get none. */
+    @Test
+    void crossingsSkipThePatchCorners() {
+        ShaftMaze.Box box = new ShaftMaze.Box(203, 1);
+        ShaftMaze maze = maze(1, List.of(box));
+        Set<List<Integer>> crossed = new HashSet<>();
+        for (ShaftMaze.Crossing crossing : maze.crossings(box)) {
+            assertEquals(Ring.PATCH_INDEX, Math.abs(crossing.along()));
+            assertTrue(Math.abs(crossing.across()) < Ring.PATCH_INDEX, () -> "A patch corner node has a crossing: " + crossing);
+            assertEquals(maze.crossingNode(box, crossing.across()), crossing.node());
+            assertTrue(crossed.add(List.of(crossing.along(), crossing.across())), () -> "A patch node has two crossings: " + crossing);
+        }
+        Set<List<Integer>> expected = new HashSet<>();
+        for (int along : new int[]{-Ring.PATCH_INDEX, Ring.PATCH_INDEX}) {
+            for (int across = 1 - Ring.PATCH_INDEX; across < Ring.PATCH_INDEX; across++) {
+                expected.add(List.of(along, across));
+            }
+        }
+        assertEquals(expected, crossed);
+        assertEquals(2 * (Ring.PATCH_NODES - 2), crossed.size());
+    }
+
+    /** No tree edge joins a patch corner node to a ruling. */
+    @Test
+    void treesHaveNoCornerCrossing() {
+        for (float bias : BIASES) {
+            for (int center = 160; center < 192; center++) {
+                ShaftMaze maze = maze(center, List.of(new ShaftMaze.Box(center, 1)), bias);
+                for (MazeEdge edge : edges(segments(maze, 4, 18))) {
+                    MazeNode.Patch patch = edge.a() instanceof MazeNode.Patch a && edge.b() instanceof MazeNode.Ruling ? a
+                            : edge.b() instanceof MazeNode.Patch b && edge.a() instanceof MazeNode.Ruling ? b : null;
+                    if (patch != null) {
+                        assertEquals(Ring.PATCH_INDEX, Math.abs(patch.i()), () -> "A crossing leaves a patch node off the border: " + edge);
+                        assertTrue(Math.abs(patch.j()) < Ring.PATCH_INDEX, () -> "A crossing leaves a patch corner node: " + edge);
+                    }
                 }
             }
         }

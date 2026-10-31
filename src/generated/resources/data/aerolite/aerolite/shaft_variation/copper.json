@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:oxidized_copper"
   },
+  "junction": {
+    "Name": "minecraft:oxidized_copper"
+  },
   "path": {
     "Name": "minecraft:oxidized_copper_bulb",
     "Properties": {

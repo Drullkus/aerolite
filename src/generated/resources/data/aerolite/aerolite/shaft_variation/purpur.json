@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:obsidian"
   },
+  "junction": {
+    "Name": "minecraft:obsidian"
+  },
   "path": {
     "Name": "minecraft:crying_obsidian"
   },

@@ -6,6 +6,9 @@
   "interior": {
     "Name": "minecraft:stone"
   },
+  "junction": {
+    "Name": "minecraft:stone"
+  },
   "path": {
     "Name": "minecraft:cobblestone"
   },
