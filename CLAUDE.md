@@ -216,6 +216,7 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 - Each `.frag` file has a port in `prototypes/shadertoy/<name>.shadertoy.glsl`. The port pastes into one Shadertoy "Image" tab with no channels.
 - `prototypes/tools/` holds the GLSL validator.
 - The maze is a standalone program in `prototypes/maze/`. Prototype a maze change there before you write any maze code in the mod. `prototypes/maze/README.md` lists the commands.
+- The chunk paint of `junction.py` paints the junction scene chunk by chunk, like the mod. `--chunk-stats` counts the exposed interior blocks of each paint rule.
 - Before you design or change an island shape, point the user at Earth photographs. See the global rule.
 
 ## Dimension
@@ -517,6 +518,8 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - Each shaft is one tree over its full length. No tree touches another shaft. The maze has no loops.
 - A maze wall keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.
 - A maze path has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
+- A maze path at a chunk edge can have its maze path block in the next chunk. Each chunk writes the blocks of a maze path that lie in it.
+- The maze grid of a chunk holds the maze grid blocks up to two blocks outside the chunk. So both chunks decay one maze path the same way.
 - Decay is one fractal Brownian simplex noise over the shaft. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
 - The decay threshold t sets the regimes. Noise below -t keeps only maze walls. Noise above t keeps only maze paths.
 - A maze wall or maze path block that decay removes becomes air. A removed path exposes the interior block.

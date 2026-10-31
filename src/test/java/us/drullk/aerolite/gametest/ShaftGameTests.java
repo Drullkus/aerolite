@@ -31,6 +31,8 @@ import us.drullk.aerolite.world.DimensionSettings;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.TestSettings;
+import us.drullk.aerolite.world.shaft.ShaftFrame;
+import us.drullk.aerolite.world.shaft.ShaftFrames;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
@@ -52,6 +54,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_18-08_4c0300c8-1a76-4b8e-86b0-0cb9daa7d32a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -66,6 +69,8 @@ public final class ShaftGameTests {
     private static ShaftPainter painter;
     @Autowired
     private static Ring ring;
+    @Autowired
+    private static ShaftFrames frames;
 
     private ShaftGameTests() {
     }
@@ -192,6 +197,96 @@ public final class ShaftGameTests {
             }
         }
         helper.assertTrue(boxAir > 0, "Erosion removed no box edge block");
+        helper.succeed();
+    }
+
+    /** True when the maze grid block at the offset and its maze path block lie in two chunks. */
+    private static boolean straddlesChunkEdge(int center, int offset) {
+        return SectionPos.blockToSectionCoord(center + offset) != SectionPos.blockToSectionCoord(center + clampInterior(offset));
+    }
+
+    /**
+     * Checks that every maze path of a shaft or column in a range along it has its maze path block.
+     * Returns the count of maze paths whose maze path block lies in another chunk.
+     */
+    private static int checkMazePaths(GameTestHelper helper, Map<Long, ProtoChunk> chunks, ShaftLayout layout, ShaftFrame frame, ShaftVariation variation, int min, int max) {
+        ServerLevel level = helper.getLevel();
+        int crossings = 0;
+        for (int along = min; along <= max; along++) {
+            for (int block = 0; block < Ring.BLOCKS; block++) {
+                int first = ring.first(block);
+                int second = ring.second(block);
+                BlockPos surface = frame.at(along, first, second);
+                if (!paintedAt(chunks, layout, level, surface).isAir()) {
+                    continue;
+                }
+                BlockPos beneath = frame.at(along, clampInterior(first), clampInterior(second));
+                helper.assertTrue(paintedAt(chunks, layout, level, beneath) == variation.path(), "A maze path has no maze path block under it");
+                if (new ChunkPos(surface).toLong() != new ChunkPos(beneath).toLong()) {
+                    crossings++;
+                }
+            }
+        }
+        return crossings;
+    }
+
+    @GameTest(template = "empty")
+    public static void mazePathBlockLiesInTheNextChunk(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        DimensionSettings settings = twoVariations().withPlacement(TestSettings.PLACEMENT.withColumnChance(1));
+        ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        Map<Long, ProtoChunk> chunks = new HashMap<>();
+        ShaftLayout.Shaft shaft = null;
+        for (int cell = 0; shaft == null && cell < 64; cell++) {
+            ShaftLayout.Shaft candidate = layout.shaft(ShaftLayout.Axis.Z, cell).orElseThrow();
+            if (straddlesChunkEdge(candidate.position(), Ring.OUTER) || straddlesChunkEdge(candidate.position(), -Ring.OUTER)) {
+                shaft = candidate;
+            }
+        }
+        helper.assertTrue(shaft != null, "No Z shaft of the first cells straddles a chunk edge");
+        int chunkZ = 0;
+        while (!layout.columnsOn(shaft, 16 * chunkZ - 16, 16 * chunkZ + 32).isEmpty()) {
+            chunkZ++;
+        }
+        int shaftCrossings = checkMazePaths(helper, chunks, layout, frames.of(shaft), layout.variation(shaft), 16 * chunkZ, 16 * chunkZ + 15);
+        helper.assertTrue(shaftCrossings > 0, "No maze path of the shaft has its maze path block in the next chunk");
+
+        ShaftLayout.Column column = null;
+        for (int cell = 0; column == null && cell < 64; cell++) {
+            for (int other = 0; column == null && other < 64; other++) {
+                ShaftLayout.Column candidate = layout.column(cell, other).orElse(null);
+                if (candidate != null && (straddlesChunkEdge(candidate.x(), Ring.OUTER) || straddlesChunkEdge(candidate.x(), -Ring.OUTER)
+                        || straddlesChunkEdge(candidate.z(), Ring.OUTER) || straddlesChunkEdge(candidate.z(), -Ring.OUTER))) {
+                    column = candidate;
+                }
+            }
+        }
+        helper.assertTrue(column != null, "No column of the first cells straddles a chunk edge");
+        int bottom = column.junctions().getFirst().center() + Ring.BOX + 1;
+        int top = column.junctions().getLast().center() - Ring.BOX - 1;
+        int columnCrossings = checkMazePaths(helper, chunks, layout, frames.of(column), layout.variation(column), bottom, top);
+        helper.assertTrue(columnCrossings > 0, "No maze path of the column has its maze path block in the next chunk");
+        helper.succeed();
+    }
+
+    /** The world seed and the position of a report of exposed interior blocks at a chunk edge. */
+    @GameTest(template = "empty")
+    public static void reportedShaftsKeepTheirMazePathBlocks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        long seed = 3446441043220923556L;
+        BlockPos around = new BlockPos(421, 220, 166);
+        int reach = 32;
+        DimensionSettings settings = TestSettings.withDecay(DimensionSettings.defaults(Level.OVERWORLD), ShaftVariation.DEFAULT_DECAY_SCALE, 1, 1);
+        ShaftLayout layout = new ShaftLayout(mazes, seed, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        Map<Long, ProtoChunk> chunks = new HashMap<>();
+        int crossings = 0;
+        for (ShaftLayout.Shaft shaft : layout.shafts(ShaftLayout.Axis.Z, around.getX() - reach, around.getX() + reach)) {
+            crossings += checkMazePaths(helper, chunks, layout, frames.of(shaft), layout.variation(shaft), around.getZ() - reach, around.getZ() + reach);
+        }
+        for (ShaftLayout.Shaft shaft : layout.shafts(ShaftLayout.Axis.X, around.getZ() - reach, around.getZ() + reach)) {
+            crossings += checkMazePaths(helper, chunks, layout, frames.of(shaft), layout.variation(shaft), around.getX() - reach, around.getX() + reach);
+        }
+        helper.assertTrue(crossings > 0, "No maze path near the position has its maze path block in the next chunk");
         helper.succeed();
     }
 

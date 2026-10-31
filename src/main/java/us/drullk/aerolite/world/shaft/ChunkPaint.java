@@ -24,15 +24,19 @@ import java.util.List;
  * Volumes come first, then maze paths, then decay, then erosion, then shear.
  * Each shaft and column paints with its own variation. A junction box paints with the variation of its horizontal shaft.
  * Decay and erosion read the thresholds and the decay noise of the variation of each block.
+ * The maze grid of the chunk holds the grid blocks up to two blocks outside the chunk. Their maze path blocks and decay writes can lie in the chunk.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md}.
  */
 final class ChunkPaint {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
+    /** The blocks beyond a chunk edge whose maze grid blocks write into the chunk. A patch decay writes two blocks inward. */
+    private static final int GRID_MARGIN = 2;
 
     /** A patch block: its outward face direction and the variation of its junction box. */
     private record PatchBlock(Direction normal, ShaftVariation variation) {
@@ -114,6 +118,13 @@ final class ChunkPaint {
                 && pos.getY() >= this.layout.minY() && pos.getY() < this.layout.maxY();
     }
 
+    /** True when a write of the maze grid block at {@code pos} can lie in the chunk. */
+    private boolean nearChunk(BlockPos pos) {
+        return pos.getX() >= this.minX - GRID_MARGIN && pos.getX() < this.minX + 16 + GRID_MARGIN
+                && pos.getZ() >= this.minZ - GRID_MARGIN && pos.getZ() < this.minZ + 16 + GRID_MARGIN
+                && pos.getY() >= this.layout.minY() && pos.getY() < this.layout.maxY();
+    }
+
     private void set(BlockPos pos, BlockState state) {
         if (this.inChunk(pos)) {
             this.chunk.setBlockState(pos, state, false);
@@ -169,12 +180,11 @@ final class ChunkPaint {
         for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
             for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
                 BlockPos pos = frame.at(along, first, second);
-                if (!this.inChunk(pos)) {
-                    continue;
-                }
                 boolean outer = Math.max(Math.abs(first), Math.abs(second)) == Ring.OUTER;
-                this.chunk.setBlockState(pos, outer ? variation.wall() : variation.interior(), false);
-                if (outer && grid) {
+                if (this.inChunk(pos)) {
+                    this.chunk.setBlockState(pos, outer ? variation.wall() : variation.interior(), false);
+                }
+                if (outer && grid && this.nearChunk(pos)) {
                     this.shaftGrid.put(pos.asLong(), variation);
                 }
             }
@@ -202,7 +212,7 @@ final class ChunkPaint {
         for (int along = -Ring.OUTER; along <= Ring.OUTER; along++) {
             for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
                 MazeCarver.Carve carve = face.carve(face.center() + along, first);
-                if (this.inChunk(carve.surface())) {
+                if (this.nearChunk(carve.surface())) {
                     this.patchGrid.put(carve.surface().asLong(), new PatchBlock(carve.normal(), variation));
                 }
             }
@@ -240,11 +250,12 @@ final class ChunkPaint {
         }
     }
 
+    /** Writes the blocks of one maze path that lie in the chunk. Its maze grid block can lie in the next chunk. */
     private void carve(MazeCarver.Carve carve, ShaftVariation variation) {
-        if (!this.inChunk(carve.surface())) {
+        if (!this.nearChunk(carve.surface())) {
             return;
         }
-        this.chunk.setBlockState(carve.surface(), AIR, false);
+        this.set(carve.surface(), AIR);
         this.set(carve.beneath(), variation.path());
         long key = carve.surface().asLong();
         this.carves.put(key, new PaintedCarve(carve, variation));

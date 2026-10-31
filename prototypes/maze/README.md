@@ -130,6 +130,18 @@ The five approaches against the ribs are:
 - Two boxes can sit so close on one shaft that their junction segments share a chunk. Then one junction segment spans both, with one patch per box. `--cluster-stats` checks that the shaft stays one tree.
 - The cut model is the earlier design. It samples plain segments through the box, cuts them, and rejoins the stub components through the patch. `--cut-stats` prints how many components stay stranded.
 
+## Chunk paint
+
+The mod paints one chunk at a time. The chunk paint of `junction.py` models that.
+
+- The chunk paint fills the junction scene, then writes the carves chunk by chunk. A chunk is 16 blocks in X and Z.
+- A carve is one maze path: the surface block that becomes air and the block beneath it that becomes the maze path block.
+- The surface rule skips a carve whose surface block is outside the chunk. So a maze path at a chunk edge leaves the interior block under it.
+- The each rule writes each block of a carve that is inside the chunk. The mod uses the each rule.
+- An exposed interior block is a maze path block of the whole-scene paint that the chunk paint does not write.
+- `--cz` sets the Z of the shaft center. The default is 0.
+- A shaft center at Z 5 or Z 10 inside its chunk puts the surface and the block beneath it in two chunks. A patch does the same at Z 6 or Z 9.
+
 ## Commands
 
 Run every command from the repository root.
@@ -315,6 +327,19 @@ Measure the stranded components of the cut model:
 python3 prototypes/maze/junction.py --cut-stats --count 40
 ```
 
+Count the exposed interior blocks of each chunk paint rule for every shaft center Z inside one chunk:
+
+```bash
+python3 prototypes/maze/junction.py --chunk-stats
+```
+
+Render the chunk paint of each rule at one shaft center Z:
+
+```bash
+python3 prototypes/maze/junction.py --chunk-paint --cz 10
+python3 prototypes/maze/junction.py --chunk-paint --cz 9
+```
+
 ## Output
 
 The images are in `images/`.
@@ -354,5 +379,8 @@ The images are in `images/`.
 - The folder holds the degree rule bands, closeups, graph views, junction scenes and column bands for P = 0.1, 0.5 and 0.9, with the same seed and place.
 - The folder holds `compare_bias<P>.png` and `compare_column_bias<P>.png` for P = 0.1, 0.5 and 0.9, with seed 1 and 24 chunks.
 - The folder holds `compare_starts_bias<P>.png`, `compare_starts_column_bias<P>.png`, `compare_starts_only_bias<P>.png` and their bands for P = 0.1 and 0.9, with seed 1 and 24 chunks.
+
+- `chunk_paint_<rule>_<view>_cz<Z>.png` is the chunk paint of one rule from the front or the back, at shaft center Z. The exposed interior blocks are red.
+- The folder holds the chunk paint of both rules at Z 10 and Z 9. Z 10 shows the shaft and the column. Z 9 shows the patches.
 
 - `seed3/` holds one junction with seed 3, rendered before the bias option existed.

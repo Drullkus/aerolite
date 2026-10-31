@@ -29,12 +29,20 @@ Every scene also takes the start tree and the scaled steps of originshift.py.
 A curve start runs over each block of rulings that axis edges join. The
 patch nodes and the virtual nodes join through the union-find pass.
 
+The chunk paint writes the carves of the junction scene chunk by chunk, like
+the mod. A chunk is 16 blocks in X and Z. The surface rule skips a carve whose
+surface block is outside the chunk. The each rule writes each block of a carve
+that is inside the chunk. The exposed interior blocks are the maze path blocks
+that a rule does not write.
+
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md
+Written by Claude Code; conversation transcript:
+llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md
 """
 
 import argparse
@@ -140,8 +148,8 @@ def tree_edges(g, parent, names):
 class Scene:
     """One junction: a junction segment on the shaft, pieces and a patch on the column."""
 
-    def __init__(self, seed, cx, cy, sampler, steps_per_node, bias, chunks_each_side=3, piece_rulings=12):
-        self.seed, self.cx, self.cy, self.cz = seed, cx, cy, 0
+    def __init__(self, seed, cx, cy, sampler, steps_per_node, bias, chunks_each_side=3, piece_rulings=12, cz=0):
+        self.seed, self.cx, self.cy, self.cz = seed, cx, cy, cz
         self.sampler, self.spn, self.bias = sampler, steps_per_node, bias
         rng = random.Random(f"{seed}:junction:{cx}:{cy}")
         self.shaft_sign = rng.choice((1, -1))
@@ -792,11 +800,12 @@ def check_tree(scene):
     return f"{len(nodes)} nodes, {len(getattr(scene, 'shaft_edges', None) or scene.edges)} edges, {len(roots)} component(s)"
 
 
-AIR, STONE, BRICK, COBBLE, BOX = 0, 1, 2, 3, 4
-COLORS = {STONE: (128, 128, 128), BRICK: (160, 152, 142), COBBLE: (92, 96, 102), BOX: (120, 126, 134)}
+AIR, STONE, BRICK, COBBLE, BOX, EXPOSED = 0, 1, 2, 3, 4, 5
+COLORS = {STONE: (128, 128, 128), BRICK: (160, 152, 142), COBBLE: (92, 96, 102), BOX: (120, 126, 134), EXPOSED: (210, 40, 40)}
 
 
-def build_voxels(scene, reach):
+def fill_voxels(scene, reach):
+    """The shaft, the column and the box of the scene, with no carve."""
     blocks = {}
     cx, cy, cz = scene.cx, scene.cy, scene.cz
     for x in range(cx - reach, cx + reach + 1):
@@ -811,10 +820,82 @@ def build_voxels(scene, reach):
         for dy in range(-HALF, HALF + 1):
             for dz in range(-HALF, HALF + 1):
                 blocks[(cx + dx, cy + dy, cz + dz)] = BOX
+    return blocks
+
+
+def build_voxels(scene, reach):
+    """The scene with every carve written, with no chunk edge."""
+    blocks = fill_voxels(scene, reach)
     for surface, beneath in scene.carves(reach):
         blocks[surface] = AIR
         blocks[beneath] = COBBLE
     return blocks
+
+
+# --- chunk paint ---------------------------------------------------------------
+
+SURFACE_RULE = "surface"
+EACH_RULE = "each"
+CHUNK_RULES = (SURFACE_RULE, EACH_RULE)
+
+
+def chunk_of(pos):
+    """The chunk of a block, as its X and Z chunk coordinates."""
+    return pos[0] // CHUNK, pos[2] // CHUNK
+
+
+def paint_chunk(blocks, chunk, carves, rule):
+    """Write the carves into the blocks of one chunk, like one chunk paint of the mod.
+
+    The surface rule skips a carve whose surface block is outside the chunk.
+    The each rule writes each block of a carve that is inside the chunk.
+    """
+    for surface, beneath in carves:
+        if rule == SURFACE_RULE and chunk_of(surface) != chunk:
+            continue
+        if chunk_of(surface) == chunk:
+            blocks[surface] = AIR
+        if chunk_of(beneath) == chunk:
+            blocks[beneath] = COBBLE
+
+
+def build_chunk_voxels(scene, reach, rule):
+    """The scene painted chunk by chunk under one rule."""
+    blocks = fill_voxels(scene, reach)
+    carves = scene.carves(reach)
+    for chunk in sorted({chunk_of(p) for p in blocks}):
+        paint_chunk(blocks, chunk, carves, rule)
+    return blocks
+
+
+def exposed_interior(blocks, reference):
+    """The maze path blocks of the reference that the blocks do not hold."""
+    return sorted(p for p, m in reference.items() if m == COBBLE and blocks.get(p) != COBBLE)
+
+
+def chunk_stats(seed, cx, cy, sampler, spn, bias, reach):
+    """Print the exposed interior blocks of each rule for every shaft center Z inside one chunk."""
+    print("cz  " + "  ".join(f"{rule:>8}" for rule in CHUNK_RULES))
+    for cz in range(CHUNK):
+        scene = Scene(seed, cx, cy, sampler, spn, bias, cz=cz)
+        reference = build_voxels(scene, reach)
+        counts = [len(exposed_interior(build_chunk_voxels(scene, reach, rule), reference)) for rule in CHUNK_RULES]
+        print(f"{cz:>2}  " + "  ".join(f"{n:>8}" for n in counts))
+
+
+def render_chunk_paint(out_dir, scene, reach, scale, suffix):
+    """Render the chunk paint of each rule from both sides. The exposed interior blocks are red."""
+    reference = build_voxels(scene, reach)
+    for rule in CHUNK_RULES:
+        blocks = build_chunk_voxels(scene, reach, rule)
+        exposed = exposed_interior(blocks, reference)
+        for p in exposed:
+            blocks[p] = EXPOSED
+        print(f"{rule} rule: {len(exposed)} exposed interior blocks")
+        for flip, view in ((False, "front"), (True, "back")):
+            name = f"chunk_paint_{rule}_{view}_cz{scene.cz}{suffix}.png"
+            render_iso(blocks, os.path.join(out_dir, name), scale, flip)
+            print("wrote", name)
 
 
 def render_iso(blocks, path, scale, flip):
@@ -880,6 +961,7 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--cx", type=int, default=203)
     ap.add_argument("--cy", type=int, default=70)
+    ap.add_argument("--cz", type=int, default=0, help="Z of the shaft center; the chunk edges sit at multiples of 16")
     ap.add_argument("--sampler", choices=("originshift", "wilson"), default="originshift")
     ap.add_argument("--steps-per-node", type=int, default=DEFAULT_STEPS)
     ap.add_argument("--bias", type=bias_value, default=DEFAULT_BIAS, help="axis chance of the class rule or axis edge weight of the degree rule")
@@ -893,6 +975,8 @@ def main():
     ap.add_argument("--cluster-stats", action="store_true", help="check that two close boxes in one junction segment keep the shaft one tree and exit")
     ap.add_argument("--column-stats", action="store_true", help="check that a segmented column with two junctions is one tree and exit")
     ap.add_argument("--column-band", action="store_true", help="render the unwrapped surface of one segmented column and exit")
+    ap.add_argument("--chunk-paint", action="store_true", help="paint the junction scene chunk by chunk under each rule, render the exposed interior blocks and exit")
+    ap.add_argument("--chunk-stats", action="store_true", help="count the exposed interior blocks of each rule for every shaft center Z inside one chunk and exit")
     ap.add_argument("--count", type=int, default=40)
     ap.add_argument("--compare", action="store_true", help="render the column band of the class rule and the degree rule side by side and exit")
     ap.add_argument("--compare-starts", action="store_true", help="with --column-band, render the column band of each start tree side by side and exit")
@@ -903,8 +987,10 @@ def main():
     check_weighted_wilson(ap, args.compare_starts or (args.rule == DEGREE_RULE and args.sampler == "wilson"), args.bias)
     check_scaled_steps(ap, args.scaled_steps or args.compare_starts, args.bias)
     if args.cut_stats:
-
         cut_stats(args.seed, args.count, args.sampler, args.steps_per_node, bias)
+        return
+    if args.chunk_stats:
+        chunk_stats(args.seed, args.cx, args.cy, args.sampler, args.steps_per_node, bias, args.reach)
         return
     if args.cluster_stats:
         cluster_stats(args.seed, args.count, args.sampler, args.steps_per_node, bias)
@@ -933,8 +1019,10 @@ def main():
         print("wrote", name)
         return
     os.makedirs(args.out, exist_ok=True)
-    scene = Scene(args.seed, args.cx, args.cy, args.sampler, args.steps_per_node, bias)
-
+    scene = Scene(args.seed, args.cx, args.cy, args.sampler, args.steps_per_node, bias, cz=args.cz)
+    if args.chunk_paint:
+        render_chunk_paint(args.out, scene, args.reach, args.scale, suffix)
+        return
     print("shaft tree:", check_tree(scene))
     blocks = build_voxels(scene, args.reach)
     front = "shaft" if scene.shaft_sign == 1 else "column"
