@@ -14,6 +14,7 @@ import us.drullk.aerolite.Aerolite;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -56,12 +57,17 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.path_block", "Maze Path Block");
         this.add("createWorld.customize.aerolite.add_variation", "Add Variation");
         this.add("createWorld.customize.aerolite.remove_variation", "Remove Variation");
+        this.add("createWorld.customize.aerolite.export_variation", "Export");
+        this.add("createWorld.customize.aerolite.import_variation", "Import");
+        this.add("createWorld.customize.aerolite.export_variation_tooltip", "Copy this variation to the clipboard");
+        this.add("createWorld.customize.aerolite.import_variation_tooltip", "Replace this variation from the clipboard");
         this.add("createWorld.customize.aerolite.preview", "Preview");
         this.add("createWorld.customize.aerolite.copy", "Copy");
         this.add("createWorld.customize.aerolite.paste", "Paste");
         this.add("createWorld.customize.aerolite.copy_tooltip", "Copy to Clipboard");
         this.add("createWorld.customize.aerolite.paste_tooltip", "Paste from Clipboard");
         this.add("createWorld.customize.aerolite.paste_failed", "Paste failed");
+        this.add("createWorld.customize.aerolite.import_failed", "Import failed");
         this.add("createWorld.customize.aerolite.preview.title", "Aerolite Preview");
         this.add("createWorld.customize.aerolite.preview.section", "Preview");
         this.add("createWorld.customize.aerolite.preview.seed", "Seed");

@@ -3,6 +3,7 @@ package us.drullk.aerolite.client;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.components.tabs.TabManager;
 import net.minecraft.client.gui.components.tabs.TabNavigationBar;
@@ -30,9 +31,11 @@ import java.util.function.UnaryOperator;
  * The settings screen of one dimension. It edits a copy of the settings.
  * The tab Shaft Placement holds the placement sliders. For the Overworld it also holds the cloud height slider.
  * The tab Shaft Variations holds the variation rows and the Add Variation button.
+ * Export and Import move one variation without its weight through the system clipboard.
  * Done sends the copy back to the preset screen. Cancel and Escape drop it.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public class DimensionSettingsScreen extends Screen {
 
@@ -164,7 +167,7 @@ public class DimensionSettingsScreen extends Screen {
         return this.edits.variations(this.settings, this.dimension).get(index);
     }
 
-    /** Adds the slider rows, the label row, the block row and the Remove row of one variation. */
+    /** Adds the slider rows, the label row, the block row and the row of Export, Import and Remove of one variation. */
     private void addVariation(SettingsList list, int index, ShaftVariation variation) {
         StepSlider[] weight = new StepSlider[1];
         weight[0] = new StepSlider(ShaftVariation.MAX_WEIGHT, variation.weight(),
@@ -213,7 +216,28 @@ public class DimensionSettingsScreen extends Screen {
             this.rebuildPending = true;
         }).build();
         remove.active = this.edits.canRemove(this.settings, this.dimension);
-        list.addRow(remove);
+        list.addRow(
+                this.clipboardButton("export_variation", button -> this.tools.json().copyVariation(this.variation(index))),
+                this.clipboardButton("import_variation", button -> this.importVariation(index)),
+                remove
+        );
+    }
+
+    /** A button whose tooltip has the key of the button plus {@code _tooltip}. */
+    private Button clipboardButton(String key, Button.OnPress onPress) {
+        return Button.builder(Component.translatable(KEY + key), onPress)
+                .tooltip(Tooltip.create(Component.translatable(KEY + key + "_tooltip")))
+                .build();
+    }
+
+    /** A good import replaces the variation and keeps its weight. A bad import shows a toast and keeps the variation. */
+    private void importVariation(int index) {
+        this.tools.json().pasteVariation(this.variation(index).weight())
+                .ifSuccess(imported -> {
+                    this.settings = this.settings.withVariation(this.dimension, index, imported);
+                    this.rebuildPending = true;
+                })
+                .ifError(error -> this.tools.json().showImportFailed(error.message()));
     }
 
     private BlockField blockField(BlockState state, String key, Consumer<BlockState> onChange) {

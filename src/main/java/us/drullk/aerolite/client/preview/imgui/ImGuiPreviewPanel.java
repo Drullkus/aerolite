@@ -1,5 +1,6 @@
 package us.drullk.aerolite.client.preview.imgui;
 
+import com.mojang.serialization.DataResult;
 import foundry.imgui.api.ImGuiMCEvents;
 import foundry.veil.api.client.render.VeilRenderSystem;
 import imgui.ImGui;
@@ -37,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -51,6 +53,7 @@ import java.util.function.Function;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_21-56_ad766c27-abc7-4f8b-ae6a-53b92f85435c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -429,7 +432,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return edited;
     }
 
-    /** The sliders in the sequence of the menu, then the block fields and the Remove button. */
+    /** The sliders in the sequence of the menu, then the block fields and the buttons Export, Import and Remove. */
     private AeroliteSettings drawVariation(AeroliteSettings settings, ResourceKey<Level> dimension, int index, String fieldKey) {
         PresetSliders sliders = this.tools().sliders();
         AeroliteSettings edited = settings;
@@ -468,12 +471,40 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         edited = this.blockField(edited, dimension, index, fieldKey + "/wall", BLOCK_LABELS.get(0), fieldStart, variation.wall(), ShaftVariation::withWall);
         edited = this.blockField(edited, dimension, index, fieldKey + "/path", BLOCK_LABELS.get(1), fieldStart, variation.path(), ShaftVariation::withPath);
         edited = this.blockField(edited, dimension, index, fieldKey + "/interior", BLOCK_LABELS.get(2), fieldStart, variation.interior(), ShaftVariation::withInterior);
+        edited = this.drawVariationClipboard(edited, dimension, index);
+        ImGui.sameLine();
         boolean removable = this.tools().edits().canRemove(edited, dimension);
         ImGui.beginDisabled(!removable);
         if (ImGui.button(text("remove_variation") + "##remove")) {
             edited = this.tools().edits().withoutVariation(edited, dimension, index);
         }
         ImGui.endDisabled();
+        return edited;
+    }
+
+    /** Export and Import of one variation. A good import replaces the variation and keeps its weight. */
+    private AeroliteSettings drawVariationClipboard(AeroliteSettings settings, ResourceKey<Level> dimension, int index) {
+        ShaftVariation current = this.tools().edits().variations(settings, dimension).get(index);
+        if (ImGui.button(text("export_variation") + "##export")) {
+            this.tools().json().copyVariation(current);
+        }
+        if (ImGui.isItemHovered()) {
+            ImGui.setTooltip(text("export_variation_tooltip"));
+        }
+        ImGui.sameLine();
+        AeroliteSettings edited = settings;
+        if (ImGui.button(text("import_variation") + "##import")) {
+            DataResult<ShaftVariation> imported = this.tools().json().pasteVariation(current.weight());
+            Optional<ShaftVariation> parsed = imported.result();
+            if (parsed.isPresent()) {
+                edited = settings.withVariation(dimension, index, parsed.get());
+            } else {
+                imported.ifError(error -> this.tools().json().showImportFailed(error.message()));
+            }
+        }
+        if (ImGui.isItemHovered()) {
+            ImGui.setTooltip(text("import_variation_tooltip"));
+        }
         return edited;
     }
 

@@ -323,7 +323,8 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The tab Shaft Placement holds the column chance slider, then the two spacing sliders in one row.
 - For the Overworld, the tab Shaft Placement adds the header Clouds and the cloud height slider.
 - The tab Shaft Variations holds the rows of each variation, then the Add Variation button.
-- The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the three block fields, and the Remove button.
+- The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the three block fields, and the button row.
+- The button row holds the Export button, the Import button and the Remove button, in that sequence.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
 - A spacing slider that passes the other spacing slider pushes it along.
@@ -342,6 +343,15 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - While a block field has focus and text, a dropdown lists up to 8 blocks whose id or name holds the text. A click or Enter picks one.
 - The dropdown shows the item icon and the name of each block. It lists no air block.
 - A dimension with one variation has its Remove button off.
+- Export writes one variation to the system clipboard as one line of JSON.
+- The JSON of one variation has the fields of a variation entry: bias, decay_scale, decay_threshold, erosion_threshold, interior, wall and path.
+- The JSON of one variation holds no weight. Only the variation codec knows the fields.
+- The codec leaves out each field at its default value, so the export can omit bias and the decay fields.
+- Import parses the clipboard at once as one variation.
+- A good import replaces the variation and keeps the weight of its row. It rebuilds the tab.
+- An import ignores a weight in the clipboard text.
+- A bad import shows a system toast with the title "Import failed" and the parse error. The variation stays.
+- The tooltip of Export is "Copy this variation to the clipboard". The tooltip of Import is "Replace this variation from the clipboard".
 - The Add Variation button appends a copy of the first variation.
 - An add or a remove of a variation rebuilds the tab and keeps the scroll position.
 
@@ -367,7 +377,9 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - For the Overworld, the group Shaft Placement adds the text Clouds and the cloud height slider.
 - The group Shaft Variations holds the variation rows and the Add Variation button.
 - Each variation row of the panel shows the sliders in the menu sequence: weight, maze bias, decay scale, decay threshold, erosion threshold.
-- The block fields and the Remove button follow the sliders.
+- The block fields follow the sliders. The Export button, the Import button and the Remove button follow on one line.
+- Export and Import in the panel act like Export and Import of the dimension screen, with the same tooltips.
+- A good import in the panel replaces the variation in the preview copy and starts a rebuild.
 - A radio button left of each dimension name selects the previewed dimension.
 - The radio buttons and the dimension dropdown of the Preview section always show the same dimension.
 - A small Remove button sits at the right end of each dimension header in the panel.
