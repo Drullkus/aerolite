@@ -66,6 +66,7 @@ repositories {
         url 'https://maven.tamaized.com/releases/'
         content {
             includeGroup 'tamaized'
+            includeGroup 'team-twilight'
         }
     }
 
@@ -320,6 +321,8 @@ dependencies {
         exclude group: 'it.unimi.dsi'
         exclude group: 'org.apache.logging.log4j'
     }
+
+    localRuntime "team-twilight:twilightforest:${twilightforest_version}:universal"
 
     datagenImplementation sourceSets.main.output
 }
