@@ -14,6 +14,8 @@ import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.math.Axis;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.GameRenderer;
@@ -24,6 +26,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -39,11 +42,14 @@ import java.util.List;
 
 /**
  * Draws the baked sections of the preview, with the sky, a floor grid and the region outline.
- * Each baked chunk shows as soon as it arrives. The first chunk of a new generation drops the drawn chunks.
+ * Each baked chunk shows as soon as it arrives. The first chunk of a new scene drops the drawn chunks.
+ * The start of a shift drops the drawn chunks outside the new region and keeps the rest.
+ * The model space has the region center of the pan at its origin. Each mesh keeps its world origin.
  * An outline edge draws translucent when a pixel of it is in front of a block. Else it draws opaque.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  */
 final class PreviewRenderer {
 
@@ -63,18 +69,20 @@ final class PreviewRenderer {
     }
 
     /** The region and backdrop of the drawn generation. */
-    private record Scene(PreviewDimension dimension, int radius, Holder<Biome> centerBiome) {
-
-        float centerX() {
-            return 8;
-        }
+    private record Scene(PreviewDimension dimension, int radius, ChunkPos center, Holder<Biome> centerBiome) {
 
         float centerY() {
             return (this.dimension.minY() + this.dimension.maxY()) / 2F;
         }
 
-        float centerZ() {
-            return 8;
+        /** The least world X of the region. */
+        int minX() {
+            return (this.center.x - this.radius) * 16;
+        }
+
+        /** The least world Z of the region. */
+        int minZ() {
+            return (this.center.z - this.radius) * 16;
         }
 
         int size() {
@@ -86,17 +94,25 @@ final class PreviewRenderer {
         }
     }
 
-    private final List<SectionBuffer> active = new ArrayList<>();
-    private long activeGeneration = -1;
+    /** The drawn meshes by world chunk position. */
+    private final Long2ObjectMap<List<SectionBuffer>> meshes = new Long2ObjectOpenHashMap<>();
+    /** The solid bits of the drawn chunks by world chunk position, and then by section index. */
+    private final Long2ObjectMap<long[][]> chunkSolids = new Long2ObjectOpenHashMap<>();
+    private long activeScene = -1;
     @Nullable
     private Scene scene;
-    /** The solid bits of each section of the drawn chunks, by chunk grid index and then section index. */
+    /** The solid bits of each section of the drawn chunks, by chunk grid index of the region and then section index. */
     private long[][] solids = new long[0][];
     private int solidsVersion;
+    /** The world X and Z of the model space origin. */
+    private double originX;
+    private double originZ;
     private final boolean[] coverEdges = new boolean[EDGES];
     private final Matrix4f coverView = new Matrix4f().zero();
     private final Matrix4f coverProjection = new Matrix4f().zero();
     private int coverVersion = -1;
+    private double coverOriginX = Double.NaN;
+    private double coverOriginZ = Double.NaN;
     private int coverWidth;
     private int coverHeight;
     private final DynamicTexture lightmap;
@@ -108,26 +124,39 @@ final class PreviewRenderer {
         Minecraft.getInstance().getTextureManager().register(LIGHTMAP, this.lightmap);
     }
 
-    /** The count of uploaded section layers that the renderer draws. */
-    int drawnSections() {
-        return this.active.size();
+    /** The count of chunks that the renderer draws. */
+    int drawnChunks() {
+        return this.meshes.size();
     }
 
-    /** Uploads each baked chunk of the builder. The first chunk of a newer generation replaces the drawn chunks. */
+    /**
+     * Uploads each baked chunk of the builder and follows each shift.
+     * The first chunk of a newer scene replaces the drawn chunks. The messages of an older scene are freed.
+     */
     void drain(PreviewBuilder builder) {
         PreviewBuilder.Output output;
         while ((output = builder.poll()) != null) {
-            if (output.generation() < builder.latestGeneration()) {
+            PreviewBuilder.Region region = output.region();
+            if (region.scene() < this.activeScene) {
                 if (output instanceof PreviewBuilder.ChunkReady ready) {
                     ready.free();
                 }
                 continue;
             }
-            if (output.generation() != this.activeGeneration) {
-                this.start(output.generation(), output.region());
+            if (region.scene() > this.activeScene) {
+                if (output instanceof PreviewBuilder.Started) {
+                    // The drawn scene stays until the new scene has a chunk.
+                    continue;
+                }
+                this.clear();
+                this.activeScene = region.scene();
             }
+            this.follow(region);
             switch (output) {
                 case PreviewBuilder.ChunkReady ready -> this.upload(ready);
+                case PreviewBuilder.Started started -> {
+                    // The follow above dropped the chunks outside the new region.
+                }
                 case PreviewBuilder.Complete complete -> {
                     // Every chunk of the generation arrived before this message.
                 }
@@ -135,33 +164,70 @@ final class PreviewRenderer {
         }
     }
 
-    private void start(long generation, PreviewBuilder.Region region) {
-        free(this.active);
-        this.activeGeneration = generation;
-        Scene scene = new Scene(region.dimension(), region.radius(), region.centerBiome());
+    /** Takes the region of a message of the drawn scene. A new center drops the chunks outside the region. */
+    private void follow(PreviewBuilder.Region region) {
+        Scene old = this.scene;
+        Scene scene = new Scene(region.dimension(), region.radius(), region.center(), region.centerBiome());
         this.scene = scene;
+        if (old != null && old.center().equals(scene.center()) && old.radius() == scene.radius() && old.dimension().equals(scene.dimension())) {
+            return;
+        }
+        var iterator = this.meshes.long2ObjectEntrySet().iterator();
+        while (iterator.hasNext()) {
+            Long2ObjectMap.Entry<List<SectionBuffer>> entry = iterator.next();
+            long key = entry.getLongKey();
+            if (!RegionChunks.contains(scene.center(), scene.radius(), ChunkPos.getX(key), ChunkPos.getZ(key))) {
+                free(entry.getValue());
+                iterator.remove();
+                this.chunkSolids.remove(key);
+            }
+        }
         this.solids = new long[scene.size() * scene.size() * scene.sections()][];
+        for (Long2ObjectMap.Entry<long[][]> entry : this.chunkSolids.long2ObjectEntrySet()) {
+            this.writeSolids(scene, ChunkPos.getX(entry.getLongKey()), ChunkPos.getZ(entry.getLongKey()), entry.getValue());
+        }
         this.solidsVersion++;
     }
 
+    private void writeSolids(Scene scene, int chunkX, int chunkZ, long[][] chunkSolids) {
+        int sections = scene.sections();
+        int base = RegionChunks.index(scene.center(), scene.radius(), chunkX, chunkZ) * sections;
+        for (int section = 0; section < Math.min(sections, chunkSolids.length); section++) {
+            this.solids[base + section] = chunkSolids[section];
+        }
+    }
+
     private void upload(PreviewBuilder.ChunkReady ready) {
+        List<SectionBuffer> buffers = new ArrayList<>(ready.meshes().size());
         for (PreviewBuilder.Baked baked : ready.meshes()) {
             VertexBuffer buffer = new VertexBuffer(VertexBuffer.Usage.STATIC);
             buffer.bind();
             buffer.upload(baked.mesh());
             VertexBuffer.unbind();
             baked.buffer().close();
-            this.active.add(new SectionBuffer(baked.origin(), baked.layer(), buffer));
+            buffers.add(new SectionBuffer(baked.origin(), baked.layer(), buffer));
         }
+        long key = ready.pos().toLong();
+        List<SectionBuffer> replaced = this.meshes.put(key, buffers);
+        if (replaced != null) {
+            free(replaced);
+        }
+        this.chunkSolids.put(key, ready.solids());
         Scene scene = this.scene;
-        if (scene != null) {
-            int sections = scene.sections();
-            int base = PreviewBlockGetter.index(ready.pos().x, ready.pos().z, scene.radius()) * sections;
-            for (int section = 0; section < Math.min(sections, ready.solids().length); section++) {
-                this.solids[base + section] = ready.solids()[section];
-            }
+        if (scene != null && RegionChunks.contains(scene.center(), scene.radius(), ready.pos().x, ready.pos().z)) {
+            this.writeSolids(scene, ready.pos().x, ready.pos().z, ready.solids());
             this.solidsVersion++;
         }
+    }
+
+    /** Frees every drawn chunk. */
+    private void clear() {
+        for (List<SectionBuffer> buffers : this.meshes.values()) {
+            free(buffers);
+        }
+        this.meshes.clear();
+        this.chunkSolids.clear();
+        this.scene = null;
     }
 
     private static void free(List<SectionBuffer> buffers) {
@@ -171,8 +237,15 @@ final class PreviewRenderer {
         buffers.clear();
     }
 
-    /** Draws the scene into the bound main render target and clears the depth for the GUI. */
-    void render(OrbitCamera camera) {
+    /**
+     * Draws the scene into the bound main render target and clears the depth for the GUI.
+     *
+     * @param originX the world X of the model space origin, which the camera orbits
+     * @param originZ the world Z of the model space origin
+     */
+    void render(OrbitCamera camera, double originX, double originZ) {
+        this.originX = originX;
+        this.originZ = originZ;
         Minecraft minecraft = Minecraft.getInstance();
         RenderTarget target = minecraft.getMainRenderTarget();
         Scene scene = this.scene;
@@ -222,13 +295,12 @@ final class PreviewRenderer {
         RenderSystem.clear(GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
     }
 
-    // [VANILLACOPY] LevelRenderer#renderSectionLayer: the section list of the preview, a white lightmap, offsets from the region center
+    // [VANILLACOPY] LevelRenderer#renderSectionLayer: the section map of the preview, a white lightmap, offsets from the pan center
     private void renderLayer(RenderType renderType, Scene scene, Matrix4f frustrumMatrix, Matrix4f projectionMatrix) {
         boolean any = false;
-        for (SectionBuffer section : this.active) {
-            if (section.layer() == renderType) {
-                any = true;
-                break;
+        for (List<SectionBuffer> buffers : this.meshes.values()) {
+            for (SectionBuffer section : buffers) {
+                any |= section.layer() == renderType;
             }
         }
         if (!any) {
@@ -245,17 +317,19 @@ final class PreviewRenderer {
         shaderinstance.setDefaultUniforms(VertexFormat.Mode.QUADS, frustrumMatrix, projectionMatrix, Minecraft.getInstance().getWindow());
         shaderinstance.apply();
         Uniform uniform = shaderinstance.CHUNK_OFFSET;
-        for (SectionBuffer section : this.active) {
-            if (section.layer() != renderType) {
-                continue;
+        for (List<SectionBuffer> buffers : this.meshes.values()) {
+            for (SectionBuffer section : buffers) {
+                if (section.layer() != renderType) {
+                    continue;
+                }
+                BlockPos blockpos = section.origin();
+                if (uniform != null) {
+                    uniform.set((float) (blockpos.getX() - this.originX), blockpos.getY() - scene.centerY(), (float) (blockpos.getZ() - this.originZ));
+                    uniform.upload();
+                }
+                section.buffer().bind();
+                section.buffer().draw();
             }
-            BlockPos blockpos = section.origin();
-            if (uniform != null) {
-                uniform.set(blockpos.getX() - scene.centerX(), blockpos.getY() - scene.centerY(), blockpos.getZ() - scene.centerZ());
-                uniform.upload();
-            }
-            section.buffer().bind();
-            section.buffer().draw();
         }
         if (uniform != null) {
             uniform.set(0.0F, 0.0F, 0.0F);
@@ -267,15 +341,17 @@ final class PreviewRenderer {
 
     /** One line per chunk border on the bottom build limit, and the twelve edges of the region box. */
     private void renderLines(Scene scene) {
-        float min = -scene.radius() * 16 - scene.centerX();
-        float max = (scene.radius() + 1) * 16 - scene.centerX();
+        float minX = (float) (scene.minX() - this.originX);
+        float minZ = (float) (scene.minZ() - this.originZ);
+        float width = scene.size() * 16;
         float bottom = scene.dimension().minY() - scene.centerY();
         BufferBuilder lines = Tesselator.getInstance().begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
-        for (float edge = min; edge <= max + 0.5F; edge += 16) {
-            line(lines, edge, bottom, min, edge, bottom, max, GRID_COLOR);
-            line(lines, min, bottom, edge, max, bottom, edge, GRID_COLOR);
+        for (int line = 0; line <= scene.size(); line++) {
+            float edge = line * 16;
+            line(lines, minX + edge, bottom, minZ, minX + edge, bottom, minZ + width, GRID_COLOR);
+            line(lines, minX, bottom, minZ + edge, minX + width, bottom, minZ + edge, GRID_COLOR);
         }
-        float[][] edges = edges(scene);
+        float[][] edges = this.edges(scene);
         for (int i = 0; i < EDGES; i++) {
             float[] edge = edges[i];
             line(lines, edge[0], edge[1], edge[2], edge[3], edge[4], edge[5], this.coverEdges[i] ? OUTLINE_COVER_COLOR : OUTLINE_COLOR);
@@ -291,20 +367,23 @@ final class PreviewRenderer {
      * Each row holds the two end points and then the two faces that meet at the edge.
      * The faces are 0 and 1 for least and most X, 2 and 3 for Y, 4 and 5 for Z.
      */
-    private static float[][] edges(Scene scene) {
-        float min = -scene.radius() * 16 - scene.centerX();
-        float max = (scene.radius() + 1) * 16 - scene.centerX();
+    private float[][] edges(Scene scene) {
+        float minX = (float) (scene.minX() - this.originX);
+        float maxX = minX + scene.size() * 16;
+        float minZ = (float) (scene.minZ() - this.originZ);
+        float maxZ = minZ + scene.size() * 16;
         float bottom = scene.dimension().minY() - scene.centerY();
         float top = scene.dimension().maxY() - scene.centerY();
-        float[] sides = {min, max};
+        float[] sidesX = {minX, maxX};
+        float[] sidesZ = {minZ, maxZ};
         float[] levels = {bottom, top};
         float[][] edges = new float[EDGES][];
         int next = 0;
         for (int a = 0; a < 2; a++) {
             for (int b = 0; b < 2; b++) {
-                edges[next++] = new float[]{sides[a], bottom, sides[b], sides[a], top, sides[b], a, 4 + b};
-                edges[next++] = new float[]{min, levels[a], sides[b], max, levels[a], sides[b], 2 + a, 4 + b};
-                edges[next++] = new float[]{sides[b], levels[a], min, sides[b], levels[a], max, 2 + a, b};
+                edges[next++] = new float[]{sidesX[a], bottom, sidesZ[b], sidesX[a], top, sidesZ[b], a, 4 + b};
+                edges[next++] = new float[]{minX, levels[a], sidesZ[b], maxX, levels[a], sidesZ[b], 2 + a, 4 + b};
+                edges[next++] = new float[]{sidesX[b], levels[a], minZ, sidesX[b], levels[a], maxZ, 2 + a, b};
             }
         }
         return edges;
@@ -314,25 +393,30 @@ final class PreviewRenderer {
      * Finds the edges with a pixel in front of a block. Only an edge between two faces that face the camera qualifies.
      * For such an edge, the test samples the edge once per pixel and marches the view ray from each sample through the region.
      * The march steps through sections first and through blocks only in a section with a solid block.
-     * The result stays until the view, the window size or the drawn chunks change.
+     * The result stays until the view, the window size, the pan center or the drawn chunks change.
      */
     private void updateCoverEdges(Scene scene, Vector3f camera, Matrix4f view, Matrix4f projection, int width, int height) {
         if (this.coverVersion == this.solidsVersion && this.coverWidth == width && this.coverHeight == height
+                && this.coverOriginX == this.originX && this.coverOriginZ == this.originZ
                 && this.coverView.equals(view) && this.coverProjection.equals(projection)) {
             return;
         }
         this.coverVersion = this.solidsVersion;
+        this.coverOriginX = this.originX;
+        this.coverOriginZ = this.originZ;
         this.coverWidth = width;
         this.coverHeight = height;
         this.coverView.set(view);
         this.coverProjection.set(projection);
-        float min = -scene.radius() * 16 - scene.centerX();
-        float max = (scene.radius() + 1) * 16 - scene.centerX();
+        float minX = (float) (scene.minX() - this.originX);
+        float maxX = minX + scene.size() * 16;
+        float minZ = (float) (scene.minZ() - this.originZ);
+        float maxZ = minZ + scene.size() * 16;
         float bottom = scene.dimension().minY() - scene.centerY();
         float top = scene.dimension().maxY() - scene.centerY();
-        boolean[] frontFaces = {camera.x < min, camera.x > max, camera.y < bottom, camera.y > top, camera.z < min, camera.z > max};
+        boolean[] frontFaces = {camera.x < minX, camera.x > maxX, camera.y < bottom, camera.y > top, camera.z < minZ, camera.z > maxZ};
         Matrix4f viewProjection = new Matrix4f(projection).mul(view);
-        float[][] edges = edges(scene);
+        float[][] edges = this.edges(scene);
         for (int i = 0; i < EDGES; i++) {
             float[] edge = edges[i];
             this.coverEdges[i] = frontFaces[(int) edge[6]] && frontFaces[(int) edge[7]]
@@ -365,20 +449,18 @@ final class PreviewRenderer {
             double dy = y - camera.y;
             double dz = z - camera.z;
             double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (length > 0 && this.rayHitsSolid(scene, x + scene.centerX(), y + scene.centerY(), z + scene.centerZ(), dx / length, dy / length, dz / length)) {
+            if (length > 0 && this.rayHitsSolid(scene, x + this.originX - scene.minX(), y + scene.centerY() - scene.dimension().minY(), z + this.originZ - scene.minZ(),
+                    dx / length, dy / length, dz / length)) {
                 return true;
             }
         }
         return false;
     }
 
-    /** Marches a ray in block space from a point on the region box until it leaves the box. */
-    private boolean rayHitsSolid(Scene scene, double originX, double originY, double originZ, double dx, double dy, double dz) {
+    /** Marches a ray from a point on the region box until it leaves the box. The point is relative to the least box corner. */
+    private boolean rayHitsSolid(Scene scene, double x, double y, double z, double dx, double dy, double dz) {
         int size = scene.size();
         int sections = scene.sections();
-        double x = originX + scene.radius() * 16;
-        double y = originY - scene.dimension().minY();
-        double z = originZ + scene.radius() * 16;
         double exit = Math.min(Math.min(exit(x, dx, size * 16), exit(y, dy, sections * 16)), exit(z, dz, size * 16));
         double t = RAY_START;
         if (t >= exit) {
@@ -534,7 +616,7 @@ final class PreviewRenderer {
                 ready.free();
             }
         }
-        free(this.active);
+        this.clear();
         Arrays.fill(this.solids, null);
         Minecraft.getInstance().getTextureManager().release(LIGHTMAP);
     }

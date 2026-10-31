@@ -344,7 +344,9 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - The Preview button shows only when ImGui loaded.
 - The Preview button opens the preview screen with a copy of the settings.
 - Done in the preview sends the copy back to the Aerolite screen. Cancel drops the copy.
-- The preview shows the shafts of a square region of chunks around the origin.
+- The preview shows the shafts of a square region of chunks around the region center.
+- The region center is a world X and Z position in blocks. It starts at the origin.
+- The region is the square of `2 * radius + 1` chunks around the chunk that holds the region center.
 - The preview paints the shafts with the shaft step code into scratch proto chunks. The vanilla block renderer bakes the blocks.
 - An ImGui panel covers the right edge of the window. The game view fills the part left of the panel.
 - A splitter on the left edge of the panel sets the panel width, from 240 to 600 ImGui units.
@@ -381,14 +383,42 @@ The player tweaks the settings in the world creation menu, like the superflat cu
 - Done in the preview writes the seed text to the seed field of the world creation screen. Cancel drops it.
 - The radius slider runs from 2 to 32 chunks in steps of 1.
 - The radius starts at the render distance option of the client.
-- Every change starts a rebuild on a worker thread after 300 ms. A progress bar shows the baked sections.
-- The scene appears chunk by chunk, in a spiral from the center chunk outward.
+- A change of the settings, the seed, the dimension or the radius starts a full rebuild on a worker thread after 300 ms.
+- A full rebuild shows the scene chunk by chunk, ring by ring from the center chunk outward. In a ring, the nearest chunk comes first.
+- The region shifts when the region center crosses a chunk border. A shift starts at once, with no wait.
+- A shift keeps the painted and baked data of each chunk that stays in the region. It drops the chunks that leave.
+- The painted chunks hold one ring of margin around the region. The margin is not baked.
+- A chunk bakes when its neighbors in the margin are painted. So the bake of a chunk does not depend on the region position.
+- A shift paints the chunks that enter the margin and bakes the chunks that enter the region, nearest chunk first. It bakes no kept chunk again.
+- A chunk also bakes each border face that an opaque block of the next chunk hides. So a shift that drops the next chunk shows no hole.
+- A hidden face bakes with the next chunk read as air, so its shading fits the exposed state.
+- A progress bar shows the painted chunks and the baked sections of the newest rebuild or shift.
+- The seeded shaft layout gives the world positions of the shafts. So a pan shows other parts of the same world.
+- The Preview section ends with the center row: the text Center, an X field, a Z field and a Reset button.
+- The X field and the Z field hold the region center in whole world blocks.
+- A center field applies its value on Enter or when it loses focus.
+- A center field without focus shows the current region center. So it follows a key move.
+- Reset puts the region center on the origin.
 - Each edge of the region box draws opaque. An edge with any pixel in front of a block draws 75% translucent.
 - The preview has no fog.
 - A drag in the game view turns the camera around the region center. The scroll wheel zooms.
 - A view gizmo sits in the top right corner of the game view, left of the panel.
 - A drag on the view gizmo turns the camera. A click on a face, an edge or a corner turns the camera to look at it.
 - The camera pitch stays between -89 and 89 degrees. A top view and a bottom view keep a small tilt.
+- The camera orbits the region center. Between shifts, the region box can sit up to 8 blocks off the view center.
+- The movement keys of the controls move the region center along the camera yaw, like creative flight without pitch.
+- With the default controls, W moves forward, S moves back, A moves left and D moves right.
+- Space and Shift do nothing. The region center does not move up or down.
+- The pan uses the real frame time.
+- Ctrl makes the pan sprint while it is held.
+- A second press of one movement key within the double press time also sprints, until that key is released.
+- The constants at the top of `RegionPan.java` set the walk speed, the sprint speed and the double press time.
+- A middle drag grabs the ground. The ground point under the cursor at the drag start follows the cursor.
+- The ground is the horizontal plane through the region center.
+- A cursor ray that misses the ground or hits it behind the camera moves nothing in that frame.
+- The movement keys and the middle drag are off while a panel field takes text input or a widget of the screen has focus.
+- Escape still closes the screen. Space still presses a focused button.
+- A left click or a middle click in the game view clears the widget focus.
 - The panel, its block field popups and the view gizmo draw at one constant font scale.
 - The panel scale does not follow the GUI scale option.
 - The constant `FONT_SCALE` in `ImGuiPreviewPanel` sets the panel scale.

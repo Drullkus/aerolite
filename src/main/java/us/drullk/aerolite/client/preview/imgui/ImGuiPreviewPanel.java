@@ -114,6 +114,14 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return VeilRenderSystem.hasImGui();
     }
 
+    @Override
+    public boolean wantsTextInput() {
+        // The ImGui context is current only inside the imgui-mc frame hooks.
+        try (foundry.imgui.api.ImGuiMC.ActiveContext context = foundry.imgui.api.ImGuiMC.withImGui()) {
+            return context.io().getWantTextInput();
+        }
+    }
+
     /**
      * imgui-mc divides the main render target width by the window width. The preview narrows that target,
      * so the panel sets the scale from the window framebuffer.
@@ -545,6 +553,39 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         ResourceKey<Level> previewed = screen.dimensionKey();
         if (previewed != null && screen.settings().variations(previewed).isEmpty()) {
             ImGui.textWrapped(text("preview.no_shafts"));
+        }
+
+        // The screen holds the text of an active center field between frames.
+        String resetCenter = text("preview.reset_center");
+        ImGui.alignTextToFramePadding();
+        ImGui.text(text("preview.center"));
+        float resetWidth = ImGui.calcTextSizeX(resetCenter) + 2 * ImGui.getStyle().getFramePaddingX();
+        ImGui.sameLine();
+        float centerWidth = Math.max(1, (ImGui.getContentRegionAvailX() - resetWidth - 2 * ImGui.getStyle().getItemSpacingX()) / 2);
+        for (net.minecraft.core.Direction.Axis axis : List.of(net.minecraft.core.Direction.Axis.X, net.minecraft.core.Direction.Axis.Z)) {
+            int shown = (int) Math.floor(axis == net.minecraft.core.Direction.Axis.X ? screen.centerX() : screen.centerZ());
+            String edit = screen.centerEdit(axis);
+            ImString field = new ImString(edit != null ? edit : Integer.toString(shown), SEED_CAPACITY);
+            ImGui.setNextItemWidth(centerWidth);
+            boolean entered = ImGui.inputText("##center_" + axis.getName(), field,
+                    imgui.flag.ImGuiInputTextFlags.CharsDecimal | imgui.flag.ImGuiInputTextFlags.EnterReturnsTrue);
+            boolean apply = entered || ImGui.isItemDeactivatedAfterEdit();
+            screen.setCenterEdit(axis, ImGui.isItemActive() && !entered ? field.get() : null);
+            if (apply) {
+                try {
+                    int value = Integer.parseInt(field.get().trim());
+                    if (value != shown) {
+                        screen.setCenter(axis == net.minecraft.core.Direction.Axis.X ? value : screen.centerX(),
+                                axis == net.minecraft.core.Direction.Axis.Z ? value : screen.centerZ());
+                    }
+                } catch (NumberFormatException exception) {
+                    // A text that is not a whole number keeps the center.
+                }
+            }
+            ImGui.sameLine();
+        }
+        if (ImGui.button(resetCenter)) {
+            screen.resetCenter();
         }
     }
 

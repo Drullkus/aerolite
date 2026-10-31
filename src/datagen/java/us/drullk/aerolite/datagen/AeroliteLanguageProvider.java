@@ -69,6 +69,8 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.preview.baking", "Baking sections: %s / %s");
         this.add("createWorld.customize.aerolite.preview.done", "Baked sections: %s");
         this.add("createWorld.customize.aerolite.preview.no_shafts", "This dimension has no variations, so it has no shafts.");
+        this.add("createWorld.customize.aerolite.preview.center", "Center");
+        this.add("createWorld.customize.aerolite.preview.reset_center", "Reset");
         this.add("aerolite.configuration.panelWidth", "Preview Panel Width");
     }
 

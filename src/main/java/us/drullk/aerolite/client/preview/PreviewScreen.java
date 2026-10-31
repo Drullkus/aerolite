@@ -1,11 +1,16 @@
 package us.drullk.aerolite.client.preview;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationContext;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
@@ -13,10 +18,13 @@ import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
+import org.joml.Matrix4f;
+import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.PresetTools;
 import us.drullk.aerolite.world.AeroliteSettings;
 
@@ -26,13 +34,15 @@ import java.util.OptionalLong;
 import java.util.function.BiConsumer;
 
 /**
- * The preview of the preset settings. It shows the shafts of a region around the origin.
+ * The preview of the preset settings. It shows the shafts of a region around the region center.
  * The ImGui panel on the right edits a copy of the settings. Done sends the copy back. Cancel drops it.
  * A previewed dimension without variations shows the empty region: sky, grid and outline.
+ * The movement keys and a middle drag move the region center. A move across a chunk border shifts the region.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -49,6 +59,15 @@ public class PreviewScreen extends Screen {
     private final Registry<Biome> biomes;
     private final HolderGetter<NormalNoise.NoiseParameters> noise;
     private final OrbitCamera camera = new OrbitCamera();
+    private final RegionPan pan = new RegionPan();
+    /** The center chunk of the last request. */
+    @Nullable
+    private ChunkPos requestedCenter;
+    private long lastFrameNanos;
+    @Nullable
+    private String centerEditX;
+    @Nullable
+    private String centerEditZ;
     private AeroliteSettings settings;
     private String seedText;
     /** The seed of the last seed text that parses. */
@@ -194,6 +213,49 @@ public class PreviewScreen extends Screen {
         return this.radius;
     }
 
+    /** The world X of the region center in blocks. */
+    public double centerX() {
+        return this.pan.x();
+    }
+
+    /** The world Z of the region center in blocks. */
+    public double centerZ() {
+        return this.pan.z();
+    }
+
+    /** Moves the region center. A move to another chunk shifts the region at once. */
+    public void setCenter(double x, double z) {
+        this.pan.set(x, z);
+        this.followCenter();
+    }
+
+    /** The text of the panel field of one center axis while the panel edits it, or null. */
+    @Nullable
+    public String centerEdit(Direction.Axis axis) {
+        return axis == Direction.Axis.X ? this.centerEditX : this.centerEditZ;
+    }
+
+    public void setCenterEdit(Direction.Axis axis, @Nullable String text) {
+        if (axis == Direction.Axis.X) {
+            this.centerEditX = text;
+        } else {
+            this.centerEditZ = text;
+        }
+    }
+
+    /** Puts the region center on the origin. */
+    public void resetCenter() {
+        this.setCenter(0, 0);
+    }
+
+    /** Requests a shift when the region center left the chunk of the last request. */
+    private void followCenter() {
+        ChunkPos center = new ChunkPos(this.pan.chunkX(), this.pan.chunkZ());
+        if (!center.equals(this.requestedCenter)) {
+            this.requestBuild();
+        }
+    }
+
     public void setRadius(int radius) {
         int clamped = Mth.clamp(radius, MIN_RADIUS, MAX_RADIUS);
         if (clamped != this.radius) {
@@ -238,7 +300,66 @@ public class PreviewScreen extends Screen {
             return;
         }
         boolean constantAmbientLight = DimensionSpecialEffects.forType(dimension.type()).constantAmbientLight();
-        this.builder.request(new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise));
+        ChunkPos center = new ChunkPos(this.pan.chunkX(), this.pan.chunkZ());
+        this.requestedCenter = center;
+        this.builder.request(new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise, center));
+    }
+
+    /** The movement keys and the middle drag work only while no widget and no panel field takes the keyboard. */
+    private boolean panAllowed() {
+        return this.getFocused() == null && !this.tools.panel().wantsTextInput();
+    }
+
+    /** The movement key of a key event, or null. */
+    @Nullable
+    private RegionPan.Key panKey(int keyCode, int scanCode) {
+        Options options = Minecraft.getInstance().options;
+        if (options.keyUp.matches(keyCode, scanCode)) {
+            return RegionPan.Key.FORWARD;
+        }
+        if (options.keyDown.matches(keyCode, scanCode)) {
+            return RegionPan.Key.BACK;
+        }
+        if (options.keyLeft.matches(keyCode, scanCode)) {
+            return RegionPan.Key.LEFT;
+        }
+        if (options.keyRight.matches(keyCode, scanCode)) {
+            return RegionPan.Key.RIGHT;
+        }
+        return null;
+    }
+
+    /** True while a Ctrl key is held. */
+    private static boolean ctrlDown() {
+        long window = Minecraft.getInstance().getWindow().getWindow();
+        return InputConstants.isKeyDown(window, GLFW.GLFW_KEY_LEFT_CONTROL) || InputConstants.isKeyDown(window, GLFW.GLFW_KEY_RIGHT_CONTROL);
+    }
+
+    /** Moves the region center by the held keys over the real frame time. */
+    private void movePan() {
+        long now = System.nanoTime();
+        double seconds = this.lastFrameNanos == 0 ? 0 : (now - this.lastFrameNanos) / 1.0E9;
+        this.lastFrameNanos = now;
+        if (!this.panAllowed()) {
+            this.pan.releaseAll();
+            return;
+        }
+        this.pan.move(seconds, this.camera.yaw(), ctrlDown());
+        this.followCenter();
+    }
+
+    /** The projection times the view, with the region center at the model space origin. */
+    private Matrix4f viewProjection() {
+        RenderTarget target = Minecraft.getInstance().getMainRenderTarget();
+        return this.camera.projection(target.width / (float) Math.max(1, target.height)).mul(this.camera.view());
+    }
+
+    private float ndcX(double mouseX) {
+        return (float) (2 * mouseX / Math.max(1, this.width) - 1);
+    }
+
+    private float ndcY(double mouseY) {
+        return (float) (1 - 2 * mouseY / Math.max(1, this.height));
     }
 
     /** Runs before the first init, so the window reports the reduced width to it. */
@@ -302,8 +423,9 @@ public class PreviewScreen extends Screen {
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.flush();
         if (this.renderer != null && this.builder != null) {
+            this.movePan();
             this.renderer.drain(this.builder);
-            this.renderer.render(this.camera);
+            this.renderer.render(this.camera, this.pan.x(), this.pan.z());
         }
     }
 
@@ -318,8 +440,14 @@ public class PreviewScreen extends Screen {
         if (super.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        if (button == 0) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            this.setFocused(null);
             this.orbiting = true;
+            return true;
+        }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            this.setFocused(null);
+            this.pan.beginDrag(this.ndcX(mouseX), this.ndcY(mouseY));
             return true;
         }
         return false;
@@ -327,19 +455,47 @@ public class PreviewScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             this.orbiting = false;
+        }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            this.pan.endDrag();
         }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (this.orbiting && button == 0) {
+        if (this.orbiting && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             this.camera.turn(dragX, dragY);
             return true;
         }
+        if (this.pan.dragging() && button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            if (this.panAllowed() && this.pan.dragTo(this.viewProjection(), this.ndcX(mouseX), this.ndcY(mouseY))) {
+                this.followCenter();
+            }
+            return true;
+        }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        RegionPan.Key key = this.panKey(keyCode, scanCode);
+        if (key != null && this.panAllowed()) {
+            this.pan.press(key, Util.getMillis());
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        RegionPan.Key key = this.panKey(keyCode, scanCode);
+        if (key != null) {
+            this.pan.release(key);
+        }
+        return super.keyReleased(keyCode, scanCode, modifiers) || key != null;
     }
 
     @Override

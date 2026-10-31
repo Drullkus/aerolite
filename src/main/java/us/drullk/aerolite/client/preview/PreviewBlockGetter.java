@@ -7,6 +7,7 @@ import net.minecraft.core.QuartPos;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ColorResolver;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
@@ -32,10 +33,12 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  */
 final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
 
     private final ProtoChunk[] chunks;
+    private final ChunkPos center;
     private final int radius;
     private final int minY;
     private final int height;
@@ -46,10 +49,11 @@ final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
     private final LevelLightEngine lightEngine;
 
     /**
-     * @param chunks the chunks from {@code -radius} to {@code radius}, with the X index first; the paint thread fills it
+     * @param chunks the chunks of the region around {@code center}, indexed by {@link RegionChunks#index}; the paint thread fills it
      */
-    PreviewBlockGetter(ProtoChunk[] chunks, int radius, int minY, int height, boolean constantAmbientLight, BiomeSource biomeSource, Climate.Sampler sampler) {
+    PreviewBlockGetter(ProtoChunk[] chunks, ChunkPos center, int radius, int minY, int height, boolean constantAmbientLight, BiomeSource biomeSource, Climate.Sampler sampler) {
         this.chunks = chunks;
+        this.center = center;
         this.radius = radius;
         this.minY = minY;
         this.height = height;
@@ -59,19 +63,15 @@ final class PreviewBlockGetter implements BlockAndTintGetter, LightChunkGetter {
         this.lightEngine = new LevelLightEngine(this, false, false);
     }
 
-    static int index(int chunkX, int chunkZ, int radius) {
-        return (chunkX + radius) * (2 * radius + 1) + chunkZ + radius;
-    }
-
     @Override
     public BlockState getBlockState(BlockPos pos) {
         int chunkX = pos.getX() >> 4;
         int chunkZ = pos.getZ() >> 4;
-        if (chunkX < -this.radius || chunkX > this.radius || chunkZ < -this.radius || chunkZ > this.radius
+        if (!RegionChunks.contains(this.center, this.radius, chunkX, chunkZ)
                 || pos.getY() < this.minY || pos.getY() >= this.minY + this.height) {
             return Blocks.AIR.defaultBlockState();
         }
-        ProtoChunk chunk = this.chunks[index(chunkX, chunkZ, this.radius)];
+        ProtoChunk chunk = this.chunks[RegionChunks.index(this.center, this.radius, chunkX, chunkZ)];
         return chunk == null ? Blocks.AIR.defaultBlockState() : chunk.getBlockState(pos);
     }
 
