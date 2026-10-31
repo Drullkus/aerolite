@@ -36,6 +36,7 @@ import java.util.Optional;
  * The Preview button shows only when ImGui loaded. The preview edits a copy of the settings.
  * The Copy and Paste buttons at the right end of the header move the settings through the system clipboard.
  * A good paste replaces the settings and rebuilds the list. A bad paste shows a toast and keeps the settings.
+ * The Defaults button right of Paste adds each missing dimension that has its own variation list, and rebuilds the list.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -45,6 +46,7 @@ import java.util.Optional;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 public class AerolitePresetScreen extends Screen {
 
@@ -60,7 +62,7 @@ public class AerolitePresetScreen extends Screen {
     private final PresetTools tools;
     private final PresetEdits edits;
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
-    /** The header row at the full window width. It holds the centered title and the clipboard buttons. */
+    /** The header row at the full window width. It holds the centered title, the clipboard buttons and Defaults. */
     private final FrameLayout header = new FrameLayout();
     /** The dropdowns of the add row. The screen draws their open lists over the rows below. */
     private final List<ChoiceDropdown<?>> dropdowns = new ArrayList<>();
@@ -90,6 +92,7 @@ public class AerolitePresetScreen extends Screen {
                 settings -> settings.alignHorizontallyRight().paddingRight(HEADER_RIGHT_MARGIN));
         clipboard.addChild(this.headerButton("copy", button -> this.tools.json().copy(this.settings, this.edits.registries())));
         clipboard.addChild(this.headerButton("paste", button -> this.paste()));
+        clipboard.addChild(this.headerButton("defaults", button -> this.loadDefaults()));
         this.layout.addToHeader(this.header);
         SettingsList list = this.layout.addToContents(new SettingsList(this.minecraft, this.width, this.layout));
         this.list = list;
@@ -125,6 +128,13 @@ public class AerolitePresetScreen extends Screen {
             this.addChoice = null;
             this.rebuildPending = true;
         }).ifError(error -> this.tools.json().showPasteFailed(error.message()));
+    }
+
+    /** Adds each dimension of the world that has its own variation list and no settings. Configured dimensions stay. */
+    private void loadDefaults() {
+        this.settings = this.edits.withDefaults(this.settings, this.edits.worldDimensions(this.context));
+        this.addChoice = null;
+        this.rebuildPending = true;
     }
 
     /** Opens the preview with a copy of the settings. Done in the preview sends the settings and the seed text back. */

@@ -350,22 +350,20 @@ The player sets the shaft settings in the World tab of the create world screen. 
 ### World tab row
 
 - The World tab has the row "Amazing Pillars" under the Bonus Chest row.
-- The row holds the label "Amazing Pillars", the button Load Defaults and the button Settings, from left to right.
+- The row holds the label "Amazing Pillars" and the button Settings, from left to right.
 - The row sits one switch row under the Bonus Chest row, 4 units below the Bonus Chest switch.
 - The label starts at the left edge of the Bonus Chest label. The Settings button ends at the right edge of the Bonus Chest switch.
-- A gap of 4 separates the two buttons. Each button is 20 high and fits its text.
+- The Settings button is 20 high and fits its text.
 - `WorldTabRow` adds the widgets in `ScreenEvent.Init.Post` of the create world screen.
 - `WorldTabRow` places the widgets on each `ScreenEvent.Render.Pre` from the position of the Bonus Chest label and switch.
 - The row shows only while the screen holds the Bonus Chest label. The vanilla tab manager adds that label only for the World tab.
 - The vanilla grid does not hold the row. So the vanilla rows keep their vanilla positions, and no mixin is necessary.
 - The Customize button of the preset opens the Aerolite Void screen. See [Aerolite Void](#aerolite-void).
 - Settings opens the shafts screen with the holder.
-- Load Defaults is on only while no dimension is configured.
-- The tooltip of Load Defaults is "Replace empty settings with Amazing Pillar defaults".
-- Load Defaults adds every dimension of the world that has its own variation list, with that list. It keeps the cloud height.
+- The row holds no Defaults button. The Defaults button is in the header of the shafts screen.
 - The own variation list of a dimension is `aerolite:<dimension path>`.
 - The Nether and the End use `aerolite:nether` and `aerolite:end` as their own lists.
-- A dimension that Load Defaults or the Add button adds takes the placement entry under its id, else `aerolite:default`.
+- A dimension that the Defaults button or the Add button adds takes the placement entry under its id, else `aerolite:default`.
 
 ### Aerolite Void
 
@@ -428,9 +426,18 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - An add or a remove of a dimension rebuilds the list and keeps the scroll position.
 - After a remove, the dimension dropdown shows the removed dimension.
 - A return from the dimension screen or the preview rebuilds the list.
-- The header keeps its centered title. A Copy button and a Paste button sit at the right end of the header row, in that sequence.
-- Each header button is 20 high and fits its text. A gap of 4 separates them. The Paste button ends 8 units from the right window edge.
+- The header keeps its centered title.
+- A Copy button, a Paste button and a Defaults button sit at the right end of the header row, in that sequence.
+- Each header button is 20 high and fits its text.
+- A gap of 4 separates the header buttons.
+- The Defaults button ends 8 units from the right window edge.
 - The tooltip of Copy is "Copy to Clipboard". The tooltip of Paste is "Paste from Clipboard".
+- The tooltip of Defaults is "Replace empty settings with Amazing Pillar defaults".
+- Defaults is always on.
+- Defaults adds every dimension of the world that has its own variation list and no dimension settings, with that list.
+- Defaults keeps each configured dimension as it is.
+- Defaults keeps the cloud height.
+- Defaults acts on the copy of the settings of the shafts screen. It rebuilds the list and keeps the scroll position.
 - Copy writes the settings to the system clipboard as one line of JSON. Only the settings codec knows the fields.
 - Copy and Paste use registry ops over the worldgen registries of the creation context.
 - Paste parses the clipboard at once. A good parse replaces the settings and rebuilds the list.
@@ -531,9 +538,12 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - A change of the seed field text starts a rebuild. An empty field keeps the last seed.
 - The Reseed button picks a new random seed. The field shows its decimal number.
 - Done in the preview writes the seed text to the seed field of the world creation screen. Cancel drops it.
-- A Copy button and a Paste button sit on one line after the seed row. They have the tooltips of the header buttons.
+- A Copy button, a Paste button and a Defaults button sit on one line after the seed row, in that sequence.
+- The panel buttons Copy, Paste and Defaults have the tooltips of the header buttons.
 - Copy in the panel writes the preview copy of the settings to the clipboard.
 - Paste in the panel replaces the preview copy and starts a rebuild. A bad parse shows the toast of the shafts screen.
+- Defaults in the panel follows the rule of the Defaults button of the shafts screen.
+- Defaults in the panel acts on the preview copy of the settings and starts a rebuild.
 - The toast draws left of the panel, because the window reports the reduced width.
 - The radius slider runs from 2 to 32 chunks in steps of 1.
 - The radius starts at the render distance option of the client.

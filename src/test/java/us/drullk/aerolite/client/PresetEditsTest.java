@@ -17,13 +17,15 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks the list rules of the add row, of Load Defaults and of Add Variation over the shipped registries.
+ * Checks the list rules of the add row, of Defaults and of Add Variation over the shipped registries.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 class PresetEditsTest {
 
@@ -63,6 +65,20 @@ class PresetEditsTest {
         for (ResourceKey<Level> dimension : List.of(Level.OVERWORLD, Level.NETHER, Level.END)) {
             assertEquals(this.lookup.defaults(dimension), loaded.dimension(dimension));
         }
+    }
+
+    @Test
+    void defaultsKeepAConfiguredDimensionAndAddTheMissingOnes() {
+        AeroliteSettings configured = this.edits.withAddedDimension(ShaftSettingsHolder.BLANK, Level.NETHER, Optional.of(ShaftRegistries.OVERWORLD_LIST))
+                .withCloudHeight(100);
+        DimensionSettings nether = configured.dimension(Level.NETHER);
+        assertNotEquals(this.lookup.defaults(Level.NETHER), nether);
+        AeroliteSettings loaded = this.edits.withDefaults(configured, List.of(TWILIGHT, Level.END, Level.NETHER, Level.OVERWORLD));
+        assertEquals(List.of(Level.OVERWORLD, Level.NETHER, Level.END), this.edits.configuredDimensions(loaded));
+        assertEquals(nether, loaded.dimension(Level.NETHER));
+        assertEquals(this.lookup.defaults(Level.OVERWORLD), loaded.dimension(Level.OVERWORLD));
+        assertEquals(this.lookup.defaults(Level.END), loaded.dimension(Level.END));
+        assertEquals(100, loaded.cloudHeight());
     }
 
     @Test

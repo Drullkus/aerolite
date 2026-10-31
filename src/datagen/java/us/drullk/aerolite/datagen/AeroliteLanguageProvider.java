@@ -15,6 +15,7 @@ import us.drullk.aerolite.Aerolite;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -31,8 +32,6 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.void.reset", "Reset");
         this.add("createWorld.customize.aerolite.title", "Amazing Pillars");
         this.add("createWorld.customize.aerolite.pillars", "Amazing Pillars");
-        this.add("createWorld.customize.aerolite.load_defaults", "Load Defaults");
-        this.add("createWorld.customize.aerolite.load_defaults_tooltip", "Replace empty settings with Amazing Pillar defaults");
         this.add("createWorld.customize.aerolite.settings", "Settings");
         this.add("createWorld.customize.aerolite.blank_list", "Blank");
         this.add("createWorld.customize.aerolite.shaft_placement", "Shaft Placement");
@@ -75,6 +74,8 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.paste", "Paste");
         this.add("createWorld.customize.aerolite.copy_tooltip", "Copy to Clipboard");
         this.add("createWorld.customize.aerolite.paste_tooltip", "Paste from Clipboard");
+        this.add("createWorld.customize.aerolite.defaults", "Defaults");
+        this.add("createWorld.customize.aerolite.defaults_tooltip", "Replace empty settings with Amazing Pillar defaults");
         this.add("createWorld.customize.aerolite.paste_failed", "Paste failed");
         this.add("createWorld.customize.aerolite.import_failed", "Import failed");
         this.add("createWorld.customize.aerolite.preview.title", "Aerolite Preview");

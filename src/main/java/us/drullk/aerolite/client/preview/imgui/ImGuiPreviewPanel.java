@@ -57,6 +57,7 @@ import java.util.function.Function;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_21-56_ad766c27-abc7-4f8b-ae6a-53b92f85435c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_1143d92a-d4be-41d5-9df1-3b5c5d54fb8d.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -603,6 +604,14 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         }
         if (ImGui.isItemHovered()) {
             ImGui.setTooltip(text("paste_tooltip"));
+        }
+        ImGui.sameLine();
+        if (ImGui.button(text("defaults") + "##defaults")) {
+            PresetEdits edits = this.tools().edits();
+            screen.setSettings(edits.withDefaults(screen.settings(), screen.levels()));
+        }
+        if (ImGui.isItemHovered()) {
+            ImGui.setTooltip(text("defaults_tooltip"));
         }
 
         int radius = this.stepSlider("##radius", screen.radius() - PreviewScreen.MIN_RADIUS, PreviewScreen.MAX_RADIUS - PreviewScreen.MIN_RADIUS,
