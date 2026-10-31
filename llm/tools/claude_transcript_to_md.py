@@ -19,6 +19,8 @@ By default the transcript is written to
 inside the project. If the desktop app resumed the conversation into a new session uuid (it copies
 the whole history into a fresh file), the previously exported file for the same conversation is
 renamed to the new uuid and every reference to the old path in the project's text files is rewritten.
+A resume keeps the start time and the opening prompt of the conversation. A new conversation that
+reuses the opening prompt starts at another time, so it keeps its own transcript.
 
 Usage:
     python3 llm/tools/claude_transcript_to_md.py --list
@@ -279,25 +281,27 @@ def default_relative_path(summary: dict) -> Path:
 def find_superseded(project: Path, summary: dict, new_rel: Path) -> Path | None:
     """An earlier export of the same conversation under a different session uuid, if any.
 
-    The desktop app resumes a conversation by copying its history into a new session file, so the start date and
-    opening prompt stay identical while the uuid changes.
+    The desktop app resumes a conversation by copying its history into a new session file, so the start time and
+    opening prompt stay identical to the second while the uuid changes. A new conversation that reuses the opening
+    prompt starts at another second, so it does not match.
     """
     directory = project / TRANSCRIPT_DIR
     if not directory.is_dir() or not summary["first_prompt"]:
         return None
     started = parse_ts(summary["start"])
-    date = started.strftime("%Y-%m-%d") if started else None
-    if not date:
+    if not started:
         return None
+    stamp = started.strftime("%Y-%m-%d_%H-%M")
+    started_line = f"| Started | {fmt_ts(summary['start'])} |"
     needle = summary["first_prompt"][:300]
-    for candidate in sorted(directory.glob(f"transcript_{date}_*.md")):
+    for candidate in sorted(directory.glob(f"transcript_{stamp}_*.md")):
         if candidate.name == new_rel.name:
             continue
         try:
             text = candidate.read_text(encoding="utf-8")
         except OSError:
             continue
-        if needle in text:
+        if started_line in text and needle in text:
             return candidate
     return None
 
