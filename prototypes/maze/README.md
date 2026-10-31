@@ -130,6 +130,32 @@ The five approaches against the ribs are:
 - Two boxes can sit so close on one shaft that their junction segments share a chunk. Then one junction segment spans both, with one patch per box. `--cluster-stats` checks that the shaft stays one tree.
 - The cut model is the earlier design. It samples plain segments through the box, cuts them, and rejoins the stub components through the patch. `--cut-stats` prints how many components stay stranded.
 
+### Bezel
+
+The option `--bezel N` sets the thickness of the solid frame on each patch face. The values are 1 and 3. The default is 1.
+
+- `--bezel 1` is the earlier model. Every earlier command and image stays the same.
+- With `--bezel 1`, the bezel is the one-block rim at face offset 7. The patch is a 7x7 node grid at offsets -6 to 6.
+- With `--bezel 1`, the 5 interior border nodes of one patch side get a crossing. The patch corner nodes get no crossing.
+- `--bezel 3` selects the new model. The box stays 15x15x15.
+- With `--bezel 3`, the bezel is 3 blocks thick. It holds the face offsets 5, 6 and 7 in both face directions.
+- The bezel is solid, like a maze wall.
+- The patch area inside the bezel is 9x9.
+- The patch nodes sit at offsets -4, -2, 0, 2 and 4. So the patch is a 5x5 node grid.
+- Patch edges sit between neighbor nodes, like in the earlier model.
+- A crossing runs along the shaft outer layer up to the box. Then it notches 3 blocks through the bezel, at face offsets 7, 6 and 5, onto a border node at offset 4.
+- The 5 border nodes of one patch side face the 5 interior ring nodes of the shaft face, at ring offsets -4, -2, 0, 2 and 4.
+- A border node and its ring node sit at the same offset across the shaft axis. So the notch runs straight.
+- No crossing lands on a shaft corner.
+- The column patch has the same geometry on the column.
+- Variant A gives the four patch corner nodes a crossing like every other border node. The flag `--corner-crossings` selects it.
+- In variant A, a patch corner node has two patch edges and one crossing. The crossing runs onto the shaft that the patch serves.
+- Variant B gives the patch corner nodes no crossing. They keep their two patch edges only. Variant B is the default with `--bezel 3`.
+- In variant B, the 3 border nodes between the corners of one patch side get a crossing.
+- Neither variant drops a patch corner leaf.
+- `--corner-crossings` needs `--bezel 3`. With `--bezel 1`, a corner crossing lands on a shaft corner.
+- Every scene of `junction.py` accepts `--bezel` and `--corner-crossings`.
+
 ## Chunk paint
 
 The mod paints one chunk at a time. The chunk paint of `junction.py` models that.
@@ -321,6 +347,40 @@ python3 prototypes/maze/junction.py --column-stats --count 100 --rule degree --b
 
 `--compare-starts` needs `--rule degree`. In `junction.py`, it also needs `--column-band`.
 
+Render the junction with a 3-block bezel, in variant B and in variant A:
+
+```bash
+python3 prototypes/maze/junction.py --seed 1 --cx 203 --cy 70 --bezel 3
+python3 prototypes/maze/junction.py --seed 1 --cx 203 --cy 70 --bezel 3 --corner-crossings
+python3 prototypes/maze/junction.py --seed 1 --cx 203 --cy 70 --bias 0.9 --rule degree --bezel 3
+python3 prototypes/maze/junction.py --seed 1 --cx 203 --cy 70 --bias 0.9 --rule degree --bezel 3 --corner-crossings
+```
+
+Render the column band and the chunk paint with a 3-block bezel:
+
+```bash
+python3 prototypes/maze/junction.py --column-band --bezel 3
+python3 prototypes/maze/junction.py --column-band --bezel 3 --corner-crossings
+python3 prototypes/maze/junction.py --chunk-paint --cz 9 --bezel 3
+python3 prototypes/maze/junction.py --chunk-paint --cz 9 --bezel 3 --corner-crossings
+```
+
+Check that the shaft and the column stay one tree with a 3-block bezel:
+
+```bash
+python3 prototypes/maze/junction.py --cluster-stats --count 600 --bezel 3
+python3 prototypes/maze/junction.py --cluster-stats --count 600 --bezel 3 --corner-crossings
+python3 prototypes/maze/junction.py --column-stats --count 200 --bezel 3
+python3 prototypes/maze/junction.py --column-stats --count 200 --bezel 3 --corner-crossings
+```
+
+Count the exposed interior blocks of each chunk paint rule with a 3-block bezel:
+
+```bash
+python3 prototypes/maze/junction.py --chunk-stats --bezel 3
+python3 prototypes/maze/junction.py --chunk-stats --bezel 3 --corner-crossings
+```
+
 Measure the stranded components of the cut model:
 
 ```bash
@@ -382,5 +442,14 @@ The images are in `images/`.
 
 - `chunk_paint_<rule>_<view>_cz<Z>.png` is the chunk paint of one rule from the front or the back, at shaft center Z. The exposed interior blocks are red.
 - The folder holds the chunk paint of both rules at Z 10 and Z 9. Z 10 shows the shaft and the column. Z 9 shows the patches.
+
+- `--bezel 3` adds `_bezel3` at the end of the file name, for example `junction_back_shaft_patch_bias0.9_degree_bezel3.png`.
+- `--corner-crossings` adds `_corners` after `_bezel3`, for example `junction_back_shaft_patch_bezel3_corners.png`.
+- In a column band, the bezel suffix follows the start suffix, for example `column_band_bezel3.png`.
+- In a chunk paint, the bezel suffix follows the Z, for example `chunk_paint_each_front_cz9_bezel3.png`.
+- The folder holds the junction scene with a 3-block bezel at P = 0.5, and at P = 0.9 with the degree rule. Each image has a variant A file and a variant B file.
+- The folder holds the column band with a 3-block bezel at P = 0.5, in both variants.
+- The folder holds the chunk paint of both rules at Z 9 with a 3-block bezel, in both variants.
+- In the junction images, the bezel is a raised frame of box blocks, 3 blocks wide. A notch is a recessed path through the bezel.
 
 - `seed3/` holds one junction with seed 3, rendered before the bias option existed.
