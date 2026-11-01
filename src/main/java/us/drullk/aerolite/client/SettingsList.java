@@ -340,7 +340,7 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
                 this.heading.render(guiGraphics, mouseX, mouseY, partialTick);
             }
             for (StringWidget label : this.labels) {
-                label.setPosition(x, top + height - label.getHeight() - 1);
+                label.setPosition(x + 1, top + height - label.getHeight() + 3);
                 label.render(guiGraphics, mouseX, mouseY, partialTick);
                 x += label.getWidth() + ROW_SPACING;
             }
