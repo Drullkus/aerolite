@@ -2,6 +2,8 @@
 
 This folder holds the standalone maze prototype for the shaft surface. It needs Python 3 and no packages.
 
+The pillar of the mod is the shaft of this prototype.
+
 ## Model
 
 - The shaft surface is a cylinder. It is 48 blocks around and infinite along the shaft axis.
@@ -108,6 +110,89 @@ The five approaches against the ribs are:
 - At 0 steps per node, the residue is 1.
 - For a curve start, `--stats` also prints the share of the curve edges that the start keeps.
 - The Wilson trees take the weighted steps of the degree rule. With the class rule, they take uniform steps.
+
+## Patterns
+
+The option `--pattern` picks the pattern type of Wilson's algorithm. The types are `uniform`, `serpentine`, `ribs`, `lines` and `gilbert`. The default is `uniform`.
+
+The option `--strength s` sets the pattern strength. s is a value from 0 to 1 in steps of 0.05. The default is 0.
+
+- A pattern other than `uniform` needs `--sampler wilson --rule degree`.
+- Each pattern type defines a set of pattern edges on the segment graph.
+- The pattern factor of a pattern edge is 1. The pattern factor of any other edge is 1 - s.
+- The class factor is P for an axis edge and 1 - P for a ring edge, like the degree rule.
+- The weight of an edge is its pattern factor times its class factor.
+- At each step, the loop-erased walk takes one edge of its node in proportion to the edge weight.
+- So Wilson's algorithm samples the weighted spanning tree distribution of these weights exactly.
+- At s = 0, every type gives the image of `--sampler wilson --rule degree` with no pattern.
+- From s = 0.05 to s = 0.95, every weight is positive. So each segment is one exact sample, with the connector segments and the junction patches as before.
+- At s = 1, the sampler does not run. The pattern edges are the segment edges, with loops or several components as they come.
+- Corner leaves drop after the pattern, like after the sampler.
+- The `uniform` type has no pattern edge. The strength has no effect on it.
+
+### Pattern random
+
+- The pattern draws come from the pattern random. Its seed is the state of the segment random before the walk.
+- The pattern random takes no value from the segment random. So the root of the walk does not change with the type.
+- The option `--seam pillar` takes its ring position from the pillar random. Its key is the seed and the layout, `connector` for the shaft of `junction.py` and `column` for the column.
+
+### Types
+
+| Type | Pattern edges |
+|---|---|
+| `uniform` | None. |
+| `serpentine` | Each ruling is one ring path with one gap. One axis edge next to the gap joins the ruling to the next ruling. |
+| `ribs` | The breadth-first tree of the segment graph from one root. |
+| `lines` | Every axis edge of the segment graph. |
+| `gilbert` | The edges of the generalized Hilbert curve of the start trees that the graph has. |
+
+Serpentine:
+
+- For each ruling in axis sequence, the pattern random draws the gap. The gap is one of the 24 ring edges.
+- The bridge is the end of the gap that is not a corner. When neither end is a corner, the pattern random picks the end.
+- The bridge is the axis edge from the bridge position to the next ruling. A junction box cuts that axis edge, so the last ruling before a box has no bridge.
+- The bridge of the last ruling joins the right virtual node.
+- The left virtual node joins the first ruling at one non-corner position that the pattern random draws.
+- Each patch row across the axis is one path. One axis edge at a row end joins it to the next row. The pattern random picks the end.
+- Each patch side joins its ruling by one crossing that the pattern random draws.
+- The draw sequence is the rulings, the left virtual node, the patch rows, then the patch sides.
+- A corner node keeps its rules. It has ring edges only, and a corner leaf drops.
+
+Ribs:
+
+- The option `--seam` picks the root. The values are `random`, `seeded` and `pillar`. The default is `random`.
+- `random` draws one node of the segment graph, like the `bfs` start. A virtual node or a patch node can be the root.
+- `seeded` draws one ring position per segment. The root is that position on the first ruling of the segment.
+- `pillar` draws one ring position per pillar. The root is that position on the first ruling of each segment.
+- `--seam` needs `--pattern ribs`.
+
+Lines:
+
+- The pattern edges hold every edge to a virtual node and every patch crossing.
+- Lines at strength s and bias P give the same distribution as the degree rule with no pattern at bias P / (P + (1 - P)(1 - s)).
+- So below s = 1, lines is a bias shift. At P = 0.5 and s = 0.9, it is the degree rule at a bias of 0.909.
+
+Gilbert:
+
+- The curve runs over each block of rulings that axis edges join, with its seam at the corner ring position 0.
+- The curve breaks where it steps along the axis on a corner ring position.
+- No edge to a virtual node, no patch edge and no patch crossing is a pattern edge.
+
+### Tree state at s = 1
+
+| Type | Segment border at s = 1 | Pillar at s = 1 |
+|---|---|---|
+| `uniform` | Sampled as at s = 0. | One tree. |
+| `serpentine` | One crossing per virtual node and one crossing per patch side. | One tree. |
+| `ribs` | The breadth-first tree holds the virtual nodes and the patches. | One tree. |
+| `lines` | Every crossing. Each line runs straight through the border. | A forest of straight lines. |
+| `gilbert` | No crossing. Each segment stands alone. | A forest. Each segment splits at its corner ring positions. |
+
+- Below s = 1, every type keeps the pillar one tree. `--cluster-stats` and `--column-stats` confirm it.
+- With a pattern, the stats print one more line. It counts the pillars that are one tree over every maze node, with the mean components and the mean loops.
+- A maze node is a ruling node that is not a corner, or a patch node. A corner node counts when it carries an edge.
+- At s = 1, the stats print no line per scene that is not one tree.
+- With seed 1 and 24 chunks, the connector band at s = 1 has 20 components for `lines` and 276 components for `gilbert`.
 
 ## Layouts
 
@@ -381,6 +466,55 @@ python3 prototypes/maze/junction.py --chunk-stats --bezel 3
 python3 prototypes/maze/junction.py --chunk-stats --bezel 3 --corner-crossings
 ```
 
+Render the connector band of one pattern at the strengths 0, 0.5, 0.9 and 1, and the stack of the four bands:
+
+```bash
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --rule degree --pattern serpentine --compare-patterns
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --rule degree --pattern ribs --compare-patterns
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --rule degree --pattern ribs --seam seeded --compare-patterns
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --rule degree --pattern ribs --seam pillar --compare-patterns
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --rule degree --pattern lines --compare-patterns
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --rule degree --pattern gilbert --compare-patterns
+```
+
+Render the three layouts of one pattern at one strength:
+
+```bash
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --sampler wilson --rule degree --pattern serpentine --strength 0.9
+```
+
+Render the column band of one pattern at the four strengths side by side:
+
+```bash
+python3 prototypes/maze/junction.py --column-band --rule degree --bezel 3 --pattern serpentine --compare-patterns
+python3 prototypes/maze/junction.py --column-band --rule degree --bezel 3 --pattern ribs --compare-patterns
+python3 prototypes/maze/junction.py --column-band --rule degree --bezel 3 --pattern ribs --seam seeded --compare-patterns
+python3 prototypes/maze/junction.py --column-band --rule degree --bezel 3 --pattern ribs --seam pillar --compare-patterns
+python3 prototypes/maze/junction.py --column-band --rule degree --bezel 3 --pattern lines --compare-patterns
+python3 prototypes/maze/junction.py --column-band --rule degree --bezel 3 --pattern gilbert --compare-patterns
+```
+
+Render the column band of one pattern at one strength:
+
+```bash
+python3 prototypes/maze/junction.py --column-band --sampler wilson --rule degree --bezel 3 --pattern gilbert --strength 0.9
+```
+
+Check that the shaft and the column stay one tree below s = 1, and print the tree state at s = 1:
+
+```bash
+python3 prototypes/maze/junction.py --cluster-stats --count 300 --sampler wilson --rule degree --bezel 3 --pattern serpentine --strength 0.95
+python3 prototypes/maze/junction.py --column-stats --count 60 --sampler wilson --rule degree --bezel 3 --pattern serpentine --strength 0.95
+python3 prototypes/maze/junction.py --cluster-stats --count 300 --sampler wilson --rule degree --bezel 3 --pattern serpentine --strength 1
+python3 prototypes/maze/junction.py --column-stats --count 60 --sampler wilson --rule degree --bezel 3 --pattern serpentine --strength 1
+```
+
+Replace `serpentine` with `ribs`, `lines` or `gilbert` for the other types.
+
+`--compare-patterns` needs `--rule degree` and a pattern other than `uniform`. In `junction.py`, it also needs `--column-band`.
+
+`--stats`, `--compare` and `--compare-starts` take no pattern.
+
 Measure the stranded components of the cut model:
 
 ```bash
@@ -453,3 +587,14 @@ The images are in `images/`.
 - In the junction images, the bezel is a raised frame of box blocks, 3 blocks wide. A notch is a recessed path through the bezel.
 
 - `seed3/` holds one junction with seed 3, rendered before the bias option existed.
+
+- A pattern other than `uniform` adds `_<type>_s<s>` after the rule suffix, for example `band_connector_wilson_degree_serpentine_s0.9.png`.
+- A ribs seam other than `random` adds `_<seam>` after the type, for example `band_connector_wilson_degree_ribs_pillar_s1.png`.
+- In a column band, the pattern suffix sits before the bezel suffix, for example `column_band_wilson_degree_gilbert_s0.9_bezel3.png`.
+- `compare_pattern_<type>_bias<P>.png` stacks four connector bands of one type at the strengths 0, 0.5, 0.9 and 1. A label strip sits above each band.
+- The labels are the type, the seam when it is not `random`, and the strength, for example "ribs pillar 0.9".
+- `compare_pattern_column_<type>_bias<P>_bezel3.png` puts the four column bands side by side, with the same labels from left to right.
+- `--compare-patterns` also writes each band of a comparison under its own file name.
+- The folder holds the pattern comparisons and their bands for each type, and for ribs with each seam, at P = 0.5 with seed 1 and 24 chunks.
+- The pattern column bands use `--bezel 3`.
+- The bands at s = 0 are equal for every type.

@@ -41,6 +41,10 @@ bezel of 1 is the rim of the earlier model, with a 7x7 node patch. A bezel of
 bezel onto a border node. Without the corner crossings flag, the patch corner
 nodes get no crossing.
 
+Every scene takes the pattern type and the pattern strength of originshift.py.
+A pattern needs Wilson's algorithm with the degree rule. The stats also print
+the tree state of each pillar over all of its nodes.
+
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_72657c6a-f5b7-4adf-9364-cab19a14fc12.md
 Written by Claude Code; conversation transcript:
@@ -51,6 +55,8 @@ Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md
+Written by Claude Code; conversation transcript:
+llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md
 """
 
 import argparse
@@ -67,28 +73,42 @@ from originshift import (
     DEFAULT_STEPS,
     DEGREE_RULE,
     NODES_PER_CHUNK,
+    PATTERNS,
+    RANDOM_SEAM,
+    RIBS_PATTERN,
     RING,
     RING_EDGE,
+    SEAMS,
     STARTS,
+    UNIFORM_PATTERN,
     Bias,
     Graph,
     bias_suffix,
     bias_value,
+    check_pattern,
     check_scaled_steps,
     check_weighted_wilson,
     build_layout,
     build_segment,
+    forest_state,
     is_corner,
     label_rows,
     label_scale,
+    pattern_label,
+    pattern_strength,
+    pattern_suffix,
     prune_corner_leaves,
+    pattern_panels,
     ring_offset,
-    sample,
+    sample_edges,
     seg_rng,
     segment_kind,
     start_only_panels,
     start_panels,
     start_suffix,
+    state_text,
+    strength_value,
+    with_pillar,
     write_png,
 )
 
@@ -169,18 +189,28 @@ def patch_grid(g, axis_on_i, patch):
             g.add_edge(n, index[(i + 1, j)], AXIS if axis_on_i else RING_EDGE)
         if j + 1 <= m:
             g.add_edge(n, index[(i, j + 1)], RING_EDGE if axis_on_i else AXIS)
+    g.patches.append((index, axis_on_i, m))
     return index
 
 
-def tree_edges(g, parent, names):
-    """Tree edges as pairs of names. Nodes without a name are virtual."""
-    edges = []
-    for node in range(len(g.adj)):
-        p = parent[node]
-        if p < 0:
-            continue
-        edges.append((names.get(node, ("virtual", node)), names.get(p, ("virtual", p))))
-    return edges
+def tree_edges(edges, names):
+    """Sampled edges as pairs of names. Nodes without a name are virtual."""
+    return [(names.get(a, ("virtual", a)), names.get(b, ("virtual", b))) for a, b in edges]
+
+
+def real_names(names):
+    """The names of the maze nodes: every patch node and every ruling node that is not a corner."""
+    return {n for n in names.values() if n[1] is not None and (n[0] == "patch" or not is_corner(n[1]))}
+
+
+def plain_nodes(segments):
+    """The non-corner ruling nodes of the plain shaft segments."""
+    return {(CHUNK * c + 2 * u + 1, v) for c in segments for u in range(NODES_PER_CHUNK) for v in range(RING) if not is_corner(v)}
+
+
+def pillar_state(scene):
+    """forest_state of the scene pillar over all of its maze nodes."""
+    return forest_state(scene.nodes, getattr(scene, "shaft_edges", None) or scene.edges)
 
 
 class Scene:
@@ -189,7 +219,10 @@ class Scene:
     def __init__(self, seed, cx, cy, sampler, steps_per_node, bias, chunks_each_side=3, piece_rulings=12, cz=0, patch=RIM):
         self.seed, self.cx, self.cy, self.cz = seed, cx, cy, cz
         self.patch = patch
-        self.sampler, self.spn, self.bias = sampler, steps_per_node, bias
+        self.sampler, self.spn = sampler, steps_per_node
+        self.bias = with_pillar(bias, f"{seed}:connector")
+        column_bias = with_pillar(bias, f"{seed}:column")
+        bias = self.bias
         rng = random.Random(f"{seed}:junction:{cx}:{cy}")
         self.shaft_sign = rng.choice((1, -1))
         self.column_sign = -self.shaft_sign
@@ -209,10 +242,10 @@ class Scene:
             self.segments[c] = build_segment(segment_kind("connector", c), NODES_PER_CHUNK, seg_rng(seed, "connector", c), sampler, steps_per_node, bias)
         self.shaft_edges = self._plain_shaft_edges()
         self.shaft_edges += self._junction_segment(seg_rng(seed, "junction", self.k))
-        self.below = build_segment("tree", piece_rulings, seg_rng(seed, "piece", 0), sampler, steps_per_node, bias)
-        self.above = build_segment("tree", piece_rulings, seg_rng(seed, "piece", 1), sampler, steps_per_node, bias)
+        self.below = build_segment("tree", piece_rulings, seg_rng(seed, "piece", 0), sampler, steps_per_node, column_bias)
+        self.above = build_segment("tree", piece_rulings, seg_rng(seed, "piece", 1), sampler, steps_per_node, column_bias)
         self.piece_rulings = piece_rulings
-        self.column_edges = self._column_patch(rng)
+        self.column_edges = self._column_patch(rng, column_bias)
 
     def _plain_shaft_edges(self):
         edges = []
@@ -252,26 +285,32 @@ class Scene:
         patch = patch_grid(g, True, self.patch)
         for (i, j), n in patch.items():
             names[n] = ("patch", i, j)
+        low, high = [], []
         for j in self.patch.crossings:
             v = face_node(self.shaft_sign, j)
             g.add_edge(patch[(-m, j)], index[(self.x_last, v)], AXIS)
             g.add_edge(patch[(m, j)], index[(self.x_first, v)], AXIS)
+            low.append((patch[(-m, j)], index[(self.x_last, v)]))
+            high.append((patch[(m, j)], index[(self.x_first, v)]))
+        g.groups += [low, high]
         x_start, x_end = rulings[0], rulings[-1]
         if self.k % 2 == 1:
             left = g.add_node()
+            g.left = left
             names[left] = (x_start - 2, None)
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(left, index[(x_start, v)], AXIS)
         if self.k_end % 2 == 1:
             right = g.add_node()
+            g.right = right
             names[right] = (x_end + 2, None)
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(right, index[(x_end, v)], AXIS)
-        parent = sample(g, rng, self.sampler, self.spn, self.bias)
+        sampled = sample_edges(g, rng, self.sampler, self.spn, self.bias)
         edges = []
-        for a, b in tree_edges(g, parent, names):
+        for a, b in tree_edges(sampled, names):
             if a[1] is None:
                 a = (a[0], b[1])
             if b[1] is None:
@@ -279,7 +318,7 @@ class Scene:
             edges.append((a, b))
         return prune_corner_leaves(edges, lambda n: n[0] != "patch" and is_corner(n[1]))
 
-    def _column_patch(self, rng):
+    def _column_patch(self, rng, bias):
         """Sample the column patch. Return its tree edges in world names."""
         g = Graph()
         m = self.patch.m
@@ -290,9 +329,10 @@ class Scene:
         for i in self.patch.crossings:
             g.add_edge(below, patch[(i, -m)], AXIS)
             g.add_edge(above, patch[(i, m)], AXIS)
-        parent = sample(g, rng, self.sampler, self.spn, self.bias)
+        g.groups += [[(patch[(i, -m)], below) for i in self.patch.crossings], [(patch[(i, m)], above) for i in self.patch.crossings]]
+        sampled = sample_edges(g, rng, self.sampler, self.spn, bias)
         edges = []
-        for a, b in tree_edges(g, parent, names):
+        for a, b in tree_edges(sampled, names):
             if a[0] == "virtual":
                 a, b = b, a
             if b[0] == "virtual":
@@ -526,6 +566,7 @@ class ClusterScene:
     def __init__(self, seed, centers, sampler, steps_per_node, bias, chunks_each_side=3, patch=RIM):
         self.centers = sorted(centers)
         self.patch = patch
+        bias = with_pillar(bias, f"{seed}:connector")
         rng = random.Random(f"{seed}:cluster:{self.centers}")
         self.signs = [rng.choice((1, -1)) for _ in self.centers]
         self.k = min(junction_chunks(c)[0] for c in self.centers)
@@ -537,6 +578,7 @@ class ClusterScene:
             if self.k <= c <= self.k_end:
                 continue
             self.segments[c] = build_segment(segment_kind("connector", c), NODES_PER_CHUNK, seg_rng(seed, "connector", c), sampler, steps_per_node, bias)
+        self.nodes = plain_nodes(self.segments)
         self.shaft_edges = Scene._plain_shaft_edges(self)
         self.shaft_edges += self._junction_segment(seg_rng(seed, "junction", self.k), sampler, steps_per_node, bias)
 
@@ -567,26 +609,33 @@ class ClusterScene:
             for (i, j), n in patch.items():
                 names[n] = ("patch", b, i, j)
             x_last, x_first = odd_below(c - HALF - 1), odd_above(c + HALF + 1)
+            low, high = [], []
             for j in self.patch.crossings:
                 v = face_node(sign, j)
                 g.add_edge(patch[(-m, j)], index[(x_last, v)], AXIS)
                 g.add_edge(patch[(m, j)], index[(x_first, v)], AXIS)
+                low.append((patch[(-m, j)], index[(x_last, v)]))
+                high.append((patch[(m, j)], index[(x_first, v)]))
+            g.groups += [low, high]
         x_start, x_end = rulings[0], rulings[-1]
         if self.k % 2 == 1:
             left = g.add_node()
+            g.left = left
             names[left] = (x_start - 2, None)
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(left, index[(x_start, v)], AXIS)
         if self.k_end % 2 == 1:
             right = g.add_node()
+            g.right = right
             names[right] = (x_end + 2, None)
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(right, index[(x_end, v)], AXIS)
-        parent = sample(g, rng, sampler, steps_per_node, bias)
+        self.nodes |= real_names(names)
+        sampled = sample_edges(g, rng, sampler, steps_per_node, bias)
         edges = []
-        for a, b in tree_edges(g, parent, names):
+        for a, b in tree_edges(sampled, names):
             if a[1] is None:
                 a = (a[0], b[1])
             if b[1] is None:
@@ -595,10 +644,39 @@ class ClusterScene:
         return prune_corner_leaves(edges, lambda n: n[0] != "patch" and is_corner(n[1]))
 
 
+class PatternTally:
+    """Tree states of the pillars of one pattern stats run."""
+
+    def __init__(self, bias):
+        self.bias = bias
+        self.active = bias.pattern != UNIFORM_PATTERN
+        self.count = self.trees = self.components = self.loops = 0
+
+    def quiet(self):
+        """At strength 1 the pattern edges paint as they are, so a scene that is not one tree is expected."""
+        return self.active and pattern_strength(self.bias) >= 1.0
+
+    def add(self, scene):
+        if not self.active:
+            return
+        _, _, components, loops = pillar_state(scene)
+        self.count += 1
+        self.trees += components == 1 and loops == 0
+        self.components += components
+        self.loops += loops
+
+    def report(self, what):
+        if not self.active:
+            return
+        n = self.count
+        print(f"pattern {pattern_label(self.bias)} strength {self.bias.strength:g}: {what} that are one tree with every maze node: {self.trees} of {n}, mean components {self.components / n:.2f}, mean loops {self.loops / n:.2f}")
+
+
 def cluster_stats(seed, count, sampler, spn, bias, patch):
     """Place two boxes at a random distance of 31 to 60 blocks and check that the shaft stays one tree."""
     merged = 0
     trees = 0
+    tally = PatternTally(bias)
     for k in range(count):
         rng = random.Random(f"{seed}:cluster-place:{k}")
         c1 = rng.randrange(100, 400)
@@ -609,12 +687,14 @@ def cluster_stats(seed, count, sampler, spn, bias, patch):
         else:
             scene = ClusterScene(seed, [c1], sampler, spn, bias, patch=patch)
         result = check_tree(scene)
+        tally.add(scene)
         if result.endswith(" 1 component(s)"):
             trees += 1
-        else:
+        elif not tally.quiet():
             print(f"{k:>4} {c1:>4} {c2:>4}  {result}")
     print(f"merged clusters: {merged} of {count}")
     print(f"scenes that are one tree: {trees} of {count}")
+    tally.report("scenes")
 
 
 # --- segmented column -----------------------------------------------------------
@@ -633,7 +713,8 @@ class ColumnScene:
         self.patch = patch
         self.y_min, self.y_max = y_min, y_max
         self.s_lo, self.s_hi = y_min // CHUNK, (y_max - 1) // CHUNK
-        self.sampler, self.spn, self.bias = sampler, steps_per_node, bias
+        self.sampler, self.spn, self.bias = sampler, steps_per_node, with_pillar(bias, f"{seed}:column")
+        self.nodes = set()
         ranges = sorted(junction_chunks(c) for c in centers)
         clusters = []
         for lo, hi in ranges:
@@ -677,31 +758,38 @@ class ColumnScene:
             patch = patch_grid(g, False, self.patch)
             for (i, j), n in patch.items():
                 names[n] = ("patch", c, i, j)
+            low, high = [], []
             for i in self.patch.crossings:
                 v = face_node(sign, i)
                 if (odd_below(c - HALF - 1), v) in index:
                     g.add_edge(patch[(i, -m)], index[(odd_below(c - HALF - 1), v)], AXIS)
+                    low.append((patch[(i, -m)], index[(odd_below(c - HALF - 1), v)]))
                 if (odd_above(c + HALF + 1), v) in index:
                     g.add_edge(patch[(i, m)], index[(odd_above(c + HALF + 1), v)], AXIS)
+                    high.append((patch[(i, m)], index[(odd_above(c + HALF + 1), v)]))
+            g.groups += [low, high]
         if lo % 2 == 1 and lo - 1 >= self.s_lo:
             left = g.add_node()
+            g.left = left
             names[left] = (rulings[0] - 2, None)
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(left, index[(rulings[0], v)], AXIS)
         if hi % 2 == 1 and hi + 1 <= self.s_hi:
             right = g.add_node()
+            g.right = right
             names[right] = (rulings[-1] + 2, None)
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(right, index[(rulings[-1], v)], AXIS)
+        self.nodes |= real_names(names)
         trace = {}
-        parent = sample(g, rng, self.sampler, self.spn, self.bias, trace)
+        sampled = sample_edges(g, rng, self.sampler, self.spn, self.bias, trace)
         if "curve" in trace:
             self.curve[0] += trace["curve"][0]
             self.curve[1] += trace["curve"][1]
         edges = []
-        for a, b in tree_edges(g, parent, names):
+        for a, b in tree_edges(sampled, names):
             if a[1] is None:
                 a = (a[0], b[1])
             if b[1] is None:
@@ -789,7 +877,7 @@ def render_column_compare(path, seed, steps_per_node, p, scale, patch):
 def column_band_name(sampler, bias, steps_per_node, patch):
     """Wilson's algorithm adds _wilson, so its band keeps its own file."""
     tag = "_wilson" if sampler == "wilson" else ""
-    return f"column_band{tag}{bias_suffix(sampler, bias)}{start_suffix(sampler, bias, steps_per_node)}{patch.suffix()}.png"
+    return f"column_band{tag}{bias_suffix(sampler, bias)}{start_suffix(sampler, bias, steps_per_node)}{pattern_suffix(bias)}{patch.suffix()}.png"
 
 
 def render_column_starts(out_dir, name, seed, panels, scale, band_scale, patch):
@@ -808,6 +896,14 @@ def render_column_starts(out_dir, name, seed, panels, scale, band_scale, patch):
     print("wrote", name)
 
 
+def render_column_patterns(out_dir, seed, p, scale, band_scale, patch, pattern, seam):
+    """Put the column band of each strength of one pattern side by side, each under its label strip. Write each band too."""
+    panels = [(label, "wilson", bias, DEFAULT_STEPS) for label, bias in pattern_panels(p, pattern, seam)]
+    seam_part = f"_{seam}" if pattern == RIBS_PATTERN and seam != RANDOM_SEAM else ""
+    name = f"compare_pattern_column_{pattern}{seam_part}_bias{p:g}{patch.suffix()}.png"
+    render_column_starts(out_dir, name, seed, panels, scale, band_scale, patch)
+
+
 def report_column(label, scene):
     """Print the tree check and, for a curve start, the share of curve edges that the start keeps."""
     line = f"{label}: {check_tree(scene)}"
@@ -815,11 +911,14 @@ def report_column(label, scene):
     if total:
         line += f", curve edges kept {kept} of {total} ({kept / total:.3f})"
     print(line)
+    if scene.bias.pattern != UNIFORM_PATTERN:
+        print(f"{label} with every maze node: {state_text(pillar_state(scene))}")
 
 
 def column_stats(seed, count, sampler, spn, bias, patch):
     """Place two junctions on a full-height column and check that the column stays one tree."""
     trees = 0
+    tally = PatternTally(bias)
     for k in range(count):
         rng = random.Random(f"{seed}:column-place:{k}")
         low = rng.randrange(-64 + 24, 300 - 40)
@@ -827,11 +926,13 @@ def column_stats(seed, count, sampler, spn, bias, patch):
         high = min(high, 320 - 24)
         scene = ColumnScene(seed + k, [low, high], [rng.choice((1, -1)), rng.choice((1, -1))], -64, 320, sampler, spn, bias, patch)
         result = check_tree(scene)
+        tally.add(scene)
         if result.endswith(" 1 component(s)"):
             trees += 1
-        else:
+        elif not tally.quiet():
             print(f"{k:>4} {low:>4} {high:>4}  {result}")
     print(f"columns that are one tree: {trees} of {count}")
+    tally.report("columns")
 
 
 # --- checks and rendering -------------------------------------------------------
@@ -1033,8 +1134,25 @@ def main():
     ap.add_argument("--compare-starts", action="store_true", help="with --column-band, render the column band of each start tree side by side and exit")
     ap.add_argument("--bezel", type=int, choices=BEZELS, default=1, help="thickness of the solid frame on each patch face")
     ap.add_argument("--corner-crossings", action="store_true", help="give the patch corner nodes a crossing; needs --bezel 3")
+    ap.add_argument("--pattern", choices=PATTERNS, default=UNIFORM_PATTERN, help="the pattern type of Wilson's algorithm")
+    ap.add_argument("--strength", type=strength_value, default=0.0, help="the pattern strength, from 0 to 1 in steps of 0.05")
+    ap.add_argument("--seam", choices=SEAMS, default=RANDOM_SEAM, help="the root of the ribs pattern")
+    ap.add_argument("--compare-patterns", action="store_true", help="with --column-band, render the column band of the pattern at four strengths side by side and exit")
     args = ap.parse_args()
-    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps)
+    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps, args.pattern, args.strength, args.seam)
+    if args.compare_patterns:
+        if not (args.column_band and args.rule == DEGREE_RULE) or args.pattern == UNIFORM_PATTERN:
+            ap.error("--compare-patterns needs --column-band, --rule degree and a --pattern other than uniform")
+        if args.corner_crossings and args.bezel == 1:
+            ap.error("--corner-crossings needs --bezel 3")
+        check_pattern(ap, bias, "wilson")
+        check_weighted_wilson(ap, True, args.bias)
+        os.makedirs(args.out, exist_ok=True)
+        render_column_patterns(args.out, args.seed, args.bias, 5, 4, Patch(args.bezel, args.corner_crossings), args.pattern, args.seam)
+        return
+    check_pattern(ap, bias, args.sampler)
+    if args.pattern != UNIFORM_PATTERN and (args.compare or args.compare_starts):
+        ap.error("--compare and --compare-starts take no --pattern")
     if args.corner_crossings and args.bezel == 1:
         ap.error("--corner-crossings needs --bezel 3")
     patch = Patch(args.bezel, args.corner_crossings)
@@ -1065,7 +1183,7 @@ def main():
         render_column_starts(args.out, f"compare_starts_column_bias{args.bias:g}{patch.suffix()}.png", args.seed, start_panels(args.bias), 5, 4, patch)
         render_column_starts(args.out, f"compare_starts_only_bias{args.bias:g}{patch.suffix()}.png", args.seed, start_only_panels(args.bias), 5, 4, patch)
         return
-    suffix = bias_suffix(args.sampler, bias) + start_suffix(args.sampler, bias, args.steps_per_node) + patch.suffix()
+    suffix = bias_suffix(args.sampler, bias) + start_suffix(args.sampler, bias, args.steps_per_node) + pattern_suffix(bias) + patch.suffix()
     if args.column_band:
         os.makedirs(args.out, exist_ok=True)
         scene = column_scene(args.seed, args.sampler, args.steps_per_node, bias, patch)
