@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aerolite Pillar Shapes</title>
+<style>
+  :root {
+    --bg: #1b1e23; --panel: #262a31; --text: #e6e8eb; --muted: #9aa1ab; --line: #3a3f48; --accent: #5aa0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  body { display: flex; }
+  #panel { width: 300px; flex: none; height: 100%; overflow-y: auto; background: var(--panel);
+    border-right: 1px solid var(--line); padding: 12px 14px; }
+  #view { flex: 1; position: relative; min-width: 0; }
+  #view canvas { display: block; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; }
+  h4 { font-size: 12px; margin: 10px 0 2px; }
+  label.row, div.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 0; }
+  select, input[type=range] { width: 150px; }
+  select { background: #1f2329; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 4px; }
+  .buttons { display: flex; gap: 4px; flex-wrap: wrap; }
+  button { background: #323843; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 9px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .sw { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .sw span { width: 14px; height: 14px; border-radius: 2px; flex: none; }
+  .ramp { height: 12px; border-radius: 2px; }
+  .ramp-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+  .note, #stats { color: var(--muted); font-size: 11px; }
+  table { border-collapse: collapse; font-size: 11px; width: 100%; }
+  th, td { text-align: left; padding: 1px 4px 1px 0; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<aside id="panel">
+  <h1>Aerolite pillar shapes</h1>
+
+  <h3>Scene</h3>
+  <label class="row">Scene
+    <select id="scene">
+      <option value="junction">Junction pair</option>
+      <option value="junctions">All 9 junction pairs</option>
+      <option value="pillar">Horizontal pillar</option>
+      <option value="shapes">All 3 horizontal shapes</option>
+      <option value="column">Column</option>
+      <option value="columns">All 3 columns</option>
+    </select>
+  </label>
+  <label class="row">Horizontal shape
+    <select id="h">
+      <option value="pillar">Pillar</option>
+      <option value="ibeam">I-beam</option>
+      <option value="bridge">Bridge</option>
+    </select>
+  </label>
+  <label class="row">Column shape
+    <select id="c">
+      <option value="pillar">Pillar</option>
+      <option value="ibeam">I-beam</option>
+      <option value="bridge">Bridge</option>
+    </select>
+  </label>
+  <div class="row">Column web plane
+    <span><label><input type="radio" name="plane" value="x"> X</label>
+      <label><input type="radio" name="plane" value="z"> Z</label></span>
+  </div>
+  <label class="row">Pattern
+    <select id="pattern">
+      <option value="serpentine">Ring serpentine</option>
+      <option value="none">None (all wall)</option>
+    </select>
+  </label>
+  <label class="row">Chunks <span id="chunksOut"></span>
+    <input id="chunks" type="range" min="1" max="6" step="1">
+  </label>
+  <label class="row">Shear band <span id="bandOut"></span>
+    <input id="band" type="range" min="8" max="64" step="8">
+  </label>
+  <label class="row">Node lattice <input id="lattice" type="checkbox"></label>
+  <label class="row">Resistance view <input id="res" type="checkbox"></label>
+  <label class="row">Cut away +Z half <input id="cut" type="checkbox"></label>
+
+  <h3>Camera</h3>
+  <div class="buttons">
+    <button data-view="iso">Iso</button>
+    <button data-view="side">Side</button>
+    <button data-view="end">End</button>
+    <button data-view="top">Top</button>
+  </div>
+  <label class="row">Orthographic <input id="ortho" type="checkbox"></label>
+  <p class="note">Drag to orbit. Right drag to pan. Scroll to zoom.</p>
+
+  <h3>Legend</h3>
+  <div id="legend"></div>
+
+  <h3>Rings</h3>
+  <div id="info"></div>
+  <p id="stats"></p>
+</aside>
+<div id="view"></div>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script src="shapes.js"></script>
+<script src="scene.js"></script>
+</body>
+</html>
