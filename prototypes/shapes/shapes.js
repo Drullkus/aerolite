@@ -178,9 +178,14 @@
     const g = gapNode(ring, ringIndex, k);
     const gapEdge = mod(2 * g + 1, L);
     for (let i = 0; i < L; i++) if (i !== gapEdge) carved.add(i);
-    // A corner node of degree one is dropped with its edge.
+    return carved;
+  }
+
+  // A corner node of degree one is dropped with its edge, unless a crossing holds it.
+  function dropLeaves(ring, carved, keep) {
+    const L = ring.length;
     for (let i = 0; i < L; i += 2) {
-      if (!ring[i].cornerNode) continue;
+      if (!ring[i].cornerNode || !carved.has(i) || (keep && keep.has(i))) continue;
       const a = mod(i - 1, L), b = mod(i + 1, L);
       const deg = (carved.has(a) ? 1 : 0) + (carved.has(b) ? 1 : 0);
       if (deg === 1) {
@@ -188,13 +193,12 @@
         carved.delete(carved.has(a) ? a : b);
       }
     }
-    return carved;
   }
 
   // ---------------------------------------------------------------- voxel store
 
   class Voxels {
-    constructor() { this.map = new Map(); this.markers = []; this.holes = []; this.labels = []; this.cz = 0; }
+    constructor() { this.map = new Map(); this.markers = []; this.holes = []; this.labels = []; this.links = []; this.checks = []; this.cz = 0; }
     static key(x, y, z) { return ((x + 1024) * 2048 + (y + 1024)) * 2048 + (z + 1024); }
     get(x, y, z) { return this.map.get(Voxels.key(x, y, z)); }
     set(x, y, z, block) { this.map.set(Voxels.key(x, y, z), { cz: this.cz, ...block, x, y, z }); }
@@ -215,6 +219,12 @@
 
   // Paints one pillar of the shape over the axis positions s0 to s1, inclusive.
   function paintPillar(out, shape, s0, s1, frame, opts) {
+    finishPillar(out, preparePillar(out, shape, s0, s1, frame, opts, null), opts);
+  }
+
+  // Paints the base blocks and computes the carved ring positions of each axis position.
+  // A linked pillar drops the rulings in its cuts and each axis edge that touches a dropped ruling.
+  function preparePillar(out, shape, s0, s1, frame, opts, link) {
     const skip = opts.skip || (() => false);
     for (let s = s0; s <= s1; s++) {
       if (skip(s)) continue;
@@ -237,18 +247,33 @@
         }
       });
     }
+    const gone = (s) => skip(s) || (link !== null && link.cuts.some(([lo, hi]) => s >= lo && s <= hi));
+    const sets = shape.rings.map((ring, ri) => {
+      const m = new Map();
+      for (let s = s0; s <= s1; s++) {
+        if (gone(s)) continue;
+        if (mod(s, 2) === 1) {
+          m.set(s, rulingCarve(ring, ri, (s - 1) / 2, opts.pattern));
+        } else {
+          const c = new Set();
+          const joined = link === null || (s - 1 >= s0 && s + 1 <= s1 && !gone(s - 1) && !gone(s + 1));
+          if (opts.pattern !== 'none' && joined) c.add(2 * gapNode(ring, ri, (s - 2) / 2));
+          m.set(s, c);
+        }
+      }
+      return m;
+    });
+    return { shape, s0, s1, frame, skip, gone, sets, keep: shape.rings.map(() => new Map()) };
+  }
+
+  // Drops corner leaves, carves the blocks, places the lattice markers and the truss anchors.
+  function finishPillar(out, P, opts) {
+    const { shape, s0, s1, frame, skip } = P;
     // Carving runs after the base pass, so a floor block never returns to wall.
     shape.rings.forEach((ring, ri) => {
-      for (let s = s0; s <= s1; s++) {
-        if (skip(s)) continue;
-        let carved;
-        if (mod(s, 2) === 1) {
-          carved = rulingCarve(ring, ri, (s - 1) / 2, opts.pattern);
-        } else {
-          carved = new Set();
-          if (opts.pattern !== 'none') carved.add(2 * gapNode(ring, ri, (s - 2) / 2));
-        }
-        for (const i of carved) carve(out, shape, ring[i], frame, s);
+      for (const [s, set] of P.sets[ri]) {
+        if (mod(s, 2) === 1) dropLeaves(ring, set, P.keep[ri].get(s));
+        for (const i of set) carve(out, shape, ring[i], frame, s);
       }
       if (opts.lattice) {
         for (let s = s0; s <= s1; s++) {
@@ -370,44 +395,251 @@
     return out;
   }
 
-  // The 15x15x15 junction of a horizontal pillar along X and a column, centered on the origin.
-  function junctionScene(hKey, cKey, opts, out = new Voxels(), x0 = 0, z0 = 0) {
+  // ---------------------------------------------------------------- junction link
+
+  class UnionFind {
+    constructor() { this.parent = new Map(); }
+    add(k) { if (!this.parent.has(k)) this.parent.set(k, k); }
+    has(k) { return this.parent.has(k); }
+    find(k) {
+      let r = k;
+      while (this.parent.get(r) !== r) r = this.parent.get(r);
+      while (this.parent.get(k) !== r) { const n = this.parent.get(k); this.parent.set(k, r); k = n; }
+      return r;
+    }
+    union(a, b) {
+      this.add(a); this.add(b);
+      const ra = this.find(a), rb = this.find(b);
+      if (ra === rb) return false;
+      this.parent.set(ra, rb);
+      return true;
+    }
+  }
+
+  function nodeKey(pid, ri, s, p) { return pid + '|' + ri + '|' + s + '|' + p; }
+
+  // Adds the placeholder ring edges of a prepared pillar to the union-find.
+  function ringGraph(P, uf, pid) {
+    P.shape.rings.forEach((ring, ri) => {
+      const L = ring.length;
+      for (const [s, set] of P.sets[ri]) {
+        if (mod(s, 2) === 1) {
+          for (const p of set) {
+            if (p % 2 === 0) uf.add(nodeKey(pid, ri, s, p));
+            else if (set.has(mod(p - 1, L)) && set.has(mod(p + 1, L))) uf.union(nodeKey(pid, ri, s, mod(p - 1, L)), nodeKey(pid, ri, s, mod(p + 1, L)));
+          }
+        } else {
+          for (const p of set) uf.union(nodeKey(pid, ri, s - 1, p), nodeKey(pid, ri, s + 1, p));
+        }
+      }
+    });
+  }
+
+  // The node pairs of the patch boustrophedon, in patch coordinates (a, b).
+  function patchEdges() {
+    const edges = [];
+    for (let row = -2; row <= 2; row++) {
+      const b = 2 * row;
+      for (let a = -PATCH_EDGE; a < PATCH_EDGE; a += 2) edges.push([[a, b], [a + 2, b]]);
+      if (row < 2) {
+        const end = mod(row, 2) === 0 ? PATCH_EDGE : -PATCH_EDGE;
+        edges.push([[end, b], [end, b + 2]]);
+      }
+    }
+    return edges;
+  }
+
+  function strHash(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+    return hash3(h, 17, 29, 5);
+  }
+
+  // The crossing candidates of a patch, as offsets t across the pillar and box sides sgn.
+  // `facing` is 'edge' when the flange edges or the plate sides face the patch, else 'face'.
+  function crossingCandidates(shapeKey, facing, choiceKey) {
+    const both = (ts) => [1, -1].flatMap((sgn) => ts.map((t) => ({ t, sgn })));
+    if (shapeKey === 'pillar') return both([-2, 0, 2]);
+    if (shapeKey === 'ibeam') return facing === 'edge' ? both([4, -4]) : both([-2, 0, 2]);
+    // A bridge patch takes exactly one crossing from one plate, from one side of the box.
+    const h = Math.floor(strHash(choiceKey) * 4);
+    const sgn = (h & 2) ? -1 : 1;
+    if (facing === 'edge') return [{ t: (h & 1) ? -4 : 4, sgn }];
+    return [{ t: 0, sgn }];
+  }
+
+  function shuffled(list, key) {
+    return list.map((c, i) => ({ c, k: strHash(key + '#' + i) })).sort((a, b) => a.k - b.k).map((e) => e.c);
+  }
+
+  // Counts the components of each ring of a finished pillar.
+  function ringComponents(P, uf, pid) {
+    return P.shape.rings.map((ring, ri) => {
+      const roots = new Set();
+      for (const [s, set] of P.sets[ri]) {
+        if (mod(s, 2) !== 1) continue;
+        for (const p of set) if (p % 2 === 0) roots.add(uf.find(nodeKey(pid, ri, s, p)));
+      }
+      return roots;
+    });
+  }
+
+  // Junctions of one horizontal pillar along X and one column per center, at the axis positions `centers`.
+  // With the junction link, the ring pattern is cut at each box and the patches join it through crossings.
+  function junctionRun(hKey, cKey, centers, opts, out = new Voxels(), x0 = 0, z0 = 0) {
+    const link = !!opts.link && opts.pattern !== 'none';
     const n = opts.chunks * 16;
     const hShape = SHAPES[hKey], cShape = SHAPES[cKey];
     const hFrame = (s, u, v) => [s + x0, v, u + z0];
     out.cz = z0;
-    paintPillar(out, hShape, -n, n - 1, hFrame, opts);
+    const hid = 'h' + x0 + ',' + z0;
+    // A horizontal Bridge runs through its holes, so its plate trees stay uncut.
+    const hCuts = hKey === 'bridge' ? [] : centers.map((c) => [c - BOX, c + BOX]);
+    const H = preparePillar(out, hShape, centers[0] - n, centers[centers.length - 1] + n - 1, hFrame, opts, link ? { cuts: hCuts } : null);
+    const uf = new UnionFind();
+    if (link) ringGraph(H, uf, hid);
 
     const half = BOX + Math.max(n, 8 + opts.band);
-    const owner = 'column' + x0 + ',' + z0;
-    const tmp = new Voxels();
-    tmp.cz = z0;
-    paintPillar(tmp, cShape, -half, half, columnFrame(opts.webPlane, x0, z0), { ...opts, skip: (s) => Math.abs(s) <= BOX });
-    for (const b of tmp.map.values()) b.owner = owner;
-    shearColumn(tmp, owner, x0, z0, -half, half, opts.band, 7 + x0 + 3 * z0);
-    for (const b of tmp.map.values()) out.set(b.x, b.y, b.z, b);
-    out.markers.push(...tmp.markers);
+    const columns = centers.map((c) => {
+      const cx = x0 + c;
+      const owner = 'column' + cx + ',' + z0;
+      const tmp = new Voxels();
+      tmp.cz = z0;
+      const frame = columnFrame(opts.webPlane, cx, z0);
+      const C = preparePillar(tmp, cShape, -half, half, frame, { ...opts, skip: (s) => Math.abs(s) <= BOX }, link ? { cuts: [] } : null);
+      if (link) ringGraph(C, uf, owner);
+      return { C, tmp, owner, cx };
+    });
+
+    const accepted = [];
+    const patches = [];
+    if (link) {
+      centers.forEach((c, ci) => {
+        const col = columns[ci];
+        const sides = [
+          { // The patch on +Z serves the horizontal pillar.
+            P: H, pid: hid, shapeKey: hKey, facing: 'edge',
+            instance: hid, junction: hid + '@' + c,
+            sAt: (sgn, k) => c + sgn * k,
+            uv: (t) => [OUTER, t],
+            patchAt: (a, b) => [x0 + c + a, b, z0 + BOX],
+            nodeAt: (t, sgn, k) => [x0 + c + sgn * k, t, z0 + BOX],
+            under: [0, 0, -1],
+          },
+          { // The patch on -Z serves the column.
+            P: col.C, pid: col.owner, shapeKey: cKey, facing: opts.webPlane === 'x' ? 'edge' : 'face',
+            instance: col.owner, junction: col.owner + '@0',
+            sAt: (sgn, k) => sgn * k,
+            uv: (t) => opts.webPlane === 'x' ? [-OUTER, t] : [t, -OUTER],
+            patchAt: (a, b) => [x0 + c + b, a, z0 - BOX],
+            nodeAt: (t, sgn, k) => [x0 + c + t, sgn * k, z0 - BOX],
+            under: [0, 0, 1],
+          },
+        ];
+        for (const side of sides) {
+          const pkey = (a, b) => 'patch|' + side.patchAt(a, b).join(',');
+          for (const [[a1, b1], [a2, b2]] of patchEdges()) uf.union(pkey(a1, b1), pkey(a2, b2));
+          patches.push(pkey(0, 0));
+          const choice = opts.bridgeChoice === 'junction' ? side.junction : side.instance;
+          let list = crossingCandidates(side.shapeKey, side.facing, choice);
+          if (side.shapeKey !== 'bridge') list = shuffled(list, side.junction);
+          for (const { t, sgn } of list) {
+            const [u, v] = side.uv(t);
+            const ri = side.P.shape.rings.findIndex((ring) => ring.some((q) => q.u === u && q.v === v));
+            if (ri < 0) continue;
+            const p = side.P.shape.rings[ri].findIndex((q) => q.u === u && q.v === v);
+            const rk = nodeKey(side.pid, ri, side.sAt(sgn, 9), p);
+            if (!uf.has(rk)) continue;
+            // The patch node faces the ring node: a side node of the patch, or a patch corner when |t| is 4.
+            if (!uf.union(rk, pkey(sgn * PATCH_EDGE, t))) continue;
+            accepted.push({ side, ri, p, t, sgn });
+            const P = side.P;
+            if (!P.keep[ri].has(side.sAt(sgn, 9))) P.keep[ri].set(side.sAt(sgn, 9), new Set());
+            P.keep[ri].get(side.sAt(sgn, 9)).add(p);
+            const rim = P.sets[ri].get(side.sAt(sgn, 8));
+            if (rim) rim.add(p);
+          }
+        }
+      });
+    }
+
+    finishPillar(out, H, opts);
+    for (const { C, tmp, owner, cx } of columns) {
+      finishPillar(tmp, C, opts);
+      for (const b of tmp.map.values()) b.owner = owner;
+      shearColumn(tmp, owner, cx, z0, -half, half, opts.band, 7 + cx + 3 * z0);
+      for (const b of tmp.map.values()) out.set(b.x, b.y, b.z, b);
+      out.markers.push(...tmp.markers);
+    }
 
     const hole = hKey === 'bridge';
-    out.markers = out.markers.filter((m) => !(Math.abs(m.x - x0) <= BOX + 0.5 && Math.abs(m.y) <= BOX + 0.5 && Math.abs(m.z - z0) <= BOX + 0.5));
-    for (let x = -BOX; x <= BOX; x++)
-      for (let y = -BOX; y <= BOX; y++)
-        for (let z = -BOX; z <= BOX; z++) {
-          if (hole && Math.abs(y) <= HOLE && Math.abs(z) <= HOLE) continue;
-          const box = (BOX - Math.max(Math.abs(x), Math.abs(y), Math.abs(z))) / (BOX - 1);
-          const cuv = opts.webPlane === 'x' ? [z, x] : [x, z];
-          const res = Math.max(box, hShape.resistance(z, y), cShape.resistance(cuv[0], cuv[1]));
-          let role = 'junction';
-          if (Math.abs(z) === BOX && Math.max(Math.abs(x), Math.abs(y)) > PATCH_EDGE) role = 'bezel';
-          else if (Math.abs(z) === BOX) role = 'wall';
-          out.set(x + x0, y, z + z0, { role, res, owner: 'box' });
-        }
-    // The patch on +Z serves the horizontal pillar. The patch on -Z serves the column.
-    paintPatch(out, x0, z0, 1, false, opts);
-    paintPatch(out, x0, z0, -1, true, opts);
-    if (hole) out.holes.push({ x0: x0 - BOX - 0.5, x1: x0 + BOX + 0.5, y0: -HOLE - 0.5, y1: HOLE + 0.5, z0: z0 - HOLE - 0.5, z1: z0 + HOLE + 0.5 });
-    out.labels.push({ text: hShape.name + ' + ' + cShape.name + ' column', x: x0, y: half + 4, z: z0 });
+    for (const c of centers) {
+      const bx = x0 + c;
+      out.markers = out.markers.filter((m) => !(Math.abs(m.x - bx) <= BOX + 0.5 && Math.abs(m.y) <= BOX + 0.5 && Math.abs(m.z - z0) <= BOX + 0.5));
+      for (let x = -BOX; x <= BOX; x++)
+        for (let y = -BOX; y <= BOX; y++)
+          for (let z = -BOX; z <= BOX; z++) {
+            if (hole && Math.abs(y) <= HOLE && Math.abs(z) <= HOLE) continue;
+            const box = (BOX - Math.max(Math.abs(x), Math.abs(y), Math.abs(z))) / (BOX - 1);
+            const cuv = opts.webPlane === 'x' ? [z, x] : [x, z];
+            const res = Math.max(box, hShape.resistance(z, y), cShape.resistance(cuv[0], cuv[1]));
+            let role = 'junction';
+            if (Math.abs(z) === BOX && Math.max(Math.abs(x), Math.abs(y)) > PATCH_EDGE) role = 'bezel';
+            else if (Math.abs(z) === BOX) role = 'wall';
+            out.set(x + bx, y, z + z0, { role, res, owner: 'box' });
+          }
+      paintPatch(out, bx, z0, 1, false, opts);
+      paintPatch(out, bx, z0, -1, true, opts);
+      if (hole) out.holes.push({ x0: bx - BOX - 0.5, x1: bx + BOX + 0.5, y0: -HOLE - 0.5, y1: HOLE + 0.5, z0: z0 - HOLE - 0.5, z1: z0 + HOLE + 0.5 });
+    }
+
+    // Each crossing runs along the outer layer to the box, then notches through the bezel at face offsets 7, 6 and 5.
+    for (const { side, ri, p, t, sgn } of accepted) {
+      const P = side.P;
+      const q = P.shape.rings[ri][p];
+      for (const [fu, fv] of q.floor) {
+        const [fx, fy, fz] = P.frame(side.sAt(sgn, 8), fu, fv);
+        const f = out.get(fx, fy, fz);
+        if (f && f.role === 'path') f.role = 'crossing';
+      }
+      const points = [P.frame(side.sAt(sgn, 9), q.u, q.v), P.frame(side.sAt(sgn, 8), q.u, q.v)];
+      for (let k = BOX; k >= PATCH_EDGE; k--) {
+        const [x, y, z] = side.nodeAt(t, sgn, k);
+        points.push([x, y, z]);
+        if (k === PATCH_EDGE) break;
+        out.delete(x, y, z);
+        const f = out.get(x + side.under[0], y + side.under[1], z + side.under[2]);
+        if (f) f.role = 'crossing';
+      }
+      out.links.push({ points, cz: z0 });
+    }
+
+    const name = hShape.name + ' + ' + cShape.name + ' column';
+    out.labels.push({ text: name, x: x0 + (centers[0] + centers[centers.length - 1]) / 2, y: half + 4, z: z0 });
+    if (link) {
+      const pillarRoots = new Set();
+      const fmt = (P, pid) => {
+        const comps = ringComponents(P, uf, pid);
+        comps.forEach((r) => r.forEach((x) => pillarRoots.add(x)));
+        return comps.length > 1 ? comps.map((r, i) => (i === 0 ? 'top ' : 'bottom ') + r.size).join(', ') : String(comps[0].size);
+      };
+      const hText = fmt(H, hid);
+      const cText = columns.map((col) => fmt(col.C, col.owner)).join(' / ');
+      const floating = patches.filter((k) => !pillarRoots.has(uf.find(k))).length;
+      const ok = ringComponents(H, uf, hid).every((r) => r.size === 1) &&
+        columns.every((col) => ringComponents(col.C, uf, col.owner).every((r) => r.size === 1)) && floating === 0;
+      out.checks.push({ ok, text: name + ': ' + hShape.name + ' ' + hText + '; column ' + cText + '; floating patches ' + floating + '; crossings ' + accepted.length });
+    }
     return out;
+  }
+
+  function junctionScene(hKey, cKey, opts, out = new Voxels(), x0 = 0, z0 = 0) {
+    return junctionRun(hKey, cKey, [0], opts, out, x0, z0);
+  }
+
+  // Three junctions on one horizontal pillar, 3 chunks apart.
+  function runScene(opts) {
+    return junctionRun(opts.h, opts.c, [-48, 0, 48], opts);
   }
 
   // A boustrophedon over the 5x5 patch nodes, rows along X on +Z and along Y on -Z.
@@ -465,11 +697,13 @@
       case 'column': out = columnScene(opts.c, opts); break;
       case 'columns': out = columnsScene(opts); break;
       case 'junctions': out = junctionsScene(opts); break;
+      case 'run': out = runScene(opts); break;
       default: out = junctionScene(opts.h, opts.c, opts);
     }
     if (opts.cut) {
       for (const b of [...out.map.values()]) if (b.z > b.cz) out.delete(b.x, b.y, b.z);
       out.markers = out.markers.filter((m) => m.cz === undefined || m.z <= m.cz);
+      out.links = out.links.filter((l) => l.points.every((q) => q[2] <= l.cz));
     }
     return out;
   }

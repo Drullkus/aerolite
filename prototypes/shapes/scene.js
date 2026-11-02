@@ -11,10 +11,12 @@
     trussGreen: { color: '#4fae4f', label: 'Truss, green diagonal' },
     junction: { color: '#8a6fbf', label: 'Junction box' },
     bezel: { color: '#e39b2f', label: 'Bezel' },
+    crossing: { color: '#c6ff3b', label: 'Crossing (maze path block of a notch)' },
   };
   const HOLE_COLOR = '#3fe0d0';
   const NODE_COLOR = '#ff3fd2';
   const CORNER_COLOR = '#ffffff';
+  const LINK_COLOR = '#c6ff3b';
   const RAMP = ['#fde725', '#5ec962', '#21918c', '#3b528b', '#440154'];
 
   const view = document.getElementById('view');
@@ -57,12 +59,12 @@
   })();
 
   const els = {};
-  ['scene', 'h', 'c', 'pattern', 'lattice', 'res', 'cut', 'chunks', 'band', 'ortho', 'chunksOut', 'bandOut', 'legend', 'info', 'stats']
+  ['scene', 'h', 'c', 'pattern', 'lattice', 'res', 'cut', 'chunks', 'band', 'ortho', 'chunksOut', 'bandOut', 'legend', 'info', 'stats', 'link', 'bridgeChoice', 'checks']
     .forEach((id) => { els[id] = document.getElementById(id); });
 
   const state = {
     scene: 'junction', h: 'bridge', c: 'ibeam', webPlane: 'x', pattern: 'serpentine',
-    lattice: false, res: false, cut: false, labels: true, chunks: 2, band: 16, ortho: false, view: 'iso', cam: null,
+    lattice: false, res: false, cut: false, labels: true, link: false, bridgeChoice: 'instance', chunks: 2, band: 16, ortho: false, view: 'iso', cam: null,
   };
 
   // ------------------------------------------------------------ hash state
@@ -96,6 +98,8 @@
     els.lattice.checked = state.lattice;
     els.res.checked = state.res;
     els.cut.checked = state.cut;
+    els.link.checked = state.link;
+    els.bridgeChoice.value = state.bridgeChoice;
     els.chunks.value = state.chunks;
     els.band.value = state.band;
     els.ortho.checked = state.ortho;
@@ -176,6 +180,13 @@
       content.add(fillMesh, lines);
     }
 
+    for (const l of vox.links) {
+      const g = new THREE.BufferGeometry().setFromPoints(l.points.map((q) => new THREE.Vector3(q[0], q[1], q[2])));
+      const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: LINK_COLOR, depthTest: false, transparent: true }));
+      line.renderOrder = 5;
+      content.add(line);
+    }
+
     for (const l of state.labels ? vox.labels : []) {
       content.add(label(l.text, l.x, l.y, l.z));
       bounds.expandByPoint(p.set(l.x, l.y + 2, l.z));
@@ -184,6 +195,7 @@
     els.stats.textContent = vox.map.size + ' blocks, ' + visible.length + ' drawn, ' + vox.markers.length + ' nodes, ' + Math.round(performance.now() - t0) + ' ms';
     legend();
     info();
+    checks(vox);
     writeHash();
     if (refit) fit(state.view);
   }
@@ -282,11 +294,25 @@
       for (const k of Object.keys(ROLES)) html += swatch(ROLES[k].color, ROLES[k].label);
     }
     html += swatch(HOLE_COLOR, 'Hole (bridge through a box)', true);
+    if (state.link) html += swatch(LINK_COLOR, 'Crossing route', true);
     if (state.lattice) {
       html += swatch(NODE_COLOR, 'Node');
       html += swatch(CORNER_COLOR, 'Corner node (no axis edge)');
     }
     els.legend.innerHTML = html;
+  }
+
+  function checks(vox) {
+    if (!state.link) {
+      els.checks.innerHTML = '<p class="note">Turn on Junction link to see the crossings and the component check.</p>';
+      return;
+    }
+    if (!vox.checks.length) {
+      els.checks.innerHTML = '<p class="note">This scene has no junction, or the pattern is None.</p>';
+      return;
+    }
+    els.checks.innerHTML = vox.checks.map((c) =>
+      '<p class="check ' + (c.ok ? 'ok' : 'bad') + '">' + (c.ok ? 'OK' : 'CHECK') + ' ' + c.text + '</p>').join('');
   }
 
   function swatch(color, text, outline) {
@@ -323,6 +349,8 @@
     on(els.lattice, 'change', () => { state.lattice = els.lattice.checked; rebuild(false); });
     on(els.res, 'change', () => { state.res = els.res.checked; rebuild(false); });
     on(els.cut, 'change', () => { state.cut = els.cut.checked; rebuild(false); });
+    on(els.link, 'change', () => { state.link = els.link.checked; rebuild(false); });
+    on(els.bridgeChoice, 'change', () => { state.bridgeChoice = els.bridgeChoice.value; rebuild(false); });
     on(els.chunks, 'input', () => { state.chunks = Number(els.chunks.value); els.chunksOut.textContent = state.chunks; rebuild(true); });
     on(els.band, 'input', () => { state.band = Number(els.band.value); els.bandOut.textContent = state.band; rebuild(false); });
     on(els.ortho, 'change', () => { state.ortho = els.ortho.checked; camera = state.ortho ? ortho : persp; fit(state.view); writeHash(); });

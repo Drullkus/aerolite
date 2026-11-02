@@ -33,6 +33,9 @@
   table { border-collapse: collapse; font-size: 11px; width: 100%; }
   th, td { text-align: left; padding: 1px 4px 1px 0; border-bottom: 1px solid var(--line); }
   th { color: var(--muted); font-weight: 600; }
+  .check { font-size: 11px; margin: 3px 0; padding-left: 6px; border-left: 3px solid; }
+  .check.ok { border-color: #5ec962; }
+  .check.bad { border-color: #e0533d; }
 </style>
 </head>
 <body>
@@ -44,6 +47,7 @@
     <select id="scene">
       <option value="junction">Junction pair</option>
       <option value="junctions">All 9 junction pairs</option>
+      <option value="run">3 junctions on one pillar</option>
       <option value="pillar">Horizontal pillar</option>
       <option value="shapes">All 3 horizontal shapes</option>
       <option value="column">Column</option>
@@ -83,6 +87,16 @@
   <label class="row">Node lattice <input id="lattice" type="checkbox"></label>
   <label class="row">Resistance view <input id="res" type="checkbox"></label>
   <label class="row">Cut away +Z half <input id="cut" type="checkbox"></label>
+
+  <h3>Junction link</h3>
+  <label class="row">Junction link <input id="link" type="checkbox"></label>
+  <label class="row">Bridge crossing
+    <select id="bridgeChoice">
+      <option value="instance">Per bridge, by seed</option>
+      <option value="junction">Per junction, by seed</option>
+    </select>
+  </label>
+  <div id="checks"></div>
 
   <h3>Camera</h3>
   <div class="buttons">
