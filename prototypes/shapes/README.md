@@ -16,7 +16,7 @@ This folder holds the three.js prototype of the pillar shapes of Aerolite 0.4.0.
 
 | Control | Effect |
 |---|---|
-| Scene | Junction pair, all 9 junction pairs, 3 junctions on one pillar, horizontal pillar, all 3 horizontal shapes, column, all 3 columns. |
+| Scene | Junction pair, all 9 junction pairs, 3 junctions on one pillar, X and Z junctions on one column, horizontal pillar, all 3 horizontal shapes, column, all 3 columns. |
 | Horizontal shape | The shape of the horizontal pillar. |
 | Column shape | The shape of the column. |
 | Column web plane | The plane of the I-beam web of a column, X or Z. The Bridge column uses it for the plane of its trusses. |
@@ -27,7 +27,7 @@ This folder holds the three.js prototype of the pillar shapes of Aerolite 0.4.0.
 | Resistance view | Colors each block by its erosion resistance. |
 | Cut away +Z half | Removes the blocks on the +Z side of each item. |
 | Junction link | Cuts the ring pattern at the boxes, adds the crossings and shows the component check. See [Junction link](#junction-link). |
-| Bridge crossing | Picks the plate and the side of the one bridge crossing once per bridge, or once per junction. |
+| Bridge crossing | For a horizontal Bridge: picks the plate and the side of its one crossing once per bridge, or once per junction. |
 | Iso, Side, End, Top | Camera directions. Side looks along -Z. End looks along -X. |
 | Orthographic | Switches to an orthographic camera. |
 
@@ -194,11 +194,15 @@ The resistance view uses a ramp from yellow (0) to dark purple (1).
 ## Junctions
 
 - Each of the 9 shape pairs gets the 15x15x15 junction box with the 3-block bezel on its two exposed faces.
-- The patch on +Z serves the horizontal pillar. The patch on -Z serves the column.
-- A horizontal Bridge gets a hole of 11x11 along X through the box, at |y| and |z| up to 5.
+- In the mod, every column has exactly two junctions: one with an X pillar at one height and one with a Z pillar at another height.
+- An X junction exposes the ±Z faces. A Z junction exposes the ±X faces.
+- The patch on the + exposed face serves the horizontal pillar. The patch on the - exposed face serves the column.
+- A horizontal Bridge gets a hole of 11x11 along its axis through the box, at |y| up to 5 and up to 5 across the axis.
 - The bridge blocks persist inside the hole. Where a box block and a bridge block share a position, the box block wins.
 - So inside the hole, the plate layers at |v| = 4 and 5 and all four truss layers remain, with their anchors. The open passage is 7 wide and 7 tall.
-- A column Bridge through a box gets no hole.
+- A column Bridge through a box gets no hole and no tunnel. The box keeps its full 15x15x15 shape.
+- So the solid box cuts each plate of a column Bridge into a piece below the box and a piece above it.
+- The scene "X and Z junctions on one column" shows one column with an X junction at y = -24 and a Z junction at y = 24. The control Horizontal shape sets both horizontal pillars.
 
 ## Junction link
 
@@ -206,17 +210,17 @@ The toggle Junction link models how the pattern joins the patch maze at a juncti
 
 ### Model
 
-- The patch on +Z serves the horizontal pillar. The patch on -Z serves the column.
 - A cut pillar drops the rulings inside the box, at the axis offsets -7 to 7.
 - A cut pillar also drops each axis edge that touches a dropped ruling. So the rim at the axis offsets 8 and -8 is maze wall.
 - A union-find pass takes the placeholder ring edges and the patch edges first.
 - Then it takes each candidate crossing in a fixed sequence. It adds a crossing only when the crossing joins two different components.
-- The sequence of the candidates of a Pillar or an I-beam is a seeded shuffle per junction.
+- The sequence of the candidates of a Pillar face or an I-beam is a seeded shuffle per junction.
 - A crossing joins a ring node on the nearest surviving ruling, at the axis offset 9, to the patch node at the same offset across the pillar.
 - A crossing runs along the pillar outer layer at the axis offset 8 up to the box.
 - Then it notches through the bezel at the face offsets 7, 6 and 5, onto the patch node at offset 4.
 - Each notch block is a maze path. The block under each notch block is the maze path block. The page colors it lime.
 - A corner node that holds a crossing is not dropped as a leaf.
+- The crossings of a horizontal pillar land on the left and right border sides of its patch. The crossings of a column land on the top and bottom border sides.
 
 ### Rules per shape
 
@@ -225,17 +229,36 @@ The toggle Junction link models how the pattern joins the patch maze at a juncti
 | Pillar | The pillar face | The 3 patch side nodes between the patch corners, at offsets -2, 0 and 2, on both sides of the box. |
 | I-beam, flange edges face the patch | The two flange edges and the recessed web face | The flange edge nodes at offsets 4 and -4, onto the patch corner nodes, on both sides of the box. The 3 web nodes face the box wall and take no crossing. |
 | I-beam, flange face faces the patch | The 13-wide flange face | Like a Pillar face: offsets -2, 0 and 2, on both sides of the box. |
-| Bridge, plate sides face the patch | The side face of each plate | Exactly one crossing: the plate side corner node at offset 4 (top plate) or -4 (bottom plate), from one side of the box. |
-| Bridge, a plate face faces the patch | The outer face of one plate | Exactly one crossing: offset 0, from one side of the box. |
+| Horizontal Bridge | The side face of each plate | Exactly one crossing: the plate side corner node at offset 4 (top plate) or -4 (bottom plate), from one side of the box. |
+| Column Bridge, matched junction | The side face of each plate | Four crossings onto the column patch: each plate piece, below and above the box, through its side face corner node at offset 4 or -4. |
+| Column Bridge, mismatched junction | The outer face of each plate | The near plate joins the column patch like a Pillar face, below and above. The far plate joins the patch of the horizontal pillar like a Pillar face, below and above. |
 
 - A horizontal pillar always faces its patch with the flange edges or the plate sides.
-- A column with the web plane X faces its patch like a horizontal pillar. A column with the web plane Z faces it with a flange face or a plate face.
+- A column faces the patches of an X junction with the faces toward ±Z, and the patches of a Z junction with the faces toward ±X.
 - The owner allows a crossing onto a patch corner node for the I-beam flange edges and the Bridge plate sides.
-- The I-beam is one ring and one tree. The solid box cuts it like a Pillar. The patch joins the ring pieces on both sides of the box through the corner crossings.
-- The two plates of a Bridge are two trees. Nothing joins them.
-- The patch of a bridge takes one crossing, so the patch hangs off one plate and no loop forms. The other plate takes no crossing at that junction.
-- The control Bridge crossing picks the plate and the side by seed: once per bridge instance, or once per junction.
+- The I-beam is one ring and one tree. The solid box cuts it like a Pillar. The patch joins the ring pieces on both sides of the box.
+- The two plates of a horizontal Bridge are two trees. Nothing joins them.
+- The patch of a horizontal Bridge takes one crossing, so the patch hangs off one plate and no loop forms. The other plate takes no crossing at that junction.
+- The control Bridge crossing picks that plate and side by seed: once per bridge instance, or once per junction. It applies to a horizontal Bridge only.
 - `link-bridge-run-instance.png` and `link-bridge-run-junction.png` show three junctions on one bridge in each mode.
+
+### Column Bridge
+
+- A column Bridge has one matched junction, where its plate sides face the patches, and one mismatched junction, where its plate outer faces face the patches.
+- With the web plane X, the plate sides face ±Z. So the X junction is matched and the Z junction is mismatched. The web plane Z swaps them.
+- Every plate piece joins the patch it faces, from below and from above, at both junctions.
+- At the matched junction, both plates join the column patch. The union-find takes all four crossings.
+- At the mismatched junction, the near plate faces the column patch and joins it through its 3 side nodes between the patch corners. The union-find keeps the crossings that join components.
+- At the mismatched junction, the far plate faces the patch of the horizontal pillar and joins it the same way. Those crossings land on the top and bottom border sides of that patch.
+- So the column tree touches the tree of the horizontal pillar at the mismatched junction. The owner accepts this one exception to the rule that no tree touches another pillar.
+- The two column patches belong to different trees, so no loop closes. Every end piece joins a patch.
+- `link-column-xz.png` and `link-column-xz-webz.png` show the column Bridge with both junctions.
+- `link-column-far-plate.png` shows the far plate crossings onto the patch of the horizontal pillar.
+
+### End pieces
+
+- A column Pillar or a column I-beam has no end piece problem. Its ring chains through both column patches, so the pieces below, between and above the junctions join one tree.
+- A column Bridge has no end piece problem either. Each plate piece joins the patch it faces at its junction.
 
 ### Bridge hole
 
@@ -247,36 +270,36 @@ The toggle Junction link models how the pattern joins the patch maze at a juncti
 
 ### Check
 
-- The panel shows one check line per junction run.
-- The line lists the component count of each pillar pattern through its junctions: one count per ring, so a Bridge gives one count per plate.
+- The panel shows one check line per junction scene.
+- The line lists the component count of each pillar pattern through its junctions: one count per ring, so a horizontal Bridge gives one count per plate.
 - The line also lists the patches that join no pillar ("floating"), and the number of crossings.
-- The target is one component per tree: 1 for a Pillar or an I-beam, 1 for each plate of a Bridge, and no floating patch.
+- A column Bridge gives one count for a group: its two plates, its patches and each horizontal pillar that it touches.
+- The target of that group is 1, plus 1 for each touched horizontal Bridge, because only one plate of that Bridge joins its patch.
+- A scene with one junction per column has no matched junction when the column Bridge mismatches it. That target then adds 1, and the line says "no matched junction".
+- The other targets are 1 for a Pillar or an I-beam, 1 for each plate of a horizontal Bridge, and no floating patch.
 - A line that meets the target reads OK. Any other line reads CHECK.
 
 ### Results
 
-| Pair (horizontal + column) | Horizontal | Column | Check |
+The scene "X and Z junctions on one column", for both web planes and both bridge modes:
+
+| Horizontal + column | Horizontal pillars | Column | Check |
 |---|---|---|---|
-| Pillar + Pillar | 1 | 1 | OK |
-| Pillar + I-beam | 1 | 1 | OK |
-| Pillar + Bridge | 1 | top 2, bottom 2 | CHECK |
-| I-beam + Pillar | 1 | 1 | OK |
-| I-beam + I-beam | 1 | 1 | OK |
-| I-beam + Bridge | 1 | top 2, bottom 2 | CHECK |
-| Bridge + Pillar | top 1, bottom 1 | 1 | OK |
-| Bridge + I-beam | top 1, bottom 1 | 1 | OK |
-| Bridge + Bridge | top 1, bottom 1 | top 2, bottom 2 | CHECK |
+| Pillar + Pillar | X 1, Z 1 | 1 | OK |
+| I-beam + Pillar | X 1, Z 1 | 1 | OK |
+| Bridge + Pillar | X top 1, bottom 1; Z top 1, bottom 1 | 1 | OK |
+| Pillar + I-beam | X 1, Z 1 | 1 | OK |
+| I-beam + I-beam | X 1, Z 1 | 1 | OK |
+| Bridge + I-beam | X top 1, bottom 1; Z top 1, bottom 1 | 1 | OK |
+| Pillar + Bridge | X 1, Z 1 | group 1, target 1 | OK |
+| I-beam + Bridge | X 1, Z 1 | group 1, target 1 | OK |
+| Bridge + Bridge | X top 1, bottom 1; Z top 1, bottom 1 | group 2, target 2 | OK |
 
-- Both bridge modes and both web planes give the same counts.
-- No patch floats in any pair.
-- The run of three junctions gives 1 for a Pillar and an I-beam, and 1 for each plate of a Bridge.
-- A column Bridge passes through a solid box, because only a horizontal Bridge gets a hole. So the box cuts each plate of a column Bridge into a piece above and a piece below.
-- The single crossing joins the patch to one piece. The other three pieces stay apart. So each plate of a column Bridge has 2 components.
-
-### Open questions
-
-- A column Bridge through a box splits each plate tree. One fix gives the column Bridge a hole along Y, like the horizontal Bridge.
-- The owner described the flange face of a column I-beam as 5 interior nodes that take crossings like a Pillar face. The Pillar rule of the mod takes the 3 side nodes between the patch corners. The page uses the 3 side nodes.
+- With the web plane X, the column Bridge touches the Z pillar. With the web plane Z, it touches the X pillar.
+- One junction, column Bridge matched (web plane X): group 1 for each horizontal shape.
+- One junction, column Bridge mismatched (web plane Z): group 2 for a Pillar or an I-beam, group 3 for a Bridge. These columns have no matched junction, so the targets are 2 and 3.
+- No patch floats in any scene. Every crossing joins two components, so no loop forms.
+- The flange face of a column I-beam takes the 3 crossings of a Pillar face. Corner crossings apply only to the I-beam flange edges and to the Bridge.
 
 ## Erosion and shear
 
@@ -323,7 +346,9 @@ The toggle Junction link models how the pattern joins the patch maze at a juncti
 | `link-bridge-corner.png` | The one bridge crossing, notched through the bezel beside the hole |
 | `link-bridge-run-instance.png`, `link-bridge-run-junction.png` | Three junctions on one bridge, in both bridge crossing modes |
 | `link-column-ibeam-webz.png` | The column patch of a column I-beam with the flange face toward the patch |
-| `link-column-bridge.png` | The column patch of a column Bridge, with its one crossing |
+| `link-column-bridge.png` | The column patch of a column Bridge at a matched junction, with its four crossings |
+| `link-column-xz.png`, `link-column-xz-webz.png` | One column Bridge with an X junction and a Z junction, web plane X and Z |
+| `link-column-far-plate.png` | The far plate crossings onto the patch of the horizontal pillar at the mismatched junction |
 
 - A WebKit view took the images. A small Swift program loads the page in a `WKWebView` and saves a snapshot of the page.
 - Each image name matches a URL hash. For example, `bridge-side.png` is `index.html#scene=pillar&h=bridge&chunks=2&ortho=1&view=side`.

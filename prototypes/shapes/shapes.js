@@ -484,188 +484,272 @@
     });
   }
 
-  // Junctions of one horizontal pillar along X and one column per center, at the axis positions `centers`.
+  // The column ring offset (u, v) on the column face toward axis e ('x' or 'z') with sign sigma, at offset t along the other axis.
+  function columnFaceUV(plane, e, sigma, t) {
+    const xoff = e === 'x' ? sigma * OUTER : t;
+    const zoff = e === 'z' ? sigma * OUTER : t;
+    return plane === 'x' ? [zoff, xoff] : [xoff, zoff];
+  }
+
+  // Junctions of horizontal pillars and columns.
+  // hs: [{ axis: 'x', y, z, centers }] runs along X at z0 + z; [{ axis: 'z', y, x, centers }] runs along Z at x0 + x.
+  // The centers of a horizontal pillar are offsets along its axis. cs: [{ x, z, centers }] with centers as Y.
+  // A box stands where a column meets a horizontal pillar at a center of both.
+  // The box exposes the faces across the horizontal axis: the patch on the + face serves the horizontal pillar,
+  // the patch on the - face serves the column.
   // With the junction link, the ring pattern is cut at each box and the patches join it through crossings.
-  function junctionRun(hKey, cKey, centers, opts, out = new Voxels(), x0 = 0, z0 = 0) {
+  function junctionLayout(hKey, cKey, hs, cs, opts, out, x0, z0) {
     const link = !!opts.link && opts.pattern !== 'none';
     const n = opts.chunks * 16;
     const hShape = SHAPES[hKey], cShape = SHAPES[cKey];
-    const hFrame = (s, u, v) => [s + x0, v, u + z0];
-    out.cz = z0;
-    const hid = 'h' + x0 + ',' + z0;
-    // A horizontal Bridge runs through its holes, so its plate trees stay uncut.
-    const hCuts = hKey === 'bridge' ? [] : centers.map((c) => [c - BOX, c + BOX]);
-    const H = preparePillar(out, hShape, centers[0] - n, centers[centers.length - 1] + n - 1, hFrame, opts, link ? { cuts: hCuts } : null);
-    const uf = new UnionFind();
-    if (link) ringGraph(H, uf, hid);
-
     const half = BOX + Math.max(n, 8 + opts.band);
-    const columns = centers.map((c) => {
-      const cx = x0 + c;
-      const owner = 'column' + cx + ',' + z0;
+    out.cz = z0;
+    const uf = new UnionFind();
+
+    const H = hs.map((h) => {
+      const ax = h.axis || 'x';
+      const frame = ax === 'x'
+        ? (s, u, v) => [s + x0, v + h.y, u + z0 + (h.z || 0)]
+        : (s, u, v) => [u + x0 + h.x, v + h.y, s + z0];
+      const id = ax === 'x' ? 'h' + x0 + ',' + z0 + (h.y ? ',' + h.y : '') : 'hz' + (x0 + h.x) + ',' + h.y;
+      // A horizontal Bridge runs through its holes, so its plate trees stay uncut.
+      const cuts = hKey === 'bridge' ? [] : h.centers.map((c) => [c - BOX, c + BOX]);
+      const P = preparePillar(out, hShape, h.centers[0] - n, h.centers[h.centers.length - 1] + n - 1, frame, opts, link ? { cuts } : null);
+      if (link) ringGraph(P, uf, id);
+      return { ...h, axis: ax, P, id, frame };
+    });
+
+    const C = cs.map((c) => {
+      const cx = x0 + c.x, cz = z0 + (c.z || 0);
+      const owner = 'column' + cx + ',' + cz;
       const tmp = new Voxels();
       tmp.cz = z0;
-      const frame = columnFrame(opts.webPlane, cx, z0);
-      const C = preparePillar(tmp, cShape, -half, half, frame, { ...opts, skip: (s) => Math.abs(s) <= BOX }, link ? { cuts: [] } : null);
-      if (link) ringGraph(C, uf, owner);
-      return { C, tmp, owner, cx };
+      const frame = columnFrame(opts.webPlane, cx, cz);
+      const lo = c.centers[0] - half, hi = c.centers[c.centers.length - 1] + half;
+      const skip = (s) => c.centers.some((by) => Math.abs(s - by) <= BOX);
+      const P = preparePillar(tmp, cShape, lo, hi, frame, { ...opts, skip }, link ? { cuts: [] } : null);
+      if (link) ringGraph(P, uf, owner);
+      return { ...c, z: c.z || 0, P, tmp, owner, cx, cz, lo, hi, frame, touches: new Set(), matched: 0 };
     });
+
+    const boxes = [];
+    for (const h of H) {
+      for (const c of C) {
+        const rel = h.axis === 'x' ? c.x : c.z;
+        const lines = h.axis === 'x' ? (h.z || 0) === c.z : h.x === c.x;
+        if (lines && h.centers.includes(rel) && c.centers.includes(h.y)) {
+          boxes.push({ h, c, rel, bx: c.cx, by: h.y, bz: c.cz, e: h.axis === 'x' ? 'z' : 'x' });
+        }
+      }
+    }
+    for (const b of boxes) {
+      const { bx, by, bz, e } = b;
+      // (p, q): p runs along the horizontal axis, q along Y.
+      b.world = (sign, p, q) => e === 'z' ? [bx + p, by + q, bz + sign * BOX] : [bx + sign * BOX, by + q, bz + p];
+      b.under = (sign) => e === 'z' ? [0, 0, -sign] : [-sign, 0, 0];
+    }
 
     const accepted = [];
     const patches = [];
     if (link) {
-      centers.forEach((c, ci) => {
-        const col = columns[ci];
-        const sides = [
-          { // The patch on +Z serves the horizontal pillar.
-            P: H, pid: hid, shapeKey: hKey, facing: 'edge',
-            instance: hid, junction: hid + '@' + c,
-            sAt: (sgn, k) => c + sgn * k,
-            uv: (t) => [OUTER, t],
-            patchAt: (a, b) => [x0 + c + a, b, z0 + BOX],
-            nodeAt: (t, sgn, k) => [x0 + c + sgn * k, t, z0 + BOX],
-            under: [0, 0, -1],
-          },
-          { // The patch on -Z serves the column.
-            P: col.C, pid: col.owner, shapeKey: cKey, facing: opts.webPlane === 'x' ? 'edge' : 'face',
-            instance: col.owner, junction: col.owner + '@0',
-            sAt: (sgn, k) => sgn * k,
-            uv: (t) => opts.webPlane === 'x' ? [-OUTER, t] : [t, -OUTER],
-            patchAt: (a, b) => [x0 + c + b, a, z0 - BOX],
-            nodeAt: (t, sgn, k) => [x0 + c + t, sgn * k, z0 - BOX],
-            under: [0, 0, 1],
-          },
-        ];
-        for (const side of sides) {
-          const pkey = (a, b) => 'patch|' + side.patchAt(a, b).join(',');
-          for (const [[a1, b1], [a2, b2]] of patchEdges()) uf.union(pkey(a1, b1), pkey(a2, b2));
-          patches.push(pkey(0, 0));
-          const choice = opts.bridgeChoice === 'junction' ? side.junction : side.instance;
-          let list = crossingCandidates(side.shapeKey, side.facing, choice);
-          if (side.shapeKey !== 'bridge') list = shuffled(list, side.junction);
-          for (const { t, sgn } of list) {
-            const [u, v] = side.uv(t);
-            const ri = side.P.shape.rings.findIndex((ring) => ring.some((q) => q.u === u && q.v === v));
-            if (ri < 0) continue;
-            const p = side.P.shape.rings[ri].findIndex((q) => q.u === u && q.v === v);
-            const rk = nodeKey(side.pid, ri, side.sAt(sgn, 9), p);
-            if (!uf.has(rk)) continue;
-            // The patch node faces the ring node: a side node of the patch, or a patch corner when |t| is 4.
-            if (!uf.union(rk, pkey(sgn * PATCH_EDGE, t))) continue;
-            accepted.push({ side, ri, p, t, sgn });
-            const P = side.P;
-            if (!P.keep[ri].has(side.sAt(sgn, 9))) P.keep[ri].set(side.sAt(sgn, 9), new Set());
-            P.keep[ri].get(side.sAt(sgn, 9)).add(p);
-            const rim = P.sets[ri].get(side.sAt(sgn, 8));
-            if (rim) rim.add(p);
+      for (const b of boxes) {
+        const { h, c, rel, by, e } = b;
+        const pkey = (sign, p, q) => 'patch|' + b.world(sign, p, q).join(',');
+        const patchGraph = (sign) => {
+          for (const [[a1, b1], [a2, b2]] of patchEdges()) {
+            if (sign > 0) uf.union(pkey(sign, a1, b1), pkey(sign, a2, b2));
+            else uf.union(pkey(sign, b1, a1), pkey(sign, b2, a2));
           }
+          patches.push(pkey(sign, 0, 0));
+        };
+        const attempt = (cand) => {
+          const [u, v] = cand.uv;
+          const ri = cand.P.shape.rings.findIndex((ring) => ring.some((q) => q.u === u && q.v === v));
+          if (ri < 0) return false;
+          const p = cand.P.shape.rings[ri].findIndex((q) => q.u === u && q.v === v);
+          const rk = nodeKey(cand.pid, ri, cand.sAt(9), p);
+          if (!uf.has(rk)) return false;
+          // The patch node faces the ring node: a side node of the patch, or a patch corner when |t| is 4.
+          if (!uf.union(rk, pkey(cand.sign, ...cand.node(PATCH_EDGE)))) return false;
+          const P = cand.P;
+          accepted.push({ P, ri, p, sAt: cand.sAt, world: (k) => b.world(cand.sign, ...cand.node(k)), under: b.under(cand.sign), cz: z0 });
+          if (!P.keep[ri].has(cand.sAt(9))) P.keep[ri].set(cand.sAt(9), new Set());
+          P.keep[ri].get(cand.sAt(9)).add(p);
+          const rim = P.sets[ri].get(cand.sAt(8));
+          if (rim) rim.add(p);
+          return true;
+        };
+
+        // The patch on the + face serves the horizontal pillar.
+        patchGraph(1);
+        let list = crossingCandidates(hKey, 'edge', opts.bridgeChoice === 'junction' ? h.id + '@' + rel : h.id);
+        if (hKey !== 'bridge') list = shuffled(list, h.id + '@' + rel);
+        for (const { t, sgn } of list) {
+          attempt({ P: h.P, pid: h.id, uv: [OUTER, t], sAt: (k) => rel + sgn * k, sign: 1, node: (k) => [sgn * k, t] });
         }
-      });
+
+        // The patch on the - face serves the column.
+        patchGraph(-1);
+        const key = c.owner + '@' + by;
+        const columnCand = (sigma, t, sgn) => ({
+          P: c.P, pid: c.owner, uv: columnFaceUV(opts.webPlane, e, sigma, t),
+          sAt: (k) => by + sgn * k, sign: sigma, node: (k) => [t, sgn * k],
+        });
+        const sideNodes = (salt) => shuffled([1, -1].flatMap((sgn) => [-2, 0, 2].map((t) => ({ t, sgn }))), key + salt);
+        if (cKey !== 'bridge') {
+          const facing = opts.webPlane === e ? 'face' : 'edge';
+          for (const { t, sgn } of shuffled(crossingCandidates(cKey, facing, key), key)) attempt(columnCand(-1, t, sgn));
+        } else if (opts.webPlane !== e) {
+          // Matched junction: both plates face the column patch with their side faces.
+          c.matched++;
+          for (const t of [4, -4]) for (const sgn of [1, -1]) attempt(columnCand(-1, t, sgn));
+        } else {
+          // Mismatched junction: the near plate joins the column patch like a Pillar face.
+          for (const { t, sgn } of sideNodes('#near')) attempt(columnCand(-1, t, sgn));
+          // The far plate joins the patch of the horizontal pillar, on its top and bottom sides.
+          for (const { t, sgn } of sideNodes('#far')) if (attempt(columnCand(1, t, sgn))) c.touches.add(h);
+        }
+      }
     }
 
-    finishPillar(out, H, opts);
-    for (const { C, tmp, owner, cx } of columns) {
-      finishPillar(tmp, C, opts);
-      for (const b of tmp.map.values()) b.owner = owner;
-      shearColumn(tmp, owner, cx, z0, -half, half, opts.band, 7 + cx + 3 * z0);
-      for (const b of tmp.map.values()) out.set(b.x, b.y, b.z, b);
-      out.markers.push(...tmp.markers);
+    for (const h of H) finishPillar(out, h.P, opts);
+    for (const c of C) {
+      finishPillar(c.tmp, c.P, opts);
+      for (const b of c.tmp.map.values()) b.owner = c.owner;
+      shearColumn(c.tmp, c.owner, c.cx, c.cz, c.lo, c.hi, opts.band, 7 + c.cx + 3 * c.cz);
+      for (const b of c.tmp.map.values()) out.set(b.x, b.y, b.z, b);
+      out.markers.push(...c.tmp.markers);
     }
 
     const hole = hKey === 'bridge';
-    for (const c of centers) {
-      const bx = x0 + c;
-      out.markers = out.markers.filter((m) => !(Math.abs(m.x - bx) <= BOX + 0.5 && Math.abs(m.y) <= BOX + 0.5 && Math.abs(m.z - z0) <= BOX + 0.5));
+    for (const b of boxes) {
+      const { bx, by, bz, e } = b;
+      out.markers = out.markers.filter((m) => !(Math.abs(m.x - bx) <= BOX + 0.5 && Math.abs(m.y - by) <= BOX + 0.5 && Math.abs(m.z - bz) <= BOX + 0.5));
       for (let x = -BOX; x <= BOX; x++)
         for (let y = -BOX; y <= BOX; y++)
           for (let z = -BOX; z <= BOX; z++) {
-            if (hole && Math.abs(y) <= HOLE && Math.abs(z) <= HOLE) continue;
+            // ea is the offset across the horizontal axis, ha the offset along it.
+            const ea = e === 'z' ? z : x, ha = e === 'z' ? x : z;
+            if (hole && Math.abs(y) <= HOLE && Math.abs(ea) <= HOLE) continue;
             const box = (BOX - Math.max(Math.abs(x), Math.abs(y), Math.abs(z))) / (BOX - 1);
             const cuv = opts.webPlane === 'x' ? [z, x] : [x, z];
-            const res = Math.max(box, hShape.resistance(z, y), cShape.resistance(cuv[0], cuv[1]));
+            const res = Math.max(box, hShape.resistance(ea, y), cShape.resistance(cuv[0], cuv[1]));
             let role = 'junction';
-            if (Math.abs(z) === BOX && Math.max(Math.abs(x), Math.abs(y)) > PATCH_EDGE) role = 'bezel';
-            else if (Math.abs(z) === BOX) role = 'wall';
-            out.set(x + bx, y, z + z0, { role, res, owner: 'box' });
+            if (Math.abs(ea) === BOX && Math.max(Math.abs(ha), Math.abs(y)) > PATCH_EDGE) role = 'bezel';
+            else if (Math.abs(ea) === BOX) role = 'wall';
+            out.set(x + bx, y + by, z + bz, { role, res, owner: 'box' });
           }
-      paintPatch(out, bx, z0, 1, false, opts);
-      paintPatch(out, bx, z0, -1, true, opts);
-      if (hole) out.holes.push({ x0: bx - BOX - 0.5, x1: bx + BOX + 0.5, y0: -HOLE - 0.5, y1: HOLE + 0.5, z0: z0 - HOLE - 0.5, z1: z0 + HOLE + 0.5 });
+      paintPatch(out, b, 1, opts);
+      paintPatch(out, b, -1, opts);
+      if (hole) {
+        out.holes.push(e === 'z'
+          ? { x0: bx - BOX - 0.5, x1: bx + BOX + 0.5, y0: by - HOLE - 0.5, y1: by + HOLE + 0.5, z0: bz - HOLE - 0.5, z1: bz + HOLE + 0.5 }
+          : { x0: bx - HOLE - 0.5, x1: bx + HOLE + 0.5, y0: by - HOLE - 0.5, y1: by + HOLE + 0.5, z0: bz - BOX - 0.5, z1: bz + BOX + 0.5 });
+      }
     }
 
     // Each crossing runs along the outer layer to the box, then notches through the bezel at face offsets 7, 6 and 5.
-    for (const { side, ri, p, t, sgn } of accepted) {
-      const P = side.P;
+    for (const { P, ri, p, sAt, world, under } of accepted) {
       const q = P.shape.rings[ri][p];
       for (const [fu, fv] of q.floor) {
-        const [fx, fy, fz] = P.frame(side.sAt(sgn, 8), fu, fv);
+        const [fx, fy, fz] = P.frame(sAt(8), fu, fv);
         const f = out.get(fx, fy, fz);
         if (f && f.role === 'path') f.role = 'crossing';
       }
-      const points = [P.frame(side.sAt(sgn, 9), q.u, q.v), P.frame(side.sAt(sgn, 8), q.u, q.v)];
+      const points = [P.frame(sAt(9), q.u, q.v), P.frame(sAt(8), q.u, q.v)];
       for (let k = BOX; k >= PATCH_EDGE; k--) {
-        const [x, y, z] = side.nodeAt(t, sgn, k);
+        const [x, y, z] = world(k);
         points.push([x, y, z]);
         if (k === PATCH_EDGE) break;
         out.delete(x, y, z);
-        const f = out.get(x + side.under[0], y + side.under[1], z + side.under[2]);
+        const f = out.get(x + under[0], y + under[1], z + under[2]);
         if (f) f.role = 'crossing';
       }
       out.links.push({ points, cz: z0 });
     }
 
     const name = hShape.name + ' + ' + cShape.name + ' column';
-    out.labels.push({ text: name, x: x0 + (centers[0] + centers[centers.length - 1]) / 2, y: half + 4, z: z0 });
+    const xs = H.flatMap((h) => (h.axis === 'x' ? h.centers : [h.x]));
+    out.labels.push({ text: name, x: x0 + (Math.min(...xs) + Math.max(...xs)) / 2, y: Math.max(...C.map((c) => c.hi)) + 4, z: z0 });
     if (link) {
       const pillarRoots = new Set();
-      const fmt = (P, pid) => {
-        const comps = ringComponents(P, uf, pid);
+      let ok = true;
+      const label = (h) => (H.length > 1 && H.some((g) => g.axis !== h.axis) ? (h.axis === 'x' ? 'X ' : 'Z ') : '');
+      const hTexts = H.map((h) => {
+        const comps = ringComponents(h.P, uf, h.id);
         comps.forEach((r) => r.forEach((x) => pillarRoots.add(x)));
-        return comps.length > 1 ? comps.map((r, i) => (i === 0 ? 'top ' : 'bottom ') + r.size).join(', ') : String(comps[0].size);
-      };
-      const hText = fmt(H, hid);
-      const cText = columns.map((col) => fmt(col.C, col.owner)).join(' / ');
+        if (!comps.every((r) => r.size === 1)) ok = false;
+        return label(h) + (comps.length > 1 ? comps.map((r, i) => (i === 0 ? 'top ' : 'bottom ') + r.size).join(', ') : String(comps[0].size));
+      });
+      const cTexts = C.map((c) => {
+        const comps = ringComponents(c.P, uf, c.owner);
+        comps.forEach((r) => r.forEach((x) => pillarRoots.add(x)));
+        if (cKey !== 'bridge') {
+          if (!comps.every((r) => r.size === 1)) ok = false;
+          return String(comps[0].size);
+        }
+        // A column Bridge is one tree with both plates and its patches. A touched horizontal pillar joins that tree.
+        const group = new Set(comps.flatMap((r) => [...r]));
+        let target = 1;
+        for (const h of c.touches) {
+          ringComponents(h.P, uf, h.id).forEach((r) => r.forEach((x) => group.add(x)));
+          target += h.P.shape.rings.length - 1;
+        }
+        // A column of the mod has one matched junction. Without it, the two plates stay apart.
+        if (c.matched === 0) target++;
+        if (group.size !== target) ok = false;
+        const touched = [...c.touches].map((h) => label(h) + hShape.name).join(', ');
+        return 'whole ' + group.size + ' (target ' + target + (touched ? ', touches ' + touched : '') + (c.matched === 0 ? ', no matched junction' : '') + ')';
+      });
       const floating = patches.filter((k) => !pillarRoots.has(uf.find(k))).length;
-      const ok = ringComponents(H, uf, hid).every((r) => r.size === 1) &&
-        columns.every((col) => ringComponents(col.C, uf, col.owner).every((r) => r.size === 1)) && floating === 0;
-      out.checks.push({ ok, text: name + ': ' + hShape.name + ' ' + hText + '; column ' + cText + '; floating patches ' + floating + '; crossings ' + accepted.length });
+      if (floating) ok = false;
+      out.checks.push({ ok, text: name + ': ' + hShape.name + ' ' + hTexts.join(' / ') + '; column ' + cTexts.join(' / ') + '; floating patches ' + floating + '; crossings ' + accepted.length });
     }
     return out;
   }
 
   function junctionScene(hKey, cKey, opts, out = new Voxels(), x0 = 0, z0 = 0) {
-    return junctionRun(hKey, cKey, [0], opts, out, x0, z0);
+    return junctionLayout(hKey, cKey, [{ y: 0, centers: [0] }], [{ x: 0, centers: [0] }], opts, out, x0, z0);
   }
 
   // Three junctions on one horizontal pillar, 3 chunks apart.
   function runScene(opts) {
-    return junctionRun(opts.h, opts.c, [-48, 0, 48], opts);
+    const centers = [-48, 0, 48];
+    return junctionLayout(opts.h, opts.c, [{ y: 0, centers }], centers.map((x) => ({ x, centers: [0] })), opts, new Voxels(), 0, 0);
   }
 
-  // A boustrophedon over the 5x5 patch nodes, rows along X on +Z and along Y on -Z.
-  function paintPatch(out, x0, z0, side, vertical, opts) {
-    const z = side * BOX;
+  // One column with an X junction below and a Z junction above, 3 chunks apart.
+  function columnXZScene(opts) {
+    const hs = [{ axis: 'x', y: -24, z: 0, centers: [0] }, { axis: 'z', y: 24, x: 0, centers: [0] }];
+    return junctionLayout(opts.h, opts.c, hs, [{ x: 0, z: 0, centers: [-24, 24] }], opts, new Voxels(), 0, 0);
+  }
+
+  // A boustrophedon over the 5x5 patch nodes, rows along the horizontal axis on the + face and along Y on the - face.
+  function paintPatch(out, b, sign, opts) {
     const cells = [];
     for (let row = -2; row <= 2; row++) {
-      const b = 2 * row;
-      for (let a = -PATCH_EDGE; a <= PATCH_EDGE; a++) cells.push([a, b]);
+      const r = 2 * row;
+      for (let a = -PATCH_EDGE; a <= PATCH_EDGE; a++) cells.push([a, r]);
       if (row < 2) {
         const end = mod(row, 2) === 0 ? PATCH_EDGE : -PATCH_EDGE;
-        cells.push([end, b + 1]);
+        cells.push([end, r + 1]);
       }
     }
+    const under = b.under(sign);
     if (opts.pattern !== 'none') {
-      for (const [a, b] of cells) {
-        const [x, y] = vertical ? [b, a] : [a, b];
-        out.delete(x + x0, y, z + z0);
-        const f = out.get(x + x0, y, z - side + z0);
+      for (const [a, r] of cells) {
+        const [x, y, z] = sign > 0 ? b.world(sign, a, r) : b.world(sign, r, a);
+        out.delete(x, y, z);
+        const f = out.get(x + under[0], y + under[1], z + under[2]);
         if (f) f.role = 'path';
       }
     }
     if (opts.lattice) {
       for (let a = -PATCH_EDGE; a <= PATCH_EDGE; a += 2)
-        for (let b = -PATCH_EDGE; b <= PATCH_EDGE; b += 2)
-          out.markers.push({ x: a + x0, y: b, z: z + side * 0.5 + z0, corner: false, cz: z0 });
+        for (let r = -PATCH_EDGE; r <= PATCH_EDGE; r += 2) {
+          const [x, y, z] = b.world(sign, a, r);
+          out.markers.push({ x: x - under[0] * 0.5, y: y - under[1] * 0.5, z: z - under[2] * 0.5, corner: false, cz: b.bz });
+        }
     }
   }
 
@@ -698,6 +782,7 @@
       case 'columns': out = columnsScene(opts); break;
       case 'junctions': out = junctionsScene(opts); break;
       case 'run': out = runScene(opts); break;
+      case 'columnXZ': out = columnXZScene(opts); break;
       default: out = junctionScene(opts.h, opts.c, opts);
     }
     if (opts.cut) {
