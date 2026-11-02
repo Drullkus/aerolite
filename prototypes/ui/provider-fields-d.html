@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Provider Tabs Mock</title>
+<link rel="stylesheet" href="imgui.css">
+</head>
+<body>
+<div class="page">
+  <h1>Option D: a tab per opened field</h1>
+  <p>The variation box has a tab bar. The tab Blocks holds the block fields. Each opened field has its own tab with the provider editor.</p>
+  <p>The arrow button of a field opens the tab of that field. When the tab is open, the arrow selects it. The arrow never closes a tab.
+    The cross on a tab is the only way to close it.
+    A click on the summary of a field that is not a simple state also opens or selects its tab.
+    A simple state keeps its text field and its dropdown. A click in that field only edits the text.
+    The Blocks tab looks the same with any set of open tabs.</p>
+  <p>Each box shows one provider type in the field Wall and a simple state in the field Path.
+    The text under each box is the JSON of the two fields, as the variation codec writes it.</p>
+  <div class="controls">
+    <label>Panel width <input id="width" type="range" min="240" max="600" step="1" value="360"> <span id="width-value"></span> units</label>
+    <label><input id="show-clip" type="checkbox"> Outline clipped items</label>
+    <div class="clip-report" id="clip-report"></div>
+  </div>
+  <div id="mock"></div>
+</div>
+<script src="imgui.js"></script>
+<script src="providers.js"></script>
+<script>
+'use strict';
+
+const FIELDS = [['wall', 'Wall'], ['path', 'Path']];
+
+/** The open tabs of each box, in the sequence of opening, and the selected tab. */
+const tabs = {};
+
+function openTab(t, fieldId) {
+  if (!t.open.includes(fieldId)) t.open.push(fieldId);
+  t.selected = fieldId;
+}
+
+/** Closes one tab. A closed selected tab gives the selection to the tab on its left. */
+function closeTab(t, fieldId) {
+  const index = t.open.indexOf(fieldId);
+  t.open.splice(index, 1);
+  if (t.selected === fieldId) t.selected = index > 0 ? t.open[index - 1] : 'blocks';
+}
+
+/** One line of the Blocks tab. Its look does not depend on the open tabs. */
+function fieldLine(t, fieldId, labelText, p) {
+  Im.withId(fieldId, () => Im.labelRow(labelText, () => Im.line(() => {
+    Im.fold('open_tab', false, () => openTab(t, fieldId), 'Open the tab of ' + labelText);
+    if (p.type === 'simple') {
+      Im.fill(() => Im.blockField('state', { value: p.simple.state, hint: 'Block state' }, b => { p.simple.state = b; }));
+    } else {
+      Im.summary('summary', Providers.typeName(p.type) + ':', Providers.summaryOf(p), () => openTab(t, fieldId),
+        Providers.typeId(p.type) + '\nClick to open the tab of ' + labelText);
+    }
+  })));
+}
+
+function drawBox(type, cell) {
+  const t = tabs[type];
+  Im.box(() => {
+    Im.tabBar('tabs', [{ id: 'blocks', label: 'Blocks' }].concat(t.open.map(id => ({
+      id, label: FIELDS.find(f => f[0] === id)[1], closable: true,
+    }))), t.selected, id => { t.selected = id; }, id => closeTab(t, id));
+    if (t.selected === 'blocks') {
+      Im.labelGrid(() => { for (const [id, text] of FIELDS) fieldLine(t, id, text, cell[id]); });
+    } else {
+      Im.withId(t.selected, () => Providers.editor(cell[t.selected]));
+    }
+  });
+}
+
+const cells = {};
+for (const [type] of Providers.TYPES) {
+  cells[type] = { wall: Providers.newProvider(type), path: Object.assign(Providers.newProvider('simple'), { simple: { state: 'gravel' } }) };
+  tabs[type] = { open: ['wall'], selected: 'wall' };
+}
+
+let panelWidth = 360;
+
+function draw() {
+  const grid = Im.html('div', 'mock-grid');
+  Im.inside(grid, () => {
+    for (const [type, name, id] of Providers.TYPES) {
+      const cell = Im.html('div', 'mock-cell');
+      Im.inside(cell, () => {
+        Im.html('h3', null, name + '  (' + id.replace('minecraft:', '') + ')');
+        Im.withId('d', () => Im.withId(type, () => Im.panel(panelWidth, () => drawBox(type, cells[type]))));
+        const json = { wall: Providers.providerJson(cells[type].wall), path: Providers.providerJson(cells[type].path) };
+        Im.html('div', 'json-caption', JSON.stringify(json)).style.width = panelWidth + 'px';
+      });
+    }
+  });
+}
+
+function report() {
+  const clipped = Im.markClipped(document.getElementById('mock'));
+  const unique = [...new Set(clipped)];
+  document.getElementById('clip-report').innerHTML = unique.length
+    ? '<b>' + unique.length + ' clipped at ' + panelWidth + ' units:</b> ' + unique.map(s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join(' | ')
+    : 'Nothing clipped at ' + panelWidth + ' units.';
+}
+
+const widthInput = document.getElementById('width');
+const widthValue = document.getElementById('width-value');
+const clipInput = document.getElementById('show-clip');
+function readControls() {
+  panelWidth = Number(widthInput.value);
+  widthValue.textContent = panelWidth;
+  document.body.classList.toggle('show-clip', clipInput.checked);
+}
+widthInput.addEventListener('input', () => { readControls(); Im.render(); });
+clipInput.addEventListener('change', () => { readControls(); Im.render(); });
+readControls();
+Im.mount(document.getElementById('mock'), draw, report);
+</script>
+</body>
+</html>

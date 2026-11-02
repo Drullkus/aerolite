@@ -81,6 +81,22 @@ const Im = (() => {
     return parsed ? blockText(parsed) : null;
   }
 
+  /** The simple provider object that the variation codec writes for one block state. */
+  function simpleProviderJson(text) {
+    return { type: 'minecraft:simple_state_provider', state: blockJson(text) };
+  }
+
+  /**
+   * The block state text of a simple provider object, or of a bare block state of the 0.3 format.
+   * Null for any other provider type or a state outside the list.
+   */
+  function blockFromProviderJson(json) {
+    if (json && typeof json.type === 'string') {
+      return json.type === 'minecraft:simple_state_provider' ? blockFromJson(json.state) : null;
+    }
+    return blockFromJson(json);
+  }
+
   function searchBlocks(text, filter) {
     const query = text.split('[')[0].trim().toLowerCase().replace(/^minecraft:/, '');
     if (!query) return [];
@@ -528,6 +544,8 @@ const Im = (() => {
         if (ev.key === 'Enter' && matches.length) { ev.preventDefault(); pick(matches[0]); }
       },
     }, value => {
+      // Typing proves the focus, also where the browser sends no focus event.
+      state.focus = k;
       f.text = value;
       f.open = true;
       const parsed = parseBlock(value);
@@ -692,7 +710,7 @@ const Im = (() => {
   }
 
   return {
-    state, BLOCKS, parseBlock, blockText, blockJson, blockFromJson, searchBlocks,
+    state, BLOCKS, parseBlock, blockText, blockJson, blockFromJson, simpleProviderJson, blockFromProviderJson, searchBlocks,
     mount, render, withId, key, find,
     panel, col, line, indent, box, disabled, fill, spacing, separator, text, labelGrid, labelRow, span,
     collapsingHeader, treeNode, tabBar, slider, dragInt, combo, checkbox, button, inputText, blockField,

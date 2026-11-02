@@ -14,7 +14,7 @@
   <div class="controls">
     <label>Panel width <input id="width" type="range" min="240" max="600" step="1" value="360"> <span id="width-value"></span> units</label>
     <label><input id="show-clip" type="checkbox"> Outline clipped items</label>
-    <label title="Half indent under Pattern, no indent under Surface paths, Strength, short Seam entries, the label Surface, the button Remove"><input id="narrow" type="checkbox"> Narrow width proposal</label>
+    <label title="Full indent under Pattern and Surface paths, Pattern Strength, long Seam entries, the label Surface path, the button Remove Variation"><input id="wide" type="checkbox"> Wide variant</label>
     <div class="clip-report" id="clip-report"></div>
   </div>
   <div id="mock"></div>
@@ -66,7 +66,7 @@ const variations = [
   }),
 ];
 let panelWidth = 360;
-let narrow = false;
+let narrow = true;
 
 function label(list, value) { return list.find(e => e[0] === value)[1]; }
 function items(list, extra) { return list.map(([value, text]) => Object.assign({ value, label: text }, extra ? extra(value) : {})); }
@@ -113,12 +113,12 @@ function variationJson(v) {
   }
   o.pattern = p;
   o.shape = v.shape;
-  o.interior = Im.blockJson(v.blocks.interior);
-  o.junction = Im.blockJson(v.blocks.junction);
-  o.wall = Im.blockJson(v.blocks.wall);
-  o.path = Im.blockJson(v.blocks.path);
-  o.surface_path = Im.blockJson(v.blocks.surface_path);
-  if (v.shape === 'bridge') o.trusses = Im.blockJson(v.blocks.trusses);
+  o.interior = Im.simpleProviderJson(v.blocks.interior);
+  o.junction = Im.simpleProviderJson(v.blocks.junction);
+  o.wall = Im.simpleProviderJson(v.blocks.wall);
+  o.path = Im.simpleProviderJson(v.blocks.path);
+  o.surface_path = Im.simpleProviderJson(v.blocks.surface_path);
+  if (v.shape === 'bridge') o.trusses = Im.simpleProviderJson(v.blocks.trusses);
   return o;
 }
 
@@ -171,13 +171,13 @@ function variationFromJson(json, into) {
   }
   v.shape = choice(SHAPES, json.shape || 'pillar', 'shape');
   for (const name of ['interior', 'wall', 'path']) {
-    const b = Im.blockFromJson(json[name]);
-    need(b, name + ' is no known block state');
+    const b = Im.blockFromProviderJson(json[name]);
+    need(b, name + ' is no simple state provider of a known block. The mock holds only simple states.');
     v.blocks[name] = b;
   }
-  v.blocks.junction = Im.blockFromJson(json.junction) || v.blocks.interior;
-  v.blocks.surface_path = Im.blockFromJson(json.surface_path) || into.blocks.surface_path;
-  v.blocks.trusses = Im.blockFromJson(json.trusses) || into.blocks.trusses;
+  v.blocks.junction = Im.blockFromProviderJson(json.junction) || v.blocks.interior;
+  v.blocks.surface_path = Im.blockFromProviderJson(json.surface_path) || into.blocks.surface_path;
+  v.blocks.trusses = Im.blockFromProviderJson(json.trusses) || into.blocks.trusses;
   return v;
 }
 
@@ -345,19 +345,19 @@ function report() {
 const widthInput = document.getElementById('width');
 const widthValue = document.getElementById('width-value');
 const clipInput = document.getElementById('show-clip');
-const narrowInput = document.getElementById('narrow');
+const wideInput = document.getElementById('wide');
 function readControls() {
   panelWidth = Number(widthInput.value);
   widthValue.textContent = panelWidth;
   document.body.classList.toggle('show-clip', clipInput.checked);
-  narrow = narrowInput.checked;
+  narrow = !wideInput.checked;
 }
 const params = new URLSearchParams(location.search);
 if (params.has('width')) widthInput.value = params.get('width');
 if (params.has('clip')) clipInput.checked = true;
 widthInput.addEventListener('input', () => { readControls(); Im.render(); });
 clipInput.addEventListener('change', () => { readControls(); Im.render(); });
-narrowInput.addEventListener('change', () => { readControls(); Im.render(); });
+wideInput.addEventListener('change', () => { readControls(); Im.render(); });
 readControls();
 Im.mount(document.getElementById('mock'), draw, report);
 </script>
