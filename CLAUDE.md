@@ -1,6 +1,6 @@
 # Aerolite
 
-Aerolite is a NeoForge world preset. The world looks like broken reinforced concrete. Terrain islands are the concrete. Shafts are the rebar that holds them.
+Aerolite is a NeoForge world preset. The world looks like broken reinforced concrete. Terrain islands are the concrete. Pillars are the rebar that holds them.
 
 The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Aerolite.
 
@@ -14,43 +14,43 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Pending settings | The settings that the world creation flow hands to the integrated server of the new world. |
 | Own variation list | The variation list of a dimension. A vanilla dimension uses `aerolite:overworld_pillars`, `aerolite:nether_pillars` or `aerolite:end_pillars`. Any other dimension uses `aerolite:<dimension namespace>/<dimension path>_pillars`. |
 | Prefab | An entry of `aerolite:variation_list`. The add row copies its weights. |
-| Shaft | A straight tube of blocks, 13x13 across, that runs along one axis. |
-| Horizontal shaft | A shaft that runs along X or Z. It is infinite. |
-| Column | A shaft that runs along Y. It spans the build height and is sheared at both ends. Columns bind horizontal shafts. |
-| Junction | The 15x15x15 box where a column crosses a horizontal shaft. |
-| Interior | The 11x11 solid core of a shaft. |
+| Pillar | A straight tube of blocks, 13x13 across, that runs along one axis. |
+| Horizontal pillar | A pillar that runs along X or Z. It is infinite. |
+| Column | A pillar that runs along Y. It spans the build height and is sheared at both ends. Columns bind horizontal pillars. |
+| Junction | The 15x15x15 box where a column crosses a horizontal pillar. |
+| Interior | The 11x11 solid core of a pillar. |
 | Outer layer | The one-block skin around the interior. It holds the maze. |
-| Maze grid | The outer layer blocks of a shaft, seen as a 2D grid that wraps around the four faces. |
-| Ruling | One ring of nodes at an odd block along the shaft. A chunk holds 8 rulings. |
-| Node | A maze grid block on a ruling at an even position around the shaft. Each face has 7 nodes from corner to corner, 5 of them interior. |
-| Corner node | A node on a shaft corner. It has edges around the ring only. It carves only when a path crosses it from one face to the other. |
+| Maze grid | The outer layer blocks of a pillar, seen as a 2D grid that wraps around the four faces. |
+| Ruling | One ring of nodes at an odd block along the pillar. A chunk holds 8 rulings. |
+| Node | A maze grid block on a ruling at an even position around the pillar. Each face has 7 nodes from corner to corner, 5 of them interior. |
+| Corner node | A node on a pillar corner. It has edges around the ring only. It carves only when a path crosses it from one face to the other. |
 | Edge | A maze grid block between two neighbor nodes. An edge in the tree is a maze path. An edge outside the tree is a maze wall. |
 | Maze wall | A maze grid block that keeps its outer layer block. |
 | Maze path | A maze grid block with no outer layer block. The block under it is the maze path block. |
 | Wilson's algorithm | The spanning tree sampler. A loop-erased random walk steps by edge weight until it hits the tree. |
-| Axis edge | An edge along the shaft axis. On a column the axis is Y. |
-| Ring edge | An edge around the shaft. |
-| Variation | One set of maze bias, decay scale, decay threshold, erosion threshold, interior block, junction block, maze wall block and maze path block. Each shaft and column picks one. |
+| Axis edge | An edge along the pillar axis. On a column the axis is Y. |
+| Ring edge | An edge around the pillar. |
+| Variation | One set of maze bias, decay scale, decay threshold, erosion threshold, interior block, junction block, maze wall block and maze path block. Each pillar and column picks one. |
 | Junction block | The block of the bezel of a junction. It defaults to the interior block. |
 | Variation list | A map of variation id to weight. Its key sequence is the pick sequence. |
-| Shaft data | The placement and the weighted variations of one dimension. |
+| Pillar data | The placement and the weighted variations of one dimension. |
 | Data map | A NeoForge data map. It attaches a value to a registry entry by id. |
-| World shaft pack | The world data pack `aerolite_shafts`. It holds the generator settings of a world as shaft data. |
+| World pillar pack | The world data pack `aerolite_shafts`. It holds the generator settings of a world as pillar data. |
 | Maze bias | The weight of axis edges in the maze sampler, 5% to 95%. Ring edges take the rest. 50% is uniform. |
-| Segment | One chunk length of a shaft. On a column it is one chunk section. Tree segments and connector segments alternate along the shaft. |
+| Segment | One chunk length of a pillar. On a column it is one chunk section. Tree segments and connector segments alternate along the pillar. |
 | Tree segment | A segment whose nodes form one spanning tree. It has no crossing of its own. |
 | Connector segment | A segment whose nodes and two virtual nodes form one spanning tree. |
 | Virtual node | A stand-in for one neighbor tree during sampling. It touches every interior node of that tree on the facing ruling. |
 | Crossing | A tree edge at a virtual node. It is the maze path between the two sampled parts. |
-| Junction segment | The segment that holds a junction. It spans the chunks with the nearest surviving ruling on each side of the box, two or three chunks. Its graph drops the box rulings and adds the shaft patch. |
+| Junction segment | The segment that holds a junction. It spans the chunks with the nearest surviving ruling on each side of the box, two or three chunks. Its graph drops the box rulings and adds the pillar patch. |
 | Bezel | The 3-block frame of an exposed junction face. It is the junction block. |
-| Patch | One of the two exposed faces of a junction, a 5x5 node grid inside the bezel. The shaft patch is part of the junction segment of the horizontal shaft. The column patch is part of the junction segment of the column. |
-| Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a shaft. Each variation sets its own decay scale and thresholds. |
-| Erosion | Removal of shaft and junction box blocks where decay noise passes the erosion threshold. It works from the surface toward the core. |
+| Patch | One of the two exposed faces of a junction, a 5x5 node grid inside the bezel. The pillar patch is part of the junction segment of the horizontal pillar. The column patch is part of the junction segment of the column. |
+| Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a pillar. Each variation sets its own decay scale and thresholds. |
+| Erosion | Removal of pillar and junction box blocks where decay noise passes the erosion threshold. It works from the surface toward the core. |
 | Shear | Noise that removes blocks from a column near one of its ends. |
-| Slot | One 16-block band of the build height. Each slot belongs to X shafts or to Z shafts. |
+| Slot | One 16-block band of the build height. Each slot belongs to X pillars or to Z pillars. |
 | Seed | The block at the tip of a walk. It grows the tree. |
-| Tree | A random walker tree. It roots on a shaft and walks into the air. |
+| Tree | A random walker tree. It roots on a pillar and walks into the air. |
 | Hue | The blockstate property of a tree block, 0 to 15. |
 | Cell | One 3D Voronoi polyhedron. |
 | Generating layer | The one horizontal layer of cells that produces islands. |
@@ -169,7 +169,7 @@ Rules:
 - Use APIs, events and capabilities first.
 - Write a mixin only when no API, event or capability can do the task.
 - Add a comment to each mixin. The comment tells why no API can do the task.
-- The chunk status mixins add the shafts status, because no API adds a chunk status.
+- The chunk status mixins add the pillars status, because no API adds a chunk status.
 - `WindowMixin` is a client mixin on `Window`. No API changes the window size that the game reports.
 - While the preview is open, `WindowMixin` reports the window width without the panel width.
 - `WindowMixin` reduces `getWidth` in framebuffer pixels, `getScreenWidth` in screen coordinates and `getGuiScaledWidth` in GUI units.
@@ -263,31 +263,31 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 - The cloud height of a dimension type is the value of the data map `aerolite:cloud_height`.
 - The cloud height slider of the Aerolite Void screen sets the cloud height of the holder settings.
 - The hand-over gives that cloud height to each level of the type `aerolite:overworld` in the first session of a new world.
-- The world shaft pack holds that cloud height as the `aerolite:cloud_height` value of `aerolite:overworld`. Later sessions read it from the data map.
+- The world pillar pack holds that cloud height as the `aerolite:cloud_height` value of `aerolite:overworld`. Later sessions read it from the data map.
 - Only the dimension type `aerolite:overworld` ships a cloud height, Y -32.
-- The packet carries the cloud height of the shaft data of the player's level. A level without a cloud height sends no packet.
+- The packet carries the cloud height of the pillar data of the player's level. A level without a cloud height sends no packet.
 - A packet carries the cloud height to the client on login, on respawn and on dimension change.
 - The client effects of `aerolite:overworld` put the clouds at the cloud height of the last packet.
 - Each dimension uses its own vanilla biome source. Overworld biomes in the Overworld, Nether biomes in the Nether, End biomes in the End.
 - A biome that the player picks in the Aerolite Void screen replaces the biome source of its dimension with a fixed biome source.
-- Each dimension has the same structure: shafts, islands, bridges and center structures.
-- The generator of a new world carries no shaft settings.
+- Each dimension has the same structure: pillars, islands, bridges and center structures.
+- The generator of a new world carries no pillar settings.
 - The Aerolite generator `aerolite:aerolite` stays registered for the worlds of 0.2. Its field `aerolite` carries their settings.
-- The shafts step does not read the generator. It paints any level with shaft data, whatever its generator.
+- The pillars step does not read the generator. It paints any level with pillar data, whatever its generator.
 - The noise settings of each dimension make only air. The islands replace the void later.
 - The void Overworld has a sea level of -64. A higher sea level makes the noise step fill the bottom with lava.
-- The shafts are the chunk status `aerolite:shafts`, between the carvers and the features. Two mixins add the status and its step, because no API adds a chunk status.
-- The features step waits for the shafts of its neighbor chunks. Features decorate the shafts.
+- The pillars are the chunk status `aerolite:shafts`, between the carvers and the features. Two mixins add the status and its step, because no API adds a chunk status.
+- The features step waits for the pillars of its neighbor chunks. Features decorate the pillars.
 
 ## World creation menu
 
-The player sets the shaft settings in the World tab of the create world screen. The world type does not matter.
+The player sets the pillar settings in the World tab of the create world screen. The world type does not matter.
 
 ### Settings
 
-- The cloud height is one setting of the whole preset. It is not a shaft placement value.
-- Each dimension has its own shaft settings: one shaft placement and one variation list.
-- The shaft placement holds the minimum shaft spacing, the maximum shaft spacing and the column chance.
+- The cloud height is one setting of the whole preset. It is not a pillar placement value.
+- Each dimension has its own pillar settings: one pillar placement and one variation list.
+- The pillar placement holds the minimum pillar spacing, the maximum pillar spacing and the column chance.
 - Each variation holds its own decay scale, decay threshold and erosion threshold.
 
 | Setting | Scope | Default |
@@ -300,22 +300,22 @@ The player sets the shaft settings in the World tab of the create world screen. 
 | Bridge chance | Preset | 0.5 |
 | Allowed biome list | Preset | The vanilla biome list of the dimension |
 | Cloud height | Preset | Y -32 |
-| Minimum shaft spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
-| Maximum shaft spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
+| Minimum pillar spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
+| Maximum pillar spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Column chance | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Variation list | Dimension | The own variation list of the dimension, for example `aerolite:overworld_pillars`. `AeroliteShaftEntries.java` writes the shipped lists. |
 | Maze decay scale | Variation | 64 blocks |
 | Maze decay threshold | Variation | 0.35 |
-| Shaft erosion threshold | Variation | 0.5 |
+| Pillar erosion threshold | Variation | 0.5 |
 | Junction block | Variation | The interior block of the variation |
 
 - Each island picks its fill fraction at random between the two bounds.
 - The island height band is the Y range of the island centers in the generating layer.
-- The shaft spacing is the center distance of two neighbor horizontal shafts on one axis. It stays between the minimum and the maximum.
-- The maze decay scale is the size of one decay region along a shaft.
-- The dimension settings are a map from dimension to shaft placement and variation list.
+- The pillar spacing is the center distance of two neighbor horizontal pillars on one axis. It stays between the minimum and the maximum.
+- The maze decay scale is the size of one decay region along a pillar.
+- The dimension settings are a map from dimension to pillar placement and variation list.
 - Every variation list holds at least one variation with a positive weight.
-- A dimension without an entry in the map gets no shafts.
+- A dimension without an entry in the map gets no pillars.
 - A variation lists its blocks in the sequence interior block, junction block, maze wall block, maze path block.
 - A variation without a junction block takes its interior block as its junction block.
 - A save writes the layout of 0.2.0: the cloud height and the dimension map.
@@ -333,7 +333,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The client component `ShaftSettingsHolder` holds the settings of the open world creation flow.
 - A create world screen that the holder does not track starts a new flow. The holder then holds blank settings.
 - Blank settings hold no dimension and the default cloud height.
-- The shafts screen, the dimension screen and the preview read and write the holder. No screen reads or writes the generator.
+- The pillars screen, the dimension screen and the preview read and write the holder. No screen reads or writes the generator.
 - The title screen and the world list end the flow. When one of them opens, the holder resets and clears the pending settings.
 - Cancel in the create world screen returns to one of those screens. So a cancelled flow leaves blank settings and no pending settings.
 
@@ -341,7 +341,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 
 - `PendingShaftSettings` is a common component. The client offers settings to it. The server claims them.
 - The flow opens the screen "Preparing world data" when it creates the world. That screen hands the holder settings to the pending settings.
-- Blank settings are not handed over. So a world created with blank settings gets no shafts and no world shaft pack.
+- Blank settings are not handed over. So a world created with blank settings gets no pillars and no world pillar pack.
 - The hand-over happens before the integrated server starts.
 - The server claims the pending settings at `ServerAboutToStartEvent`, before it loads the levels.
 - The server claims them only for a new world. A world is new while its Overworld data is not initialized.
@@ -364,8 +364,8 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The row shows only while the screen holds the Bonus Chest label. The vanilla tab manager adds that label only for the World tab.
 - The vanilla grid does not hold the row. So the vanilla rows keep their vanilla positions, and no mixin is necessary.
 - The Customize button of the preset opens the Aerolite Void screen. See [Aerolite Void](#aerolite-void).
-- Settings opens the shafts screen with the holder.
-- The row holds no Defaults button. The Defaults button is in the header of the shafts screen.
+- Settings opens the pillars screen with the holder.
+- The row holds no Defaults button. The Defaults button is in the header of the pillars screen.
 - The own variation list of the Overworld is `aerolite:overworld_pillars`.
 - The own variation list of the Nether is `aerolite:nether_pillars`.
 - The own variation list of the End is `aerolite:end_pillars`.
@@ -411,10 +411,10 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - A dimension other than the three vanilla dimensions reads its name from `dimension.<namespace>.<path>`, for example `dimension.twilightforest.twilight_forest`.
 - A dimension without that translation shows its id path as its name.
 
-### Shafts screen
+### Pillars screen
 
-- The shafts screen has the title "Amazing Pillars" and a footer.
-- The shafts screen edits a copy of the holder settings. Done writes the copy to the holder. Cancel and Escape drop it.
+- The pillars screen has the title "Amazing Pillars" and a footer.
+- The pillars screen edits a copy of the holder settings. Done writes the copy to the holder. Cancel and Escape drop it.
 - Its list holds the add row first, then one row per configured dimension.
 - The add row holds the dimension dropdown, the list dropdown and the Add button, in that sequence.
 - The dimension dropdown lists every dimension of the world that has no dimension settings.
@@ -453,7 +453,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - Defaults adds every dimension of the world that has its own variation list and no dimension settings, with that list.
 - Defaults keeps each configured dimension as it is.
 - Defaults keeps the cloud height.
-- Defaults acts on the copy of the settings of the shafts screen. It rebuilds the list and keeps the scroll position.
+- Defaults acts on the copy of the settings of the pillars screen. It rebuilds the list and keeps the scroll position.
 - Copy writes the settings to the system clipboard as one line of JSON. Only the settings codec knows the fields.
 - Copy and Paste use registry ops over the worldgen registries of the creation context.
 - Paste parses the clipboard at once. A good parse replaces the settings and rebuilds the list.
@@ -464,11 +464,11 @@ The player sets the shaft settings in the World tab of the create world screen. 
 
 - The dimension screen edits a copy of the settings.
 - Its title is "Amazing Pillars: " and the dimension name. The title shows below the tab bar.
-- A tab bar at the top holds two tabs: Shaft Placement and Shaft Variations.
+- A tab bar at the top holds two tabs: Pillar Placement and Pillar Variations.
 - The footer holds Done and Cancel.
-- Done writes the edited settings back to the shafts screen. Cancel and Escape drop them.
-- The tab Shaft Placement holds the column chance slider, then the two spacing sliders in one row.
-- The tab Shaft Variations holds the rows of each variation, then the Add Variation button.
+- Done writes the edited settings back to the pillars screen. Cancel and Escape drop them.
+- The tab Pillar Placement holds the column chance slider, then the two spacing sliders in one row.
+- The tab Pillar Variations holds the rows of each variation, then the Add Variation button.
 - The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the four block fields, and the button row.
 - The button row holds the Copy button (export), the Paste button (import) and the Remove button, in that sequence.
 - The column chance slider runs from 0% to 100% in steps of 5%.
@@ -508,24 +508,24 @@ The player sets the shaft settings in the World tab of the create world screen. 
 
 ### Preview
 
-- The footer of the shafts screen has a Preview button between Done and Cancel.
-- Each footer button of the shafts screen is half the vanilla default button width.
+- The footer of the pillars screen has a Preview button between Done and Cancel.
+- Each footer button of the pillars screen is half the vanilla default button width.
 - The Preview button shows only when ImGui loaded.
 - The Preview button opens the preview screen with a copy of the settings.
-- Done in the preview sends the copy back to the shafts screen. Cancel drops the copy.
-- The preview shows the shafts of a square region of chunks around the region center.
+- Done in the preview sends the copy back to the pillars screen. Cancel drops the copy.
+- The preview shows the pillars of a square region of chunks around the region center.
 - The region center is a world X and Z position in blocks. It starts at the origin.
 - The region is the square of `2 * radius + 1` chunks around the chunk that holds the region center.
-- The preview paints the shafts with the shaft step code into scratch proto chunks. The vanilla block renderer bakes the blocks.
+- The preview paints the pillars with the pillar step code into scratch proto chunks. The vanilla block renderer bakes the blocks.
 - An ImGui panel covers the right edge of the window. The game view fills the part left of the panel.
 - A splitter on the left edge of the panel sets the panel width, from 240 to 600 ImGui units.
 - The panel edits the settings of the menu screens, with the same slider steps and the same rules.
 - The panel shows the Preview section, then one collapsing header per configured dimension, then the add row.
 - Each dimension header starts open.
 - The id of a dimension header does not change in a rebuild. So the header keeps its open state after an add or a remove.
-- Each dimension header holds two groups that start open: Shaft Placement and Shaft Variations.
-- The group Shaft Placement holds the column chance slider and the two spacing sliders.
-- The group Shaft Variations holds the variation rows and the Add Variation button.
+- Each dimension header holds two groups that start open: Pillar Placement and Pillar Variations.
+- The group Pillar Placement holds the column chance slider and the two spacing sliders.
+- The group Pillar Variations holds the variation rows and the Add Variation button.
 - Each variation row of the panel shows the sliders in the menu sequence: weight, maze bias, decay scale, decay threshold, erosion threshold.
 - The block fields follow the sliders. The Export button, the Import button and the Remove button follow on one line.
 - Export and Import in the panel act like Export and Import of the dimension screen, with the same tooltips.
@@ -536,7 +536,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - The radio buttons and the dimension dropdown of the Preview section always show the same dimension.
 - A small Remove button sits at the right end of each dimension header in the panel.
 - After the dimensions, the panel has a dimension combo, a list combo and an Add button.
-- The list combo lists "No prefab" and every prefab by its name. It follows the rules of the list dropdown of the shafts screen.
+- The list combo lists "No prefab" and every prefab by its name. It follows the rules of the list dropdown of the pillars screen.
 - The list combo shows the tooltip of the list dropdown on hover, with the same dimension rule.
 - When no dimension is left to add, both combos and the Add button are off. The dimension combo reads "All dimensions configured".
 - The panel shows the heading "Blocks" above the block fields and the label of each block field left of the field. A block field has no tooltip.
@@ -565,8 +565,8 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - A Copy button, a Paste button and a Defaults button sit on one line after the seed row, in that sequence.
 - The panel buttons Copy, Paste and Defaults have the tooltips of the header buttons.
 - Copy in the panel writes the preview copy of the settings to the clipboard.
-- Paste in the panel replaces the preview copy and starts a rebuild. A bad parse shows the toast of the shafts screen.
-- Defaults in the panel follows the rule of the Defaults button of the shafts screen.
+- Paste in the panel replaces the preview copy and starts a rebuild. A bad parse shows the toast of the pillars screen.
+- Defaults in the panel follows the rule of the Defaults button of the pillars screen.
 - Defaults in the panel acts on the preview copy of the settings and starts a rebuild.
 - The toast draws left of the panel, because the window reports the reduced width.
 - The radius slider runs from 2 to 32 chunks in steps of 1.
@@ -581,7 +581,7 @@ The player sets the shaft settings in the World tab of the create world screen. 
 - A chunk also bakes each border face that an opaque block of the next chunk hides. So a shift that drops the next chunk shows no hole.
 - A hidden face bakes with the next chunk read as air, so its shading fits the exposed state.
 - A progress bar shows the painted chunks and the baked sections of the newest rebuild or shift.
-- The seeded shaft layout gives the world positions of the shafts. So a pan shows other parts of the same world.
+- The seeded pillar layout gives the world positions of the pillars. So a pan shows other parts of the same world.
 - The Preview section ends with the center row: the text Center, an X field, a Z field and a Reset button.
 - The X field and the Z field hold the region center in whole world blocks.
 - A center field applies its value on Enter or when it loses focus.
@@ -625,11 +625,11 @@ The player sets the shaft settings in the World tab of the create world screen. 
 
 ## Data
 
-The shaft data lives in datapack registries and data maps. See the glossary for the terms.
+The pillar data lives in datapack registries and data maps. See the glossary for the terms.
 
 ### Registries
 
-- Three datapack registries hold the shaft data. They do not sync to the client.
+- Three datapack registries hold the pillar data. They do not sync to the client.
 - `aerolite:shaft_variation` holds the variations. The shipped entries are `aerolite:stone`, `aerolite:tuff` and the others in `AeroliteShaftEntries.java`.
 - A variation entry holds `bias`, `decay_scale`, `decay_threshold`, `erosion_threshold`, `interior`, `junction`, `wall` and `path`. It holds no weight.
 - The codec writes `junction` right after `interior`. An entry without `junction` takes its interior block.
@@ -642,15 +642,15 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - The placements of the vanilla dimensions are in the namespace `minecraft`, for example `data/minecraft/aerolite/shaft_placement/overworld.json`.
 - `aerolite:variation_list` holds `aerolite:overworld_pillars`, `aerolite:nether_pillars` and `aerolite:end_pillars`. Each entry is a variation list.
 - The menu copies from the variation lists. Worldgen reads them only for a generator without the field `aerolite`.
-- A change to a shipped variation list changes the shafts of each world whose generator has no field `aerolite`.
-- The JSON key sequence of a variation list is the pick sequence. A tool that sorts the keys changes the shafts.
+- A change to a shipped variation list changes the pillars of each world whose generator has no field `aerolite`.
+- The JSON key sequence of a variation list is the pick sequence. A tool that sorts the keys changes the pillars.
 - Data generation writes the variation lists with their key sequence. The other generated JSON has sorted keys.
 
 ### Data maps
 
 - The data map `aerolite:shaft_variations` is on the level stem registry. Its value is a variation list.
 - Its file is `data/<namespace>/data_maps/dimension/shaft_variations.json`. The keys are dimension ids.
-- It ships without values. So no dimension gets shafts from the shipped data alone.
+- It ships without values. So no dimension gets pillars from the shipped data alone.
 - The world creation screen applies data maps to a level stem registry without the dimensions of the new world.
 - So `DimensionShaftValues` reads the files of `aerolite:shaft_variations` by dimension id, with the merge rules of NeoForge.
 - `DimensionShaftValues` skips a tag entry, because a tag cannot resolve without the dimensions.
@@ -658,28 +658,28 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 
 ### Level binding
 
-- The level load resolves the shaft data of each server level. A data attachment of the level holds it. The level does not save it.
-- The shafts step and the cloud height packet read the attachment.
+- The level load resolves the pillar data of each server level. A data attachment of the level holds it. The level does not save it.
+- The pillars step and the cloud height packet read the attachment.
 - The binding resolves once per level load. A reload of the data packs does not change it.
 - The project timed a mixin field on the server level against the attachment. Per chunk, the difference stayed below the noise.
-- So the attachment holds the shaft data. The project rule allows a mixin only when no API can do the task.
+- So the attachment holds the pillar data. The project rule allows a mixin only when no API can do the task.
 - A data map value for the dimension wins over the pending settings and the generator settings.
 - Without a data map value, a level takes the claimed pending settings when they list its dimension.
 - The server claims pending settings only for a new world. See [Hand-over to the server](#hand-over-to-the-server).
 - Claimed pending settings give their cloud height to each level of the dimension type `aerolite:overworld`, listed or not.
 - Without a data map value and without pending settings for it, a level takes the generator settings for its dimension. Its generator must be the Aerolite generator, and the settings must list the dimension.
-- A server with claimed pending settings writes the world shaft pack from them at the first level load.
+- A server with claimed pending settings writes the world pillar pack from them at the first level load.
 - That pack holds each listed dimension without a data map value, and the cloud height of the pending settings.
 - A new world gets vanilla noise generators. So only a world of 0.2 takes generator settings.
 - A level that takes the generator settings and has the dimension type `aerolite:overworld` takes the cloud height of the generator settings.
 - A generator without the field `aerolite` takes the default settings. They come from the shipped variation lists and placements.
 - A 0.1.0 save without a variation map reads the default lists from the registries of the save.
 
-### World shaft pack
+### World pillar pack
 
-- A level that takes the generator settings writes the world shaft pack to `<world>/datapacks/aerolite_shafts/`.
+- A level that takes the generator settings writes the world pillar pack to `<world>/datapacks/aerolite_shafts/`.
 - The level load writes the pack once. A world with a folder `datapacks/aerolite_shafts` gets no new pack.
-- The game enables the new pack on the next world load. From then on, the data maps give the shaft data.
+- The game enables the new pack on the next world load. From then on, the data maps give the pillar data.
 - The writer puts the partial pack in `<world>/aerolite_shafts.tmp`. Then it moves the pack into the data pack folder.
 - The pack holds a value for each dimension whose Aerolite generator lists it and that has no data map value.
 - `pack.mcmeta` holds the data pack format of the game.
@@ -689,25 +689,25 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - Any other variation gets the entry `aerolite_world:<dimension namespace>/<dimension path>/<index>`. The index is its position in the list.
 - `data/aerolite/data_maps/dimension_type/cloud_height.json` holds the cloud height of the Overworld generator for `aerolite:overworld`.
 
-## Shafts
+## Pillars
 
 ### Placement
 
-- Along X, a seeded sequence of X positions exists. At each position, one Z-aligned horizontal shaft runs at one seeded height.
-- Along Z, a seeded sequence of Z positions exists. At each position, one X-aligned horizontal shaft runs at one seeded height.
-- A horizontal shaft keeps one height for its full length.
-- Shafts have no elbows. A shaft never turns and never steps.
-- An X shaft and a Z shaft never intersect.
-- Every seeded choice of the shafts uses a random that mixes each coordinate into the seed.
+- Along X, a seeded sequence of X positions exists. At each position, one Z-aligned horizontal pillar runs at one seeded height.
+- Along Z, a seeded sequence of Z positions exists. At each position, one X-aligned horizontal pillar runs at one seeded height.
+- A horizontal pillar keeps one height for its full length.
+- Pillars have no elbows. A pillar never turns and never steps.
+- An X pillar and a Z pillar never intersect.
+- Every seeded choice of the pillars uses a random that mixes each coordinate into the seed.
 - The vanilla Xoroshiro positional random puts the coordinate hash into the seed unmixed. Its first values correlate between neighbor coordinates.
-- Each axis is a jittered grid. The cell size is the mean of the minimum and the maximum spacing. Each cell holds one shaft at a seeded place.
+- Each axis is a jittered grid. The cell size is the mean of the minimum and the maximum spacing. Each cell holds one pillar at a seeded place.
 - A margin of half the minimum spacing in each cell keeps each neighbor distance between the minimum and the maximum.
-- The smallest minimum spacing of 32 keeps at least 16 blocks between two shafts on the same axis.
-- The build height is cut into slots of 16 blocks. The bottom slot and the top slot hold no horizontal shaft.
-- The seed shuffles which of the other slots belong to X shafts and which to Z shafts.
-- A horizontal shaft picks one slot of its axis. Inside the slot it picks an offset of 1 or 2, so at least one block of air separates it from a shaft in the next slot.
-- A column can stand where an X shaft and a Z shaft cross in plan view. The column chance setting decides which crossings get one.
-- A crossing gets no column unless at least one slot lies between the slots of its two shafts.
+- The smallest minimum spacing of 32 keeps at least 16 blocks between two pillars on the same axis.
+- The build height is cut into slots of 16 blocks. The bottom slot and the top slot hold no horizontal pillar.
+- The seed shuffles which of the other slots belong to X pillars and which to Z pillars.
+- A horizontal pillar picks one slot of its axis. Inside the slot it picks an offset of 1 or 2, so at least one block of air separates it from a pillar in the next slot.
+- A column can stand where an X pillar and a Z pillar cross in plan view. The column chance setting decides which crossings get one.
+- A crossing gets no column unless at least one slot lies between the slots of its two pillars.
 - Each column has a top end and a bottom end.
 - The top end is uniform from 16 blocks above the highest junction box to the top build limit. The bottom end is uniform from the bottom build limit to 16 blocks below the lowest junction box.
 - Those 16 blocks hold the shortest shear band and the 8-block margin.
@@ -716,29 +716,29 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - Each column end picks its shear band height at random, from 8 to 64 blocks.
 - The shear band shrinks so at least 8 blocks of full column stay between the band and the outermost junction box.
 - Shear does not touch a junction box.
-- Where a column crosses a horizontal shaft, a junction joins them. The junction is a 15x15x15 box, centered on the crossing.
+- Where a column crosses a horizontal pillar, a junction joins them. The junction is a 15x15x15 box, centered on the crossing.
 - The box is the interior block of its variation.
 - The bezel of each exposed face is the junction block of its variation.
 - The patch area inside the bezel is the maze wall block over the interior block.
-- Every horizontal shaft and every column picks one variation by weight. A weight of 0 never picks.
-- The pick walks the variation list in its sequence. The same seed, weights and sequence give the same shafts.
-- A horizontal shaft picks with a random at its axis and cell. A column picks with a random at the cells of its two shafts.
-- A junction box takes the variation of its horizontal shaft. So do its two patches and the maze path blocks on them.
-- A dimension without shaft data gets no shafts. The noise settings of the dimension still make its terrain.
-- `ShaftLayoutTest` holds a fingerprint of the default shafts of one seed. A change that moves a shaft fails it.
-- Shafts pierce islands. Each solid block of the finished shaft replaces the terrain block at its position.
-- The shaft paint writes only solid blocks. A block of the chunk stays where the finished shaft is air.
-- The shaft paint computes the finished shaft in a buffer. It does not read the chunk.
+- Every horizontal pillar and every column picks one variation by weight. A weight of 0 never picks.
+- The pick walks the variation list in its sequence. The same seed, weights and sequence give the same pillars.
+- A horizontal pillar picks with a random at its axis and cell. A column picks with a random at the cells of its two pillars.
+- A junction box takes the variation of its horizontal pillar. So do its two patches and the maze path blocks on them.
+- A dimension without pillar data gets no pillars. The noise settings of the dimension still make its terrain.
+- `ShaftLayoutTest` holds a fingerprint of the default pillars of one seed. A change that moves a pillar fails it.
+- Pillars pierce islands. Each solid block of the finished pillar replaces the terrain block at its position.
+- The pillar paint writes only solid blocks. A block of the chunk stays where the finished pillar is air.
+- The pillar paint computes the finished pillar in a buffer. It does not read the chunk.
 
 ### Cross section
 
-- The outside is 13x13. The interior is 11x11 and solid. The interior uses the shaft interior block.
+- The outside is 13x13. The interior is 11x11 and solid. The interior uses the pillar interior block.
 - The outer layer is one block thick. It holds the maze.
 
 ### Maze
 
-- The maze is one spanning tree of the maze grid along the whole shaft. It has no loops.
-- A ruling sits on every odd block along the shaft. On a ruling, nodes sit on even blocks around the shaft, so the four corners are nodes. Edges sit between neighbor nodes. Every other maze grid block is a maze wall.
+- The maze is one spanning tree of the maze grid along the whole pillar. It has no loops.
+- A ruling sits on every odd block along the pillar. On a ruling, nodes sit on even blocks around the pillar, so the four corners are nodes. Edges sit between neighbor nodes. Every other maze grid block is a maze wall.
 - A corner node has no edge along the axis, so no path runs along a corner.
 - After sampling, a corner node of degree one is dropped with its edge. So a two-block margin runs along every corner, with a notch where a path crosses the corner.
 - Wilson's algorithm samples each tree from a seeded root. It samples the weighted spanning tree distribution exactly.
@@ -747,57 +747,57 @@ The shaft data lives in datapack registries and data maps. See the glossary for 
 - At each step, the walk takes one edge of its node in proportion to the edge weight.
 - An edge between two rulings is an axis edge. An edge between two nodes of one ruling is a ring edge.
 - An edge to a virtual node is an axis edge. A crossing onto a patch is an axis edge.
-- A patch edge along the shaft axis is an axis edge. A patch edge across the shaft axis is a ring edge.
-- A maze bias above 50% favors maze paths along the shaft. A maze bias below 50% favors maze paths around the shaft.
-- Each horizontal shaft and each column samples with the maze bias of its variation. A junction segment uses the maze bias of its own shaft.
-- A horizontal shaft is cut into segments, aligned to chunks. Segments with an even index are tree segments. Segments with an odd index are connector segments.
-- Each segment is a pure function of the world seed, the shaft and the segment index. The chunk generation sequence does not change the result.
+- A patch edge along the pillar axis is an axis edge. A patch edge across the pillar axis is a ring edge.
+- A maze bias above 50% favors maze paths along the pillar. A maze bias below 50% favors maze paths around the pillar.
+- Each horizontal pillar and each column samples with the maze bias of its variation. A junction segment uses the maze bias of its own pillar.
+- A horizontal pillar is cut into segments, aligned to chunks. Segments with an even index are tree segments. Segments with an odd index are connector segments.
+- Each segment is a pure function of the world seed, the pillar and the segment index. The chunk generation sequence does not change the result.
 - A connector segment samples its tree on its own nodes plus two virtual nodes. A tree edge at a virtual node becomes a crossing to that neighbor tree segment.
 - The union of all segments is one tree. A chunk boundary gets several crossings, so no wall ring marks it.
 - A chunk needs at most two segments: its own, which can be a junction segment, and the connector segment before it along the axis.
-- A column is cut into segments of one chunk section, like a horizontal shaft. A column segment is a pure function of the world seed, the column and the section index.
+- A column is cut into segments of one chunk section, like a horizontal pillar. A column segment is a pure function of the world seed, the column and the section index.
 - At a build limit, a segment gets no virtual node on the outer side.
-- A junction cuts the maze grid of both shafts. The one-block rim around each shaft attachment sits on even positions, so it is wall.
-- A junction exposes two patches, the faces that no shaft covers. The seed picks one patch for the horizontal shaft. The other patch serves the column.
+- A junction cuts the maze grid of both pillars. The one-block rim around each pillar attachment sits on even positions, so it is wall.
+- A junction exposes two patches, the faces that no pillar covers. The seed picks one patch for the horizontal pillar. The other patch serves the column.
 - The bezel holds the face offsets 5, 6 and 7 in both face directions. The patch area inside it is 9x9.
 - The patch nodes sit at the face offsets -4, -2, 0, 2 and 4. Patch edges sit between neighbor patch nodes.
 - `Ring.PATCH_NODES` sets the patch size. The bezel thickness derives from it and `Ring.BOX`.
-- A junction segment replaces the chunks that hold the nearest surviving ruling on each side of the box. Its graph is those rulings minus the box rulings, plus the shaft patch nodes, plus a crossing from each patch border node that faces the shaft, without the patch corner nodes, onto the nearest ruling. One tree spans all of it, so no part strands.
+- A junction segment replaces the chunks that hold the nearest surviving ruling on each side of the box. Its graph is those rulings minus the box rulings, plus the pillar patch nodes, plus a crossing from each patch border node that faces the pillar, without the patch corner nodes, onto the nearest ruling. One tree spans all of it, so no part strands.
 - The junction segment keeps the chunk alternation. An end chunk with an odd index gives it a virtual node on that side.
-- When the junction segments of two boxes share a chunk, one junction segment spans both boxes. It holds one shaft patch per box.
+- When the junction segments of two boxes share a chunk, one junction segment spans both boxes. It holds one pillar patch per box.
 - The column patch is part of a column junction segment. Crossings run from its border nodes above and below, without the patch corner nodes, onto the nearest ruling.
 - In the graph, each of the 3 border nodes between the corners of one patch side has one crossing edge. The sampled tree holds a subset of those edges.
 - A patch corner node gets no crossing. It keeps its two patch edges. No patch corner node is dropped.
-- A crossing runs along the shaft outer layer up to the box. Then it notches through the bezel at the face offsets 7, 6 and 5, onto a border node at offset 4.
-- A border node and its ring node sit at the same offset across the shaft axis. So the notch runs straight.
+- A crossing runs along the pillar outer layer up to the box. Then it notches through the bezel at the face offsets 7, 6 and 5, onto a border node at offset 4.
+- A border node and its ring node sit at the same offset across the pillar axis. So the notch runs straight.
 - Each notch block is a maze path. The block one in is the maze path block.
-- Each shaft is one tree over its full length. No tree touches another shaft. The maze has no loops.
+- Each pillar is one tree over its full length. No tree touches another pillar. The maze has no loops.
 - A maze wall keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.
 - A maze path has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
 - A maze path at a chunk edge can have its maze path block in the next chunk. Each chunk writes the blocks of a maze path that lie in it.
 - The maze grid of a chunk holds the maze grid blocks up to two blocks outside the chunk. So both chunks decay one maze path the same way.
-- Decay is one fractal Brownian simplex noise over the shaft. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
+- Decay is one fractal Brownian simplex noise over the pillar. Far negative values keep only maze walls. Far positive values keep only maze paths. Central values keep both.
 - The decay threshold t sets the regimes. Noise below -t keeps only maze walls. Noise above t keeps only maze paths.
-- A maze wall or maze path block that decay removes leaves no shaft block. A removed path exposes the interior block.
+- A maze wall or maze path block that decay removes leaves no pillar block. A removed path exposes the interior block.
 - Decay acts on the whole 15x15 face of each patch. The bezel joins the maze grid of the patch as maze wall.
 - Decay removes a bezel block where the noise passes the decay threshold, like a maze wall. The interior block beneath it shows.
-- A removed patch maze wall exposes the interior block, like a removed shaft maze wall.
+- A removed patch maze wall exposes the interior block, like a removed pillar maze wall.
 - A removed patch maze path also removes its maze path block. The block one further in becomes the maze path block.
 - A notch block decays like a maze path.
 - Erosion starts where the absolute decay noise passes the erosion threshold, at either end of the noise.
 - The reach is the absolute noise, normalized from the erosion threshold to 1.
 - Each block has an erosion resistance from 0 to 1. Erosion removes a block when the reach exceeds its resistance.
-- In a shaft, the resistance rises over 5 layers from the outer layer inward. The 3x3 core has a resistance of 1, so it never vanishes.
+- In a pillar, the resistance rises over 5 layers from the outer layer inward. The 3x3 core has a resistance of 1, so it never vanishes.
 - In a junction box, the box resistance rises over 6 layers from the box face inward. The 3x3x3 core has a resistance of 1.
-- A box block takes the largest of the box resistance and the resistance of each shaft whose cross section holds it. So erosion never cuts a shaft at a junction.
-- Erosion samples the noise at each block, so one side of a shaft can erode deeper than the other.
-- Erosion runs after decay and before shear. An eroded block leaves no shaft block.
+- A box block takes the largest of the box resistance and the resistance of each pillar whose cross section holds it. So erosion never cuts a pillar at a junction.
+- Erosion samples the noise at each block, so one side of a pillar can erode deeper than the other.
+- Erosion runs after decay and before shear. An eroded block leaves no pillar block.
 - The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
 - The prototype keeps Origin Shift and its start trees for comparison. The mod uses only Wilson's algorithm.
 
 ## Walker Trees
 
-- A tree roots on the outer layer of a shaft and walks outward into the air, like a chorus plant.
+- A tree roots on the outer layer of a pillar and walks outward into the air, like a chorus plant.
 - The tree block is one block with the property `hue`, 0 to 15.
 - The hue of a block is the walk step count from the root, wrapped to 16. One tree cycles through the full hue circle as it grows.
 - At each step the walker continues in one direction. With a chance of 10 percent it also spawns a second branch.
