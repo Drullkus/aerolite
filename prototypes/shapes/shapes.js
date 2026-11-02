@@ -29,14 +29,15 @@
 
   // The truss diagonal at the offset and the axis position, or null.
   // Row r runs from 0 at v = 6 down to 12 at v = -6, like bridge.png.
+  // Rows 2 and 10 are the anchors in the inner plate layers.
   function bridgeTruss(u, v, s) {
-    if (Math.abs(v) > 3) return null;
+    if (Math.abs(v) > 4) return null;
     const r = 6 - v;
     const m = mod(s, 8);
     const red = m === mod(5 - r, 8) || m === mod(6 - r, 8);
     const green = m === mod(r + 1, 8) || m === mod(r + 2, 8);
-    if (u === 6 || u === -5) return red ? 'trussRed' : null;
-    if (u === -6 || u === 5) return green ? 'trussGreen' : null;
+    if (u === 4 || u === -5) return red ? 'trussRed' : null;
+    if (u === -4 || u === 5) return green ? 'trussGreen' : null;
     return null;
   }
 
@@ -153,7 +154,7 @@
       solid: bridgeSolid, resistance: bridgeResistance,
       rings: [traceRing(bridgeSolid, [-OUTER, OUTER]), traceRing(bridgeSolid, [-OUTER, -OUTER])],
       // The inner faces of the plates show the pattern as flush surface path blocks.
-      flush: (u, v) => Math.abs(v) === 4,
+      flush: (u, v) => Math.abs(v) === 4 && Math.abs(u) <= 5,
       truss: bridgeTruss,
     },
   };
@@ -261,6 +262,19 @@
         }
       }
     });
+    // A truss anchor replaces the plate block, also on a flush surface path.
+    for (let s = s0; s <= s1; s++) {
+      if (skip(s)) continue;
+      for (let u = -OUTER; u <= OUTER; u++) {
+        for (let v = -OUTER; v <= OUTER; v++) {
+          if (!shape.solid(u, v)) continue;
+          const t = shape.truss(u, v, s);
+          if (!t) continue;
+          const [x, y, z] = frame(s, u, v);
+          out.set(x, y, z, { role: t, res: TRUSS_RESISTANCE, owner: shape.key });
+        }
+      }
+    }
   }
 
   function carve(out, shape, p, frame, s) {

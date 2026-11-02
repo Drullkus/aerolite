@@ -134,15 +134,19 @@ The resistance view uses a ramp from yellow (0) to dark purple (1).
 
 ### Layers across the bridge
 
-| u | Layer | Content at v from -3 to 3 |
-|---|---|---|
-| 6 | Outer layer, +u side | Red truss |
-| 5 | Inner layer, +u side | Green truss |
-| -4 to 4 | Inside | Hollow, 9 wide and 7 tall |
-| -5 | Inner layer, -u side | Red truss |
-| -6 | Outer layer, -u side | Green truss |
+| u | Block 1 to 13 | Layer | Content at v from -4 to 4 |
+|---|---|---|---|
+| 6 | 13 | Plate side column | Empty truss space |
+| 5 | 12 | Outer truss layer, +u side | Green truss |
+| 4 | 11 | Inner truss layer, +u side | Red truss |
+| -3 to 3 | 4 to 10 | Inside | Hollow, 7 wide and 7 tall |
+| -4 | 3 | Inner truss layer, -u side | Green truss |
+| -5 | 2 | Outer truss layer, -u side | Red truss |
+| -6 | 1 | Plate side column | Empty truss space |
 
-- 10 blocks lie between the two red layers. 10 blocks lie between the two green layers.
+- The trusses stand one block in from the plate sides. The truss space at u = 6 and u = -6 is empty.
+- On the +u side, green is outside red. On the -u side, red is outside green.
+- 8 blocks lie between the two red layers. 8 blocks lie between the two green layers.
 - The red and green diagonals never intersect, because they live in different layers.
 
 ### Layers up the bridge
@@ -151,19 +155,22 @@ The resistance view uses a ramp from yellow (0) to dark purple (1).
 |---|---|
 | 6 | Outer face of the top plate. It holds the grooves. |
 | 5 | Middle layer of the top plate. It holds the groove floor. |
-| 4 | Inner face of the top plate. It holds the flush surface paths. |
+| 4 | Inner face of the top plate. It holds the flush surface paths and the truss anchors of row 2. |
 | 3 to -3 | Truss rows 3 to 9 of `bridge.png` |
-| -4 | Inner face of the bottom plate |
+| -4 | Inner face of the bottom plate. It holds the truss anchors of row 10. |
 | -5 | Middle layer of the bottom plate |
 | -6 | Outer face of the bottom plate |
 
 ### Trusses
 
 - Row r of `bridge.png` is v = 6 - r. The column of `bridge.png` is the axis position s.
-- A red truss block sits where s mod 8 is (5 - r) mod 8 or (6 - r) mod 8.
-- A green truss block sits where s mod 8 is (r + 1) mod 8 or (r + 2) mod 8.
+- The truss rule covers rows 2 to 10, at v from 4 to -4.
+- A red truss block sits at u = 4 and u = -5, where s mod 8 is (5 - r) mod 8 or (6 - r) mod 8.
+- A green truss block sits at u = 5 and u = -4, where s mod 8 is (r + 1) mod 8 or (r + 2) mod 8.
 - Each diagonal is 2 blocks wide per row. It runs 8 rows over 8 blocks of length, with a period of 8.
 - Both diagonals anchor at s mod 8 = 3 and 4, in row 2 and row 10. These are the white blocks of `bridge.png`.
+- The trusses dig one block into the plates. Rows 2 and 10 are the inner plate layers.
+- Anchor rule: a truss anchor block replaces the plate block at its position. It wins over a maze wall and over a flush surface path.
 - In the middle row, v = 0, both diagonals sit at s mod 8 = 7 and 0. They cross there in projection.
 - A rotation of 180 degrees about the vertical axis at s = 3.5 maps each red layer onto a green layer. So both sides look the same.
 - `images/bridge-side.png` matches `bridge.png` along two periods.
@@ -173,7 +180,10 @@ The resistance view uses a ramp from yellow (0) to dark purple (1).
 - Each plate has its own ring of 28 blocks: the outer face (13 blocks), one side block, the inner face (13 blocks) and the other side block.
 - The 4 plate corners sit on even indices. They are corner nodes.
 - The outer face carries grooves.
-- The inner face is flat. A path on it is a flush surface path block. A wall on it is a maze wall block.
+- The inner face is flat. The flush pattern is 11 blocks wide, at u from -5 to 5. It matches the 11-wide groove floors of the outer face.
+- In that area, a path is a flush surface path block and a wall is a maze wall block.
+- The inner corner nodes at u = 6 and u = -6 are not flush. They carve like the plate side.
+- A truss anchor in the flush area wins over the pattern. See the anchor rule.
 - Proposal for the plate side: the side holds 2 corner nodes and 1 ring edge, like the corner margin of the Pillar. It shows maze wall, with a groove where a path wraps from the outer face to the inner face.
 - The trusses are their own block field. They carry no pattern.
 
@@ -183,7 +193,7 @@ The resistance view uses a ramp from yellow (0) to dark purple (1).
 - The patch on +Z serves the horizontal pillar. The patch on -Z serves the column.
 - A horizontal Bridge gets a hole of 11x11 along X through the box, at |y| and |z| up to 5.
 - The bridge blocks persist inside the hole. Where a box block and a bridge block share a position, the box block wins.
-- So inside the hole, the plate layers at |v| = 4 and 5 and the inner truss layers at |u| = 5 remain. The open passage is 9 wide and 7 tall.
+- So inside the hole, the plate layers at |v| = 4 and 5 and all four truss layers remain, with their anchors. The open passage is 7 wide and 7 tall.
 - A column Bridge through a box gets no hole.
 
 ## Erosion and shear
@@ -194,7 +204,7 @@ The resistance view uses a ramp from yellow (0) to dark purple (1).
 - A flange is 4 thick. Its two middle layers have resistance 1. Its surface layers have resistance 0.
 - The web is 5 thick. Its layers have resistance 0, 0.5, 1, 0.5 and 0.
 - A bridge plate is 3 thick. Its middle layer has resistance 1. Its two faces have resistance 0.
-- Proposal: a truss block has the constant resistance 0.5.
+- Proposal: a truss block has the constant resistance 0.5. A truss anchor also has 0.5.
 - A box block takes the largest of the box resistance and the resistance of each pillar through it, like today.
 - Each column keeps the shear band at both ends, for each shape. The page uses one value noise. The threshold rises from 0 at the inner band edge to 1 at the end.
 
@@ -202,7 +212,6 @@ The resistance view uses a ramp from yellow (0) to dark purple (1).
 
 - The ring of the I-beam holds the 4 hidden concave corner blocks, so it is 64 blocks. The other choice is the 60 exposed blocks, with the web nodes at odd v.
 - The inner flange corners are ring edges, not corner nodes. So the I-beam has no corner margin there.
-- The truss anchors in rows 2 and 10 lie inside the plates. The page keeps them as plate blocks, so the flush pattern of the inner face stays unbroken. The other choice is a truss block in each anchor.
 - The two plates of a Bridge have separate rings. The sampler then makes one tree per plate, or joins the plates through the trusses.
 - A truss block has the resistance 0.5 on the page.
 - The Bridge column takes its truss plane from the same seeded choice as the I-beam web.
