@@ -23,6 +23,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.AeroliteClientConfig;
 import us.drullk.aerolite.client.PresetEdits;
@@ -35,6 +36,7 @@ import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.StateProviders;
 import us.drullk.aerolite.world.VariationList;
 import us.drullk.aerolite.world.WeightedVariation;
 
@@ -60,6 +62,7 @@ import java.util.function.Function;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -609,15 +612,23 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         ShaftVariation apply(ShaftVariation variation, BlockState state);
     }
 
-    /** The label sits left of the field. The fields of one variation start at one column and take the rest of the line. */
+    /**
+     * The label sits left of the field. The fields of one variation start at one column and take the rest of the line.
+     * A provider other than a simple provider shows its type id in a read-only field.
+     */
     private AeroliteSettings blockField(AeroliteSettings settings, ResourceKey<Level> dimension, int index, String fieldKey, String labelKey,
-                                        float fieldStart, BlockState state, BlockEdit edit) {
+                                        float fieldStart, BlockStateProvider provider, BlockEdit edit) {
         ImGuiBlockField field = this.blockFields.computeIfAbsent(fieldKey, key -> new ImGuiBlockField());
         float lineStart = ImGui.getCursorPosX();
         ImGui.alignTextToFramePadding();
         ImGui.text(text(labelKey));
         ImGui.sameLine();
         ImGui.setCursorPosX(lineStart + fieldStart);
+        BlockState state = StateProviders.simpleState(provider);
+        if (state == null) {
+            field.drawReadOnly("##" + fieldKey, StateProviders.typeId(provider));
+            return settings;
+        }
         BlockState picked = field.draw("##" + fieldKey, KEY + labelKey, state, this.tools().blocks(), this.tools().icons());
         return picked == null ? settings : this.editVariation(settings, dimension, index, current -> edit.apply(current, picked));
     }

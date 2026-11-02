@@ -1,5 +1,6 @@
 package us.drullk.aerolite.world.shaft;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
@@ -28,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 public final class ShaftLayout {
 
@@ -100,6 +102,8 @@ public final class ShaftLayout {
     private final MixedRandomFactory shaftVariationRandom;
     private final MixedRandomFactory columnVariationRandom;
     private final MixedRandomFactory root;
+    /** The randoms of the block state providers, one per block position. */
+    private final MixedRandomFactory blockRandom;
     /** One decay noise per decay scale. Every noise starts from the same seed hash. */
     private final Map<Integer, FractalNoise> decayNoises = new ConcurrentHashMap<>();
     private final FractalNoise shearNoise;
@@ -123,6 +127,7 @@ public final class ShaftLayout {
         this.columnMazeRandom = root.fork("column_maze");
         this.shaftVariationRandom = root.fork("shaft_variation");
         this.columnVariationRandom = root.fork("column_variation");
+        this.blockRandom = root.fork("block");
         this.shearNoise = new FractalNoise(root.fromHashOf("shear"), SHEAR_OCTAVES, SHEAR_SCALE);
 
         // The bottom slot and the top slot hold no shaft.
@@ -174,6 +179,11 @@ public final class ShaftLayout {
             }
         }
         throw new IllegalStateException("The weights do not sum to the total weight");
+    }
+
+    /** The seed of the provider random at a block. Two chunks that paint one block use the same seed. */
+    public long blockSeed(BlockPos pos) {
+        return this.blockRandom.seedAt(pos.getX(), pos.getY(), pos.getZ());
     }
 
     /** The decay noise at the decay scale of a variation. */

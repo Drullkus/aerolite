@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:soul_soil"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:soul_soil"
+    }
   },
   "junction": {
-    "Name": "minecraft:soul_soil"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:soul_soil"
+    }
   },
   "path": {
-    "Name": "minecraft:warped_wart_block"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:warped_wart_block"
+    }
   },
   "wall": {
-    "Name": "minecraft:soul_sand"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:soul_sand"
+    }
   }
 }

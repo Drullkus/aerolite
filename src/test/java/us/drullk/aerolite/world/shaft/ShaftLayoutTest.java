@@ -1,5 +1,6 @@
 package us.drullk.aerolite.world.shaft;
 
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -45,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 class ShaftLayoutTest {
 
@@ -163,7 +165,7 @@ class ShaftLayoutTest {
     private static final ShaftVariation NEVER = TestSettings.TUFF;
     private static final ShaftVariation HEAVY = TestSettings.STONE;
     private static final ShaftVariation LIGHT = new ShaftVariation(0.2F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
-            Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.COBBLED_DEEPSLATE.defaultBlockState());
+            BlockStateProvider.simple(Blocks.DEEPSLATE), BlockStateProvider.simple(Blocks.DEEPSLATE), BlockStateProvider.simple(Blocks.DEEPSLATE_BRICKS), BlockStateProvider.simple(Blocks.COBBLED_DEEPSLATE));
 
     private ShaftLayout pickLayout(long seed) {
         DimensionSettings settings = new DimensionSettings(TestSettings.PLACEMENT.withShaftSpacing(32, 64).withColumnChance(1),
@@ -285,7 +287,7 @@ class ShaftLayoutTest {
 
     private static String fingerprint(ShaftVariation variation) {
         return "|" + variation.bias() + "|" + variation.decayScale() + "|" + variation.decayThreshold() + "|" + variation.erosionThreshold()
-                + "|" + variation.interior() + "|" + variation.wall() + "|" + variation.path();
+                + "|" + TestSettings.state(variation.interior()) + "|" + TestSettings.state(variation.wall()) + "|" + TestSettings.state(variation.path());
     }
 
 }

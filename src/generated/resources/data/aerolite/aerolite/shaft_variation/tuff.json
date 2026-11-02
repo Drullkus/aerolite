@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:tuff"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:tuff"
+    }
   },
   "junction": {
-    "Name": "minecraft:tuff"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:tuff"
+    }
   },
   "path": {
-    "Name": "minecraft:polished_tuff"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:polished_tuff"
+    }
   },
   "wall": {
-    "Name": "minecraft:tuff_bricks"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:tuff_bricks"
+    }
   }
 }

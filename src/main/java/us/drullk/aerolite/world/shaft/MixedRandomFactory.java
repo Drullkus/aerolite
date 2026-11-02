@@ -11,6 +11,7 @@ import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
  * so its first values correlate between neighbor coordinates.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 public final class MixedRandomFactory implements PositionalRandomFactory {
 
@@ -28,6 +29,11 @@ public final class MixedRandomFactory implements PositionalRandomFactory {
     /** A factory for the coordinates, independent of the randoms at other coordinates. */
     public MixedRandomFactory fork(int x, int y, int z) {
         return new MixedRandomFactory(this.mix(x, y, z));
+    }
+
+    /** The seed of the random at the coordinates. A random with this seed equals {@link #at}. */
+    public long seedAt(int x, int y, int z) {
+        return this.mix(x, y, z);
     }
 
     private long mix(int x, int y, int z) {

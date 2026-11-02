@@ -10,6 +10,9 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.SimpleStateProvider;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
@@ -26,6 +29,7 @@ import java.util.List;
  * The bezel of each patch face is the junction block. The patch area inside it is the maze wall block over the box.
  * Decay and erosion read the thresholds and the decay noise of the variation of each block.
  * The maze grid of the chunk holds the grid blocks up to two blocks outside the chunk. Their maze path blocks and decay writes can lie in the chunk.
+ * Each provider samples with a random seeded by the world seed and the block position.
  * Every step writes to a buffer of the finished shaft blocks. The chunk gets only the solid blocks of the buffer.
  * So a block of the chunk stays where the finished shaft is air.
  *
@@ -35,6 +39,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 final class ChunkPaint {
 
@@ -60,6 +65,8 @@ final class ChunkPaint {
     private final int minX;
     private final int minZ;
     private final BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+    /** The provider random. Each sample reseeds it from the block position. */
+    private final XoroshiroRandomSource random = new XoroshiroRandomSource(0L);
     /** The maze grid blocks of shafts and columns outside the junction boxes, with the variation of each block. */
     private final Long2ObjectMap<ShaftVariation> shaftGrid = new Long2ObjectOpenHashMap<>();
     /** The maze grid blocks of the patches. */
@@ -165,6 +172,17 @@ final class ChunkPaint {
             this.buffer[height >> 4] = section;
         }
         section[(pos.getX() - this.minX) | (pos.getZ() - this.minZ) << 4 | (height & 15) << 8] = state;
+    }
+
+    /** Writes the block of the provider at the position to the buffer. */
+    private void set(BlockPos pos, BlockStateProvider provider) {
+        if (!this.inChunk(pos)) {
+            return;
+        }
+        if (!(provider instanceof SimpleStateProvider)) {
+            this.random.setSeed(this.layout.blockSeed(pos));
+        }
+        this.set(pos, provider.getState(this.random, pos));
     }
 
     private int alongMin(ShaftLayout.Axis axis) {

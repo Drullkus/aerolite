@@ -5,6 +5,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftRegistries;
@@ -19,6 +20,7 @@ import java.util.Map;
  * The shipped entries of the shaft data registries: the variations, the variation list of each vanilla dimension and the placements.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 @Component
 public final class AeroliteShaftEntries {
@@ -65,7 +67,7 @@ public final class AeroliteShaftEntries {
     }
 
     private static void register(BootstrapContext<ShaftVariation> context, ResourceKey<ShaftVariation> key, float bias, Block interior, Block wall, Block path) {
-        context.register(key, ShaftVariation.standard(bias, interior.defaultBlockState(), wall.defaultBlockState(), path.defaultBlockState()));
+        context.register(key, ShaftVariation.standard(bias, BlockStateProvider.simple(interior), BlockStateProvider.simple(wall), BlockStateProvider.simple(path)));
     }
 
     /** The default variation list of each vanilla dimension. The sequence is the pick sequence. */

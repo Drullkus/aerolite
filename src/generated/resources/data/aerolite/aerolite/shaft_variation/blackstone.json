@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:blackstone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:blackstone"
+    }
   },
   "junction": {
-    "Name": "minecraft:blackstone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:blackstone"
+    }
   },
   "path": {
-    "Name": "minecraft:polished_blackstone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:polished_blackstone"
+    }
   },
   "wall": {
-    "Name": "minecraft:polished_blackstone_bricks"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:polished_blackstone_bricks"
+    }
   }
 }

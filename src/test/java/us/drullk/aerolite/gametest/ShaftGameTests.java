@@ -1,5 +1,10 @@
 package us.drullk.aerolite.gametest;
 
+import java.util.HashSet;
+import net.minecraft.world.level.levelgen.feature.stateproviders.WeightedStateProvider;
+import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
+import net.minecraft.util.random.SimpleWeightedRandomList;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -82,6 +87,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-01_7b2c6d29-0ea3-4452-a1db-06e54416a4d5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -142,7 +148,7 @@ public final class ShaftGameTests {
         int y = shaft.centerY();
         int paths = 0;
         for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
-            helper.assertTrue(chunk.getBlockState(new BlockPos(x, y, z)) == variation.interior(), "The shaft core is not the interior block of its variation");
+            helper.assertTrue(chunk.getBlockState(new BlockPos(x, y, z)) == TestSettings.state(variation.interior()), "The shaft core is not the interior block of its variation");
             for (int block = 0; block < Ring.BLOCKS; block++) {
                 int dy = ring.first(block);
                 int dx = ring.second(block);
@@ -153,15 +159,50 @@ public final class ShaftGameTests {
                 if (outer.isAir()) {
                     paths++;
                     BlockPos beneath = new BlockPos(x + clampInterior(dx), y + clampInterior(dy), z);
-                    helper.assertTrue(chunk.getBlockState(beneath) == variation.path(), "A maze path has no maze path block of its variation under it");
+                    helper.assertTrue(chunk.getBlockState(beneath) == TestSettings.state(variation.path()), "A maze path has no maze path block of its variation under it");
                 } else {
-                    helper.assertTrue(outer == variation.wall(), "An outer layer block is not the maze wall block of its variation");
+                    helper.assertTrue(outer == TestSettings.state(variation.wall()), "An outer layer block is not the maze wall block of its variation");
                 }
             }
             helper.assertTrue(chunk.getBlockState(new BlockPos(x, y + Ring.OUTER + 1, z)).isAir(), "The block above the shaft is not air");
         }
         helper.assertTrue(paths > 0, "The shaft has no maze path");
         helper.assertTrue(chunk.getBlockState(new BlockPos(x, level.getMinBuildHeight(), pos.getMinBlockZ())).is(Blocks.AIR), "The void holds a block");
+        helper.succeed();
+    }
+
+    /** A weighted provider paints by the block position. A new layout of the same seed paints the same blocks. */
+    @GameTest(template = "empty")
+    public static void weightedProviderPaintsByPosition(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        WeightedStateProvider wall = new WeightedStateProvider(SimpleWeightedRandomList.<BlockState>builder()
+                .add(Blocks.STONE_BRICKS.defaultBlockState(), 1)
+                .add(Blocks.MOSSY_STONE_BRICKS.defaultBlockState(), 1));
+        DimensionSettings settings = new DimensionSettings(TestSettings.PLACEMENT, List.of(new WeightedVariation(1, TestSettings.STONE.withWall(wall))));
+        ShaftLayout first = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout second = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        ShaftLayout.Shaft shaft = first.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
+        ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(shaft.position()), 0);
+        ProtoChunk firstChunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+        ProtoChunk secondChunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+        painter.paint(first, firstChunk);
+        painter.paint(second, secondChunk);
+
+        Set<BlockState> walls = new HashSet<>();
+        for (int x = pos.getMinBlockX(); x <= pos.getMaxBlockX(); x++) {
+            for (int y = shaft.centerY() - Ring.OUTER; y <= shaft.centerY() + Ring.OUTER; y++) {
+                for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
+                    BlockPos at = new BlockPos(x, y, z);
+                    BlockState state = firstChunk.getBlockState(at);
+                    helper.assertTrue(state == secondChunk.getBlockState(at), "Two layouts of one seed painted different blocks");
+                    if (state.is(Blocks.STONE_BRICKS) || state.is(Blocks.MOSSY_STONE_BRICKS)) {
+                        helper.assertTrue(state == wall.getState(new XoroshiroRandomSource(first.blockSeed(at)), at), "A wall block does not follow the random of its position");
+                        walls.add(state);
+                    }
+                }
+            }
+        }
+        helper.assertTrue(walls.size() == 2, "The weighted provider did not paint both wall blocks");
         helper.succeed();
     }
 
@@ -179,7 +220,7 @@ public final class ShaftGameTests {
             ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(shaft.position()), chunkZ);
             ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
             painter.paint(layout, chunk);
-            BlockState interior = layout.variation(shaft).interior();
+            BlockState interior = TestSettings.state(layout.variation(shaft).interior());
             for (int z = pos.getMinBlockZ(); z <= pos.getMaxBlockZ(); z++) {
                 for (int first = -Ring.OUTER; first <= Ring.OUTER; first++) {
                     for (int second = -Ring.OUTER; second <= Ring.OUTER; second++) {
@@ -320,7 +361,7 @@ public final class ShaftGameTests {
                     continue;
                 }
                 BlockPos beneath = frame.at(along, clampInterior(first), clampInterior(second));
-                helper.assertTrue(paintedAt(chunks, layout, level, beneath) == variation.path(), "A maze path has no maze path block under it");
+                helper.assertTrue(paintedAt(chunks, layout, level, beneath) == TestSettings.state(variation.path()), "A maze path has no maze path block under it");
                 if (new ChunkPos(surface).toLong() != new ChunkPos(beneath).toLong()) {
                     crossings++;
                 }
@@ -465,7 +506,7 @@ public final class ShaftGameTests {
         ChunkPos pos = new ChunkPos(0, SectionPos.blockToSectionCoord(shaft.position()));
         ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
         painter.paint(layout, chunk);
-        helper.assertTrue(chunk.getBlockState(new BlockPos(pos.getMinBlockX(), shaft.centerY(), shaft.position())).is(layout.variation(shaft).interior().getBlock()),
+        helper.assertTrue(chunk.getBlockState(new BlockPos(pos.getMinBlockX(), shaft.centerY(), shaft.position())).is(TestSettings.state(layout.variation(shaft).interior()).getBlock()),
                 "The generator settings wrote no shaft core");
         helper.succeed();
     }
@@ -575,7 +616,7 @@ public final class ShaftGameTests {
     private static DimensionSettings twoVariations() {
         ShaftVariation stone = TestSettings.STONE.withJunction(Blocks.CHISELED_STONE_BRICKS.defaultBlockState());
         ShaftVariation deepslate = new ShaftVariation(0.8F, TestSettings.DECAY_SCALE, TestSettings.DECAY_THRESHOLD, TestSettings.EROSION_THRESHOLD,
-                Blocks.DEEPSLATE.defaultBlockState(), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState());
+                BlockStateProvider.simple(Blocks.DEEPSLATE), BlockStateProvider.simple(Blocks.CHISELED_DEEPSLATE), BlockStateProvider.simple(Blocks.DEEPSLATE_TILES), BlockStateProvider.simple(Blocks.POLISHED_DEEPSLATE));
         return TestSettings.withDecay(TestSettings.OVERWORLD.withVariations(List.of(TestSettings.one(stone), TestSettings.one(deepslate))),
                 TestSettings.DECAY_SCALE, 1, 1);
     }
@@ -602,16 +643,16 @@ public final class ShaftGameTests {
                     }
                     // A box corner is a bezel block of a patch face.
                     BlockPos boxEdge = new BlockPos(column.x() + Ring.BOX, junction.center() + Ring.BOX, column.z() + Ring.BOX);
-                    helper.assertTrue(paintedAt(chunks, layout, level, boxEdge) == boxVariation.junction(), "A box corner is not the junction block of its horizontal shaft");
+                    helper.assertTrue(paintedAt(chunks, layout, level, boxEdge) == TestSettings.state(boxVariation.junction()), "A box corner is not the junction block of its horizontal shaft");
                     BlockPos boxInside = new BlockPos(column.x() + Ring.BOX - 1, junction.center() + Ring.BOX - 1, column.z() + Ring.BOX - 1);
-                    helper.assertTrue(paintedAt(chunks, layout, level, boxInside) == boxVariation.interior(), "A junction box block is not the interior block of its horizontal shaft");
+                    helper.assertTrue(paintedAt(chunks, layout, level, boxInside) == TestSettings.state(boxVariation.interior()), "A junction box block is not the interior block of its horizontal shaft");
                 }
                 // An even Y between the boxes holds no ruling, so ring block 1 there is always maze wall.
                 int between = (column.junctions().getFirst().center() + column.junctions().getLast().center()) / 2 & ~1;
-                helper.assertTrue(paintedAt(chunks, layout, level, new BlockPos(column.x(), between, column.z())) == columnVariation.interior(),
+                helper.assertTrue(paintedAt(chunks, layout, level, new BlockPos(column.x(), between, column.z())) == TestSettings.state(columnVariation.interior()),
                         "The column core is not the interior block of the column");
                 BlockState wall = paintedAt(chunks, layout, level, new BlockPos(column.x() + ring.first(1), between, column.z() + ring.second(1)));
-                helper.assertTrue(wall == columnVariation.wall(), "A column wall block is not the maze wall block of the column");
+                helper.assertTrue(wall == TestSettings.state(columnVariation.wall()), "A column wall block is not the maze wall block of the column");
             }
         }
         helper.assertTrue(columns > 0, "The layout has no column");
@@ -666,23 +707,23 @@ public final class ShaftGameTests {
                                 boolean notchSpot = depth > Ring.PATCH_EDGE && Math.abs(cross) < Ring.PATCH_EDGE && cross % 2 == 0;
                                 if (inBezel) {
                                     if (!face.isAir()) {
-                                        helper.assertTrue(face == variation.junction(), "A bezel block is not the junction block of its box");
+                                        helper.assertTrue(face == TestSettings.state(variation.junction()), "A bezel block is not the junction block of its box");
                                         bezel++;
                                     }
                                     if (!notchSpot) {
-                                        helper.assertTrue(beneath != variation.path(), "A bezel block outside a notch has a maze path block under it");
+                                        helper.assertTrue(beneath != TestSettings.state(variation.path()), "A bezel block outside a notch has a maze path block under it");
                                     }
-                                    if (face.isAir() && notchSpot && beneath == variation.path()) {
+                                    if (face.isAir() && notchSpot && beneath == TestSettings.state(variation.path())) {
                                         notch++;
                                     } else if (face.isAir()) {
                                         helper.assertTrue(decay, "A bezel block is air outside a notch without decay");
                                         decayed++;
                                     }
                                 } else if (face.isAir()) {
-                                    helper.assertTrue(decay || beneath == variation.path(), "A patch maze path has no maze path block under it");
+                                    helper.assertTrue(decay || beneath == TestSettings.state(variation.path()), "A patch maze path has no maze path block under it");
                                     path++;
                                 } else {
-                                    helper.assertTrue(face == variation.wall(), "A patch block is not the maze wall block or air");
+                                    helper.assertTrue(face == TestSettings.state(variation.wall()), "A patch block is not the maze wall block or air");
                                     wall++;
                                 }
                             }
@@ -719,7 +760,7 @@ public final class ShaftGameTests {
         ServerLevel level = helper.getLevel();
         String json = "{\"interior\": {\"Name\": \"minecraft:tuff\"}, \"wall\": {\"Name\": \"minecraft:tuff_bricks\"}, \"path\": {\"Name\": \"minecraft:polished_tuff\"}}";
         ShaftVariation tuff = ShaftVariation.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(json)).getOrThrow();
-        helper.assertTrue(tuff.junction() == Blocks.TUFF.defaultBlockState(), "A variation without a junction block did not take its interior block");
+        helper.assertTrue(TestSettings.state(tuff.junction()) == Blocks.TUFF.defaultBlockState(), "A variation without a junction block did not take its interior block");
         DimensionSettings settings = TestSettings.withDecay(TestSettings.OVERWORLD.withVariations(List.of(TestSettings.one(tuff))), TestSettings.DECAY_SCALE, 1, 1)
                 .withPlacement(TestSettings.PLACEMENT.withColumnChance(1));
         ShaftLayout layout = new ShaftLayout(mazes, 7, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);

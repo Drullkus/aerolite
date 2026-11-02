@@ -6,6 +6,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.lwjgl.glfw.GLFW;
 
@@ -18,9 +19,11 @@ import java.util.function.Consumer;
  * While it has focus and text, a dropdown lists the blocks whose id or name holds the text.
  * The screen draws the dropdown and sends clicks to it, so the dropdown covers the rows below.
  * The parse and the search are in {@link BlockSearch}.
+ * A read-only field shows the type id of a provider that has no editor.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 public class BlockField extends EditBox {
 
@@ -50,6 +53,17 @@ public class BlockField extends EditBox {
         this.setHint(name);
         this.writeText(search.text(state));
         this.setResponder(this::onTextChange);
+    }
+
+    /** A field that shows the text and takes no input. It opens no dropdown. */
+    public static BlockField readOnly(Font font, BlockSearch search, String text, Component name) {
+        BlockField field = new BlockField(font, search, Blocks.AIR.defaultBlockState(), name, state -> {
+        });
+        field.setResponder(value -> {
+        });
+        field.writeText(text);
+        field.setEditable(false);
+        return field;
     }
 
     public BlockState state() {

@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:end_stone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone"
+    }
   },
   "junction": {
-    "Name": "minecraft:end_stone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone"
+    }
   },
   "path": {
-    "Name": "minecraft:purpur_block"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:purpur_block"
+    }
   },
   "wall": {
-    "Name": "minecraft:end_stone_bricks"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone_bricks"
+    }
   }
 }

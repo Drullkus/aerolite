@@ -16,10 +16,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.StateProviders;
 import us.drullk.aerolite.world.WeightedVariation;
 
 import javax.annotation.Nullable;
@@ -38,6 +40,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 public class DimensionSettingsScreen extends Screen {
 
@@ -260,8 +263,12 @@ public class DimensionSettingsScreen extends Screen {
                 .ifError(error -> this.tools.json().showImportFailed(error.message()));
     }
 
-    private BlockField blockField(BlockState state, String key, Consumer<BlockState> onChange) {
-        BlockField field = new BlockField(this.font, this.tools.blocks(), state, Component.translatable(key), onChange);
+    /** A provider other than a simple provider shows its type id in a read-only field. */
+    private BlockField blockField(BlockStateProvider provider, String key, Consumer<BlockState> onChange) {
+        BlockState state = StateProviders.simpleState(provider);
+        BlockField field = state != null
+                ? new BlockField(this.font, this.tools.blocks(), state, Component.translatable(key), onChange)
+                : BlockField.readOnly(this.font, this.tools.blocks(), StateProviders.typeId(provider), Component.translatable(key));
         this.blockFields.add(field);
         return field;
     }

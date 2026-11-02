@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:obsidian"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:obsidian"
+    }
   },
   "junction": {
-    "Name": "minecraft:obsidian"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:obsidian"
+    }
   },
   "path": {
-    "Name": "minecraft:crying_obsidian"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:crying_obsidian"
+    }
   },
   "wall": {
-    "Name": "minecraft:purpur_block"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:purpur_block"
+    }
   }
 }

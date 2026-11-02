@@ -1,5 +1,6 @@
 package us.drullk.aerolite.world;
 
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -32,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 class AeroliteSettingsTest {
 
@@ -122,7 +124,7 @@ class AeroliteSettingsTest {
         assertEquals(List.of(9, 1), defaults().variations(Level.END).stream().map(WeightedVariation::weight).toList());
         assertEquals(ShippedShaftData.variation("stone"), defaults().variations(Level.OVERWORLD).getFirst().variation());
         assertEquals(ShippedShaftData.variation("purpur"), defaults().variations(Level.END).getLast().variation());
-        assertEquals(Blocks.OXIDIZED_COPPER_BULB.defaultBlockState(), ShippedShaftData.variation("copper").path());
+        assertEquals(Blocks.OXIDIZED_COPPER_BULB.defaultBlockState(), TestSettings.state(ShippedShaftData.variation("copper").path()));
         assertEquals(0.8F, ShippedShaftData.variation("copper").bias());
     }
 
@@ -241,7 +243,7 @@ class AeroliteSettingsTest {
     @Test
     void dimensionMapRoundTrip() {
         WeightedVariation deepslate = new WeightedVariation(4, new ShaftVariation(0.85F, 128, 0.25F, 0.4F,
-                Blocks.DEEPSLATE.defaultBlockState(), Blocks.CHISELED_DEEPSLATE.defaultBlockState(), Blocks.DEEPSLATE_TILES.defaultBlockState(), Blocks.POLISHED_DEEPSLATE.defaultBlockState()));
+                BlockStateProvider.simple(Blocks.DEEPSLATE), BlockStateProvider.simple(Blocks.CHISELED_DEEPSLATE), BlockStateProvider.simple(Blocks.DEEPSLATE_TILES), BlockStateProvider.simple(Blocks.POLISHED_DEEPSLATE)));
         AeroliteSettings settings = TestSettings.SETTINGS
                 .withAddedVariation(Level.NETHER, deepslate)
                 .withDimension(ELSEWHERE, List.of(deepslate.withWeight(0), TestSettings.one(TestSettings.END)));
@@ -261,7 +263,7 @@ class AeroliteSettingsTest {
             WeightedVariation variation = firstOverworldVariation(json);
             assertEquals(1, variation.weight());
             assertEquals(ShaftVariation.UNIFORM_BIAS, variation.variation().bias());
-            assertEquals(Direction.Axis.X, variation.variation().interior().getValue(RotatedPillarBlock.AXIS));
+            assertEquals(Direction.Axis.X, TestSettings.state(variation.variation().interior()).getValue(RotatedPillarBlock.AXIS));
         }
     }
 
@@ -370,22 +372,22 @@ class AeroliteSettingsTest {
     @Test
     void variationEntryWithoutJunctionTakesTheInteriorBlock() {
         ShaftVariation variation = ShaftVariation.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("{" + STONE_BLOCKS + "}")).getOrThrow();
-        assertEquals(variation.interior(), variation.junction());
+        assertEquals(TestSettings.state(variation.interior()), TestSettings.state(variation.junction()));
         // A save of 0.2 holds no junction block. Its variation still equals the shipped entry.
         ShaftVariation stone = ShippedShaftData.variation("stone");
         JsonObject old = ShaftVariation.CODEC.encodeStart(JsonOps.INSTANCE, stone).getOrThrow().getAsJsonObject();
         old.remove("junction");
         assertEquals(stone, ShaftVariation.CODEC.parse(JsonOps.INSTANCE, old).getOrThrow());
         ShaftVariation chiseled = ShaftVariation.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("{\"junction\": {\"Name\": \"minecraft:chiseled_stone_bricks\"}, " + STONE_BLOCKS + "}")).getOrThrow();
-        assertEquals(Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), chiseled.junction());
-        assertEquals(Blocks.STONE.defaultBlockState(), chiseled.interior());
+        assertEquals(Blocks.CHISELED_STONE_BRICKS.defaultBlockState(), TestSettings.state(chiseled.junction()));
+        assertEquals(Blocks.STONE.defaultBlockState(), TestSettings.state(chiseled.interior()));
     }
 
     @Test
     void shippedEntriesTakeTheirInteriorAsJunctionBlock() {
         for (String name : ShippedShaftData.VARIATIONS) {
             ShaftVariation variation = ShippedShaftData.variation(name);
-            assertEquals(variation.interior(), variation.junction(), name);
+            assertEquals(TestSettings.state(variation.interior()), TestSettings.state(variation.junction()), name);
         }
     }
 

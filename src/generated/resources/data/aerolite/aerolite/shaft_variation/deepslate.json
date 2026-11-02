@@ -4,21 +4,33 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:deepslate",
-    "Properties": {
-      "axis": "y"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:deepslate",
+      "Properties": {
+        "axis": "y"
+      }
     }
   },
   "junction": {
-    "Name": "minecraft:deepslate",
-    "Properties": {
-      "axis": "y"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:deepslate",
+      "Properties": {
+        "axis": "y"
+      }
     }
   },
   "path": {
-    "Name": "minecraft:polished_deepslate"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:polished_deepslate"
+    }
   },
   "wall": {
-    "Name": "minecraft:deepslate_bricks"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:deepslate_bricks"
+    }
   }
 }

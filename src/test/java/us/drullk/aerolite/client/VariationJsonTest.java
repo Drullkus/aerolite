@@ -1,5 +1,6 @@
 package us.drullk.aerolite.client;
 
+import us.drullk.aerolite.world.TestSettings;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.world.level.block.Blocks;
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 class VariationJsonTest {
 
@@ -83,7 +85,7 @@ class VariationJsonTest {
         JsonObject object = JsonParser.parseString(this.json.exportVariation(copper)).getAsJsonObject();
         object.remove("junction");
         ShaftVariation parsed = this.json.parseVariation(object.toString()).getOrThrow();
-        assertEquals(copper.interior(), parsed.junction());
+        assertEquals(TestSettings.state(copper.interior()), TestSettings.state(parsed.junction()));
         assertEquals(copper.withJunction(copper.interior()), parsed);
     }
 

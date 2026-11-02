@@ -6,6 +6,7 @@ import imgui.ImGuiStyle;
 import imgui.ImGuiViewport;
 import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiHoveredFlags;
+import imgui.flag.ImGuiInputTextFlags;
 import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImString;
 import net.minecraft.client.resources.language.I18n;
@@ -22,11 +23,13 @@ import java.util.List;
  * An ImGui text field for one block state. While it has focus and text, a list of matches with item icons shows below it.
  * The list is a window over the panel, so it moves no other widget. It scrolls when the space below the field is too short.
  * A click on a match sets the text, parses it and returns the state.
+ * A read-only field shows the type id of a provider that has no editor.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  */
 final class ImGuiBlockField {
 
@@ -87,6 +90,17 @@ final class ImGuiBlockField {
             this.listInUse = false;
         }
         return result;
+    }
+
+    /** Draws the text in a field that takes no input. No match list shows. */
+    void drawReadOnly(String id, String text) {
+        this.text.set(text);
+        this.shown = null;
+        this.valid = true;
+        this.open = false;
+        this.listInUse = false;
+        ImGui.setNextItemWidth(-1);
+        ImGui.inputText(id, this.text, ImGuiInputTextFlags.ReadOnly);
     }
 
     @Nullable

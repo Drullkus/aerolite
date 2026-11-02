@@ -6,29 +6,33 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
- * One set of shaft blocks, maze bias and decay values. The registry {@code aerolite:shaft_variation} holds the shipped variations.
+ * One set of shaft block providers, maze bias and decay values. The registry {@code aerolite:shaft_variation} holds the shipped variations.
+ * Two variations are equal when {@link StateProviders#same} holds for each provider.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  *
  * @param bias             the weight of axis edges in the maze sampler; ring edges get one minus this weight
  * @param decayScale       the size of one decay region along a shaft, a power of two
  * @param decayThreshold   decay noise below the negative threshold keeps only maze walls, above it only maze paths
  * @param erosionThreshold decay noise beyond this threshold in either direction erodes the shaft and its junction boxes
- * @param interior         the shaft interior block
- * @param junction         the block of the bezel of a junction
- * @param wall             the maze wall block
- * @param path             the maze path block
+ * @param interior         the provider of the shaft interior block
+ * @param junction         the provider of the block of the bezel of a junction
+ * @param wall             the provider of the maze wall block
+ * @param path             the provider of the maze path block
  */
 public record ShaftVariation(float bias, int decayScale, float decayThreshold, float erosionThreshold,
-                             BlockState interior, BlockState junction, BlockState wall, BlockState path) {
+                             BlockStateProvider interior, BlockStateProvider junction, BlockStateProvider wall, BlockStateProvider path) {
 
     public static final float MIN_BIAS = 0.05F;
     public static final float MAX_BIAS = 0.95F;
@@ -55,7 +59,7 @@ public record ShaftVariation(float bias, int decayScale, float decayThreshold, f
 
     /**
      * The variation fields, whose missing decay fields take the given values. The fields are always written.
-     * A missing junction block takes the interior block.
+     * Each block field reads a provider object or a bare block state. A missing junction provider takes the interior provider.
      * A save whose erosion threshold is not above its decay threshold loads with the erosion threshold one step above it.
      */
     public static MapCodec<ShaftVariation> mapCodec(int decayScale, float decayThreshold, float erosionThreshold) {
@@ -64,16 +68,16 @@ public record ShaftVariation(float bias, int decayScale, float decayThreshold, f
                 AeroliteCodecs.defaultedField(DECAY_SCALE_CODEC, "decay_scale", decayScale).forGetter(ShaftVariation::decayScale),
                 AeroliteCodecs.defaultedField(Codec.floatRange(0, 1), "decay_threshold", decayThreshold).forGetter(ShaftVariation::decayThreshold),
                 AeroliteCodecs.defaultedField(Codec.floatRange(THRESHOLD_STEP, 1), "erosion_threshold", erosionThreshold).forGetter(ShaftVariation::erosionThreshold),
-                BlockState.CODEC.fieldOf("interior").forGetter(ShaftVariation::interior),
-                BlockState.CODEC.optionalFieldOf("junction").forGetter(variation -> Optional.of(variation.junction())),
-                BlockState.CODEC.fieldOf("wall").forGetter(ShaftVariation::wall),
-                BlockState.CODEC.fieldOf("path").forGetter(ShaftVariation::path)
+                StateProviders.CODEC.fieldOf("interior").forGetter(ShaftVariation::interior),
+                StateProviders.CODEC.optionalFieldOf("junction").forGetter(variation -> Optional.of(variation.junction())),
+                StateProviders.CODEC.fieldOf("wall").forGetter(ShaftVariation::wall),
+                StateProviders.CODEC.fieldOf("path").forGetter(ShaftVariation::path)
         ).apply(instance, (bias, scale, decay, erosion, interior, junction, wall, path) ->
                 new ShaftVariation(bias, scale, decay, erosion, interior, junction.orElse(interior), wall, path))).xmap(ShaftVariation::withErosionAboveDecay, variation -> variation);
     }
 
-    /** A variation with the default decay values. Its junction block is its interior block. */
-    public static ShaftVariation standard(float bias, BlockState interior, BlockState wall, BlockState path) {
+    /** A variation with the default decay values. Its junction provider is its interior provider. */
+    public static ShaftVariation standard(float bias, BlockStateProvider interior, BlockStateProvider wall, BlockStateProvider path) {
         return new ShaftVariation(bias, DEFAULT_DECAY_SCALE, DEFAULT_DECAY_THRESHOLD, DEFAULT_EROSION_THRESHOLD, interior, interior, wall, path);
     }
 
@@ -108,20 +112,55 @@ public record ShaftVariation(float bias, int decayScale, float decayThreshold, f
         return new ShaftVariation(this.bias, this.decayScale, this.decayThreshold, threshold, this.interior, this.junction, this.wall, this.path);
     }
 
-    public ShaftVariation withInterior(BlockState interior) {
+    public ShaftVariation withInterior(BlockStateProvider interior) {
         return new ShaftVariation(this.bias, this.decayScale, this.decayThreshold, this.erosionThreshold, interior, this.junction, this.wall, this.path);
     }
 
-    public ShaftVariation withJunction(BlockState junction) {
+    public ShaftVariation withInterior(BlockState interior) {
+        return this.withInterior(BlockStateProvider.simple(interior));
+    }
+
+    public ShaftVariation withJunction(BlockStateProvider junction) {
         return new ShaftVariation(this.bias, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interior, junction, this.wall, this.path);
     }
 
-    public ShaftVariation withWall(BlockState wall) {
+    public ShaftVariation withJunction(BlockState junction) {
+        return this.withJunction(BlockStateProvider.simple(junction));
+    }
+
+    public ShaftVariation withWall(BlockStateProvider wall) {
         return new ShaftVariation(this.bias, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interior, this.junction, wall, this.path);
     }
 
-    public ShaftVariation withPath(BlockState path) {
+    public ShaftVariation withWall(BlockState wall) {
+        return this.withWall(BlockStateProvider.simple(wall));
+    }
+
+    public ShaftVariation withPath(BlockStateProvider path) {
         return new ShaftVariation(this.bias, this.decayScale, this.decayThreshold, this.erosionThreshold, this.interior, this.junction, this.wall, path);
+    }
+
+    public ShaftVariation withPath(BlockState path) {
+        return this.withPath(BlockStateProvider.simple(path));
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return this == other || other instanceof ShaftVariation variation
+                && Float.compare(this.bias, variation.bias) == 0
+                && this.decayScale == variation.decayScale
+                && Float.compare(this.decayThreshold, variation.decayThreshold) == 0
+                && Float.compare(this.erosionThreshold, variation.erosionThreshold) == 0
+                && StateProviders.same(this.interior, variation.interior)
+                && StateProviders.same(this.junction, variation.junction)
+                && StateProviders.same(this.wall, variation.wall)
+                && StateProviders.same(this.path, variation.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(this.bias, this.decayScale, this.decayThreshold, this.erosionThreshold, StateProviders.hash(this.interior),
+                StateProviders.hash(this.junction), StateProviders.hash(this.wall), StateProviders.hash(this.path));
     }
 
 }

@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:andesite"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:andesite"
+    }
   },
   "junction": {
-    "Name": "minecraft:andesite"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:andesite"
+    }
   },
   "path": {
-    "Name": "minecraft:polished_diorite"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:polished_diorite"
+    }
   },
   "wall": {
-    "Name": "minecraft:polished_andesite"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:polished_andesite"
+    }
   }
 }

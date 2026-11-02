@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:stone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:stone"
+    }
   },
   "junction": {
-    "Name": "minecraft:stone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:stone"
+    }
   },
   "path": {
-    "Name": "minecraft:cobblestone"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:cobblestone"
+    }
   },
   "wall": {
-    "Name": "minecraft:stone_bricks"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:stone_bricks"
+    }
   }
 }

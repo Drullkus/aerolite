@@ -4,15 +4,27 @@
   "decay_threshold": 0.35,
   "erosion_threshold": 0.5,
   "interior": {
-    "Name": "minecraft:packed_mud"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:packed_mud"
+    }
   },
   "junction": {
-    "Name": "minecraft:packed_mud"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:packed_mud"
+    }
   },
   "path": {
-    "Name": "minecraft:moss_block"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:moss_block"
+    }
   },
   "wall": {
-    "Name": "minecraft:mud_bricks"
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:mud_bricks"
+    }
   }
 }
