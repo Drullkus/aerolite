@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Variation Row Mock</title>
+<link rel="stylesheet" href="imgui.css">
+</head>
+<body>
+<div class="page">
+  <h1>Variation row, Aerolite 0.4.0</h1>
+  <p>The panel draws the settings of one variation in this sequence: the sliders, the pattern, the shape, the blocks and the buttons.
+    Each widget is live. The JSON under the panel shows each variation as Copy writes it.</p>
+  <div class="controls">
+    <label>Panel width <input id="width" type="range" min="240" max="600" step="1" value="360"> <span id="width-value"></span> units</label>
+    <label><input id="show-clip" type="checkbox"> Outline clipped items</label>
+    <label title="Half indent under Pattern, no indent under Surface paths, Strength, short Seam entries, the label Surface, the button Remove"><input id="narrow" type="checkbox"> Narrow width proposal</label>
+    <div class="clip-report" id="clip-report"></div>
+  </div>
+  <div id="mock"></div>
+</div>
+<script src="imgui.js"></script>
+<script>
+'use strict';
+
+const DECAY_SCALES = [32, 64, 128, 256, 512, 1024];
+const PATTERNS = [
+  ['bricks', 'Bricks'], ['mazes', 'Mazes'], ['tiles', 'Tiles'], ['scales', 'Scales'], ['chaos', 'Chaos'],
+];
+const MAZE_TYPES = [['uniform', 'Uniform'], ['serpentine', 'Serpentine'], ['ribs', 'Ribs'], ['lines', 'Lines'], ['gilbert', 'Gilbert']];
+const SEAMS = [['random_per_segment', 'Random per segment'], ['seeded_per_segment', 'Seeded per segment'], ['per_pillar', 'Per pillar']];
+const SHORT_SEAMS = [['random_per_segment', 'Random'], ['seeded_per_segment', 'Seeded'], ['per_pillar', 'Per pillar']];
+const BRICK_SIZES = [['small', 'Small'], ['jumbled', 'Jumbled'], ['large', 'Large']];
+const TILE_SIZES = [['small', 'Small'], ['large', 'Large']];
+const STAGGERS = [['none', 'None'], ['x', 'X'], ['y', 'Y']];
+const CELLS = [['delaunay', 'Delaunay'], ['voronoi', 'Voronoi']];
+const SHAPES = [['pillar', 'Pillar'], ['i_beam', 'I-beam'], ['bridge', 'Bridge']];
+const BLOCK_FIELDS = [
+  ['wall', 'Wall'], ['path', 'Path'], ['interior', 'Interior'], ['junction', 'Junction'], ['surface_path', 'Surface path'],
+];
+
+let nextUid = 0;
+
+function newVariation(overrides) {
+  const v = {
+    uid: nextUid++,
+    weight: 8, bias: 9, decayScale: 1, decay: 7, erosion: 10,
+    pattern: 'mazes',
+    mazes: { type: 'uniform', strength: 10, seam: 'random_per_segment' },
+    bricks: { size: 'large' },
+    tiles: { size: 'large', stagger: 'none', encased: false },
+    chaos: { cells: 'voronoi', spacing: 6, jitter: 10, corner: 2 },
+    loops: { allow: true, share: 5 },
+    surface: { paths: false, cutting: false, overTails: false },
+    shape: 'pillar',
+    blocks: { wall: 'stone_bricks', path: 'gravel', interior: 'stone', junction: 'stone', surface_path: 'dirt_path', trusses: 'chain' },
+  };
+  return Object.assign(v, overrides || {});
+}
+
+const variations = [
+  newVariation(),
+  newVariation({
+    weight: 2, bias: 13, decay: 5, erosion: 12, pattern: 'tiles', shape: 'bridge',
+    blocks: { wall: 'deepslate_bricks', path: 'tuff', interior: 'deepslate', junction: 'polished_andesite', surface_path: 'gravel', trusses: 'iron_bars' },
+  }),
+];
+let panelWidth = 360;
+let narrow = false;
+
+function label(list, value) { return list.find(e => e[0] === value)[1]; }
+function items(list, extra) { return list.map(([value, text]) => Object.assign({ value, label: text }, extra ? extra(value) : {})); }
+function round(x) { return Math.round(x * 1000) / 1000; }
+
+function biasLabel(step) {
+  const percent = 5 + 5 * step;
+  const word = percent < 50 ? 'ringwise' : percent === 50 ? 'uniform' : 'lengthwise';
+  return percent + '% (' + word + ')';
+}
+
+function setWeight(v, weight) {
+  const othersPositive = variations.some(o => o !== v && o.weight > 0);
+  v.weight = weight === 0 && !othersPositive ? 1 : weight;
+}
+
+// ------------------------------------------------------------------ JSON
+
+function variationJson(v) {
+  const o = {
+    bias: round(0.05 + 0.05 * v.bias),
+    decay_scale: DECAY_SCALES[v.decayScale],
+    decay_threshold: round(v.decay * 0.05),
+    erosion_threshold: round(v.erosion * 0.05),
+  };
+  const p = { type: v.pattern };
+  if (v.pattern === 'mazes') {
+    p.maze = v.mazes.type;
+    if (v.mazes.type !== 'uniform') p.strength = round(v.mazes.strength * 0.05);
+    if (v.mazes.type === 'ribs') p.seam = v.mazes.seam;
+  } else {
+    if (v.pattern === 'bricks') p.size = v.bricks.size;
+    if (v.pattern === 'tiles') Object.assign(p, { size: v.tiles.size, stagger: v.tiles.stagger, encased: v.tiles.encased });
+    if (v.pattern === 'chaos') {
+      Object.assign(p, { cells: v.chaos.cells, node_spacing: v.chaos.spacing, jitter: round(v.chaos.jitter * 0.05), corner_radius: v.chaos.corner / 2 });
+    }
+    p.allow_loops = v.loops.allow;
+    if (v.loops.allow) p.loop_share = round(v.loops.share * 0.05);
+    p.surface_paths = v.surface.paths;
+    if (v.surface.paths) {
+      p.cutting = v.surface.cutting;
+      if (v.pattern === 'scales') p.paths_over_tails = v.surface.overTails;
+    }
+  }
+  o.pattern = p;
+  o.shape = v.shape;
+  o.interior = Im.blockJson(v.blocks.interior);
+  o.junction = Im.blockJson(v.blocks.junction);
+  o.wall = Im.blockJson(v.blocks.wall);
+  o.path = Im.blockJson(v.blocks.path);
+  o.surface_path = Im.blockJson(v.blocks.surface_path);
+  if (v.shape === 'bridge') o.trusses = Im.blockJson(v.blocks.trusses);
+  return o;
+}
+
+function need(cond, message) { if (!cond) throw new Error(message); }
+function step(value, scale, min, max, name) {
+  need(typeof value === 'number', name + ' is no number');
+  return Math.min(max, Math.max(min, Math.round(value / scale)));
+}
+function choice(list, value, name) {
+  need(list.some(e => e[0] === value), name + ': unknown value ' + JSON.stringify(value));
+  return value;
+}
+
+/** Reads one variation. The weight of the row stays. */
+function variationFromJson(json, into) {
+  need(json && typeof json === 'object', 'Not a JSON object');
+  const v = newVariation({ uid: into.uid, weight: into.weight });
+  nextUid--;
+  v.bias = step(json.bias - 0.05, 0.05, 0, 18, 'bias');
+  const scale = DECAY_SCALES.indexOf(json.decay_scale);
+  need(scale >= 0, 'decay_scale must be a power of two from 32 to 1024');
+  v.decayScale = scale;
+  v.decay = step(json.decay_threshold, 0.05, 0, 19, 'decay_threshold');
+  v.erosion = Math.max(v.decay + 1, step(json.erosion_threshold, 0.05, 1, 20, 'erosion_threshold'));
+  const p = json.pattern || { type: 'mazes', maze: 'uniform' };
+  v.pattern = choice(PATTERNS, p.type, 'pattern.type');
+  if (v.pattern === 'mazes') {
+    v.mazes.type = choice(MAZE_TYPES, p.maze || 'uniform', 'pattern.maze');
+    if (p.strength !== undefined) v.mazes.strength = step(p.strength, 0.05, 0, 20, 'pattern.strength');
+    if (p.seam !== undefined) v.mazes.seam = choice(SEAMS, p.seam, 'pattern.seam');
+  } else {
+    if (p.size !== undefined && v.pattern === 'bricks') v.bricks.size = choice(BRICK_SIZES, p.size, 'pattern.size');
+    if (v.pattern === 'tiles') {
+      if (p.size !== undefined) v.tiles.size = choice(TILE_SIZES, p.size, 'pattern.size');
+      if (p.stagger !== undefined) v.tiles.stagger = choice(STAGGERS, p.stagger, 'pattern.stagger');
+      v.tiles.encased = !!p.encased;
+      fixStagger(v.tiles);
+    }
+    if (v.pattern === 'chaos') {
+      if (p.cells !== undefined) v.chaos.cells = choice(CELLS, p.cells, 'pattern.cells');
+      if (p.node_spacing !== undefined) v.chaos.spacing = step(p.node_spacing, 1, 2, 16, 'pattern.node_spacing');
+      if (p.jitter !== undefined) v.chaos.jitter = step(p.jitter, 0.05, 0, 20, 'pattern.jitter');
+      if (p.corner_radius !== undefined) v.chaos.corner = step(p.corner_radius, 0.5, 0, 8, 'pattern.corner_radius');
+    }
+    v.loops.allow = p.allow_loops !== false;
+    if (p.loop_share !== undefined) v.loops.share = step(p.loop_share, 0.05, 0, 20, 'pattern.loop_share');
+    v.surface.paths = !!p.surface_paths;
+    v.surface.cutting = !!p.cutting;
+    v.surface.overTails = !!p.paths_over_tails;
+  }
+  v.shape = choice(SHAPES, json.shape || 'pillar', 'shape');
+  for (const name of ['interior', 'wall', 'path']) {
+    const b = Im.blockFromJson(json[name]);
+    need(b, name + ' is no known block state');
+    v.blocks[name] = b;
+  }
+  v.blocks.junction = Im.blockFromJson(json.junction) || v.blocks.interior;
+  v.blocks.surface_path = Im.blockFromJson(json.surface_path) || into.blocks.surface_path;
+  v.blocks.trusses = Im.blockFromJson(json.trusses) || into.blocks.trusses;
+  return v;
+}
+
+// ------------------------------------------------------------------ widgets
+
+/** Encased tiles cannot stagger along X. Large tiles have no X stagger. */
+function fixStagger(tiles) {
+  if (tiles.stagger === 'x' && (tiles.encased || tiles.size === 'large')) tiles.stagger = 'none';
+}
+
+function percentSlider(id, name, value, onChange, tip) {
+  Im.slider(id, { value, min: 0, max: 20, label: name + ': ' + value * 5 + '%', tip }, onChange);
+}
+
+function drawLoopsAndSurface(v) {
+  Im.checkbox('allow_loops', 'Allow loops', v.loops.allow, x => { v.loops.allow = x; });
+  if (v.loops.allow) {
+    Im.indent(() => percentSlider('loop_share', 'Loop Share', v.loops.share, x => { v.loops.share = x; }));
+  }
+  Im.checkbox('surface_paths', 'Surface paths', v.surface.paths, x => { v.surface.paths = x; });
+  if (v.surface.paths) {
+    const children = () => {
+      Im.checkbox('cutting', 'Cutting', v.surface.cutting, x => { v.surface.cutting = x; });
+      if (v.pattern === 'scales') {
+        Im.checkbox('paths_over_tails', 'Paths over tails', v.surface.overTails, x => { v.surface.overTails = x; });
+      }
+    };
+    if (narrow) children(); else Im.indent(children);
+  }
+}
+
+function drawPattern(v) {
+  if (v.pattern === 'mazes') {
+    const m = v.mazes;
+    Im.combo('maze_type', { preview: 'Type: ' + label(MAZE_TYPES, m.type), value: m.type, items: items(MAZE_TYPES) }, x => { m.type = x; });
+    if (m.type !== 'uniform') {
+      percentSlider('strength', narrow ? 'Strength' : 'Pattern Strength', m.strength, x => { m.strength = x; });
+    }
+    if (m.type === 'ribs') {
+      const seams = narrow ? SHORT_SEAMS : SEAMS;
+      Im.combo('seam', {
+        preview: 'Seam: ' + label(seams, m.seam), value: m.seam,
+        items: items(seams, value => narrow ? { tip: label(SEAMS, value) } : {}),
+        tip: narrow ? label(SEAMS, m.seam) : null,
+      }, x => { m.seam = x; });
+    }
+    return;
+  }
+  if (v.pattern === 'bricks') {
+    Im.combo('brick_size', { preview: 'Size: ' + label(BRICK_SIZES, v.bricks.size), value: v.bricks.size, items: items(BRICK_SIZES) },
+      x => { v.bricks.size = x; });
+  }
+  if (v.pattern === 'tiles') {
+    const t = v.tiles;
+    Im.combo('tile_size', { preview: 'Size: ' + label(TILE_SIZES, t.size), value: t.size, items: items(TILE_SIZES) },
+      x => { t.size = x; fixStagger(t); });
+    Im.combo('stagger', {
+      preview: 'Stagger: ' + label(STAGGERS, t.stagger),
+      value: t.stagger,
+      items: items(STAGGERS, value => value !== 'x' ? {} : {
+        hidden: t.size === 'large',
+        off: t.encased,
+        tip: t.encased ? 'Encased tiles do not stagger along X' : null,
+      }),
+    }, x => { t.stagger = x; });
+    Im.checkbox('encased', 'Encased', t.encased, x => { t.encased = x; fixStagger(t); });
+  }
+  if (v.pattern === 'chaos') {
+    const c = v.chaos;
+    Im.combo('cells', { preview: 'Cells: ' + label(CELLS, c.cells), value: c.cells, items: items(CELLS) }, x => { c.cells = x; });
+    Im.slider('node_spacing', {
+      value: c.spacing, min: 2, max: 16, label: 'Node Spacing: ' + c.spacing,
+      tip: 'Placeholder range: 2 to 16 blocks, step 1',
+    }, x => { c.spacing = x; });
+    percentSlider('jitter', 'Jitter', c.jitter, x => { c.jitter = x; }, 'Placeholder range: 0% to 100% of the node spacing, step 5%');
+    Im.slider('corner_radius', {
+      value: c.corner, min: 0, max: 8, label: 'Corner Radius: ' + (c.corner / 2).toFixed(1),
+      tip: 'Placeholder range: 0 to 4 blocks, step 0.5',
+    }, x => { c.corner = x; });
+  }
+  drawLoopsAndSurface(v);
+}
+
+function drawVariation(v) {
+  Im.slider('weight', { value: v.weight, min: 0, max: 16, label: 'Weight: ' + v.weight }, x => setWeight(v, x));
+  Im.slider('bias', { value: v.bias, min: 0, max: 18, label: 'Maze Bias: ' + biasLabel(v.bias) }, x => { v.bias = x; });
+  Im.slider('decay_scale', { value: v.decayScale, min: 0, max: 5, label: 'Maze Decay Scale: ' + DECAY_SCALES[v.decayScale] },
+    x => { v.decayScale = x; });
+  percentSlider('decay_threshold', 'Maze Decay Threshold', v.decay, x => {
+    v.decay = Math.min(x, 19);
+    if (v.erosion < v.decay + 1) v.erosion = v.decay + 1;
+  });
+  Im.slider('erosion_threshold', { value: v.erosion, min: 1, max: 20, label: 'Erosion Threshold: ' + v.erosion * 5 + '%' }, x => {
+    v.erosion = x;
+    if (v.decay > x - 1) v.decay = x - 1;
+  });
+  Im.combo('pattern', { preview: 'Pattern: ' + label(PATTERNS, v.pattern), value: v.pattern, items: items(PATTERNS) },
+    x => { v.pattern = x; });
+  Im.indent(() => drawPattern(v), narrow ? 10 : undefined);
+  Im.combo('shape', { preview: 'Shape: ' + label(SHAPES, v.shape), value: v.shape, items: items(SHAPES) }, x => { v.shape = x; });
+  Im.text('Blocks');
+  const fields = v.shape === 'bridge' ? BLOCK_FIELDS.concat([['trusses', 'Trusses']]) : BLOCK_FIELDS;
+  Im.labelGrid(() => {
+    for (const [name, full] of fields) {
+      const text = narrow && name === 'surface_path' ? 'Surface' : full;
+      Im.labelRow(text, () => Im.blockField(name, { value: v.blocks[name], hint: full }, b => { v.blocks[name] = b; }));
+    }
+  });
+  Im.line(() => {
+    Im.button('copy', 'Copy', () => {
+      Im.copyText(JSON.stringify(variationJson(v)));
+    }, { tip: 'Export this variation to the clipboard' });
+    Im.button('paste', 'Paste', () => {
+      Im.pasteText(t => {
+        try {
+          const read = variationFromJson(JSON.parse(t), v);
+          variations[variations.indexOf(v)] = read;
+        } catch (err) {
+          Im.toast('Paste failed', err.message);
+        }
+      });
+    }, { tip: 'Import this variation from the clipboard' });
+    Im.button('remove', narrow ? 'Remove' : 'Remove Variation', () => {
+      variations.splice(variations.indexOf(v), 1);
+      if (!variations.some(o => o.weight > 0)) variations[0].weight = 1;
+    }, { off: variations.length < 2 });
+  });
+}
+
+function draw() {
+  Im.panel(panelWidth, () => {
+    if (Im.collapsingHeader('overworld', 'Overworld', true, { radio: true, right: 'Remove' })) {
+      Im.withId('overworld', () => {
+        Im.treeNode('placement', 'Pillar Placement', false, () => {
+          Im.text('(placement sliders, unchanged)', { dim: true });
+        });
+        Im.treeNode('variations', 'Pillar Variations', true, () => {
+          for (const v of variations) {
+            Im.withId(v.uid, () => Im.box(() => drawVariation(v)));
+            Im.spacing();
+          }
+          Im.button('add_variation', 'Add Variation', () => {
+            const copy = JSON.parse(JSON.stringify(variations[0]));
+            copy.uid = nextUid++;
+            variations.push(copy);
+          });
+        });
+      });
+    }
+  });
+  for (const [index, v] of variations.entries()) {
+    Im.html('h2', null, 'Variation ' + (index + 1) + ' JSON (weight ' + v.weight + ' stays in the list)');
+    Im.html('div', 'json-view', JSON.stringify(variationJson(v), null, 2));
+  }
+}
+
+function report() {
+  const clipped = Im.markClipped(document.getElementById('mock'));
+  const unique = [...new Set(clipped)];
+  document.getElementById('clip-report').innerHTML = unique.length
+    ? '<b>' + unique.length + ' clipped at ' + panelWidth + ' units:</b> ' + unique.map(s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join(' | ')
+    : 'Nothing clipped at ' + panelWidth + ' units.';
+}
+
+const widthInput = document.getElementById('width');
+const widthValue = document.getElementById('width-value');
+const clipInput = document.getElementById('show-clip');
+const narrowInput = document.getElementById('narrow');
+function readControls() {
+  panelWidth = Number(widthInput.value);
+  widthValue.textContent = panelWidth;
+  document.body.classList.toggle('show-clip', clipInput.checked);
+  narrow = narrowInput.checked;
+}
+const params = new URLSearchParams(location.search);
+if (params.has('width')) widthInput.value = params.get('width');
+if (params.has('clip')) clipInput.checked = true;
+widthInput.addEventListener('input', () => { readControls(); Im.render(); });
+clipInput.addEventListener('change', () => { readControls(); Im.render(); });
+narrowInput.addEventListener('change', () => { readControls(); Im.render(); });
+readControls();
+Im.mount(document.getElementById('mock'), draw, report);
+</script>
+</body>
+</html>
