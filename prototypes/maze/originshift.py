@@ -45,7 +45,12 @@ defines a set of pattern edges on the segment graph. The weight of an edge is
 its pattern factor times its class factor. The pattern factor is 1 for a
 pattern edge and 1 - s for any other edge. At s = 1 the sampler does not run,
 and the pattern edges are the segment edges. The pattern types are uniform,
-serpentine, ribs, lines and gilbert.
+serpentine, ribs, lines and gilbert. Lines takes no strength and no bias. It
+always paints its grooves, on every non-corner ring position or on every
+second one. A serpentine connector turns into each neighbor at the gap of the
+facing neighbor ruling. Gilbert at s = 1 joins its curve pieces into one tree.
+
+A node carves only when it carries an edge.
 
 Written by Claude Code; conversation transcript:
 llm/transcripts/transcript_2026-10-28_22-52_44feb929-a98e-4826-8aa2-5d56973d077a.md
@@ -100,16 +105,17 @@ SEEDED_SEAM = "seeded"
 PILLAR_SEAM = "pillar"
 SEAMS = (RANDOM_SEAM, SEEDED_SEAM, PILLAR_SEAM)
 
+LINE_SPACINGS = (1, 2)
 STRENGTH_STEPS = 20
 COMPARE_STRENGTHS = (0.0, 0.5, 0.9, 1.0)
 
 # p is the axis chance of the class rule or the axis edge weight of the degree rule.
 # start and scaled apply to Origin Shift only. pattern, strength and seam apply to Wilson's algorithm only.
-# pillar is the ring position of the pillar seam, or None.
+# pillar is the ring position of the pillar seam, or None. spacing is the line spacing of lines.
 Bias = namedtuple(
     "Bias",
-    ("p", "rule", "start", "scaled", "pattern", "strength", "seam", "pillar"),
-    defaults=(BFS_START, False, UNIFORM_PATTERN, 0.0, RANDOM_SEAM, None),
+    ("p", "rule", "start", "scaled", "pattern", "strength", "seam", "pillar", "spacing"),
+    defaults=(BFS_START, False, UNIFORM_PATTERN, 0.0, RANDOM_SEAM, None, 1),
 )
 
 
@@ -453,8 +459,12 @@ def edge_key(a, b):
 
 
 def pattern_strength(bias):
-    """The uniform pattern has no pattern edge, so its strength has no effect."""
-    return 0.0 if bias.pattern == UNIFORM_PATTERN else bias.strength
+    """Uniform has no pattern edge, so it acts at 0. Lines always paints its grooves, so it acts at 1."""
+    if bias.pattern == UNIFORM_PATTERN:
+        return 0.0
+    if bias.pattern == LINES_PATTERN:
+        return 1.0
+    return bias.strength
 
 
 def pattern_random(rng):
@@ -469,18 +479,31 @@ def with_pillar(bias, key):
     return bias._replace(pillar=random.Random(f"{key}:pillar").randrange(RING))
 
 
-def serpentine_edges(g, rng):
+def serpentine_turns(rng, count):
+    """The (gap, bridge) of each of count rulings: the gap, then the bridge end when both gap ends are not corners."""
+    turns = []
+    for _ in range(count):
+        gap = rng.randrange(RING)
+        ends = [v for v in (gap, (gap + 1) % RING) if not is_corner(v)]
+        turns.append((gap, ends[rng.randrange(2)] if len(ends) == 2 else ends[0]))
+    return turns
+
+
+def neighbor_bridge(rng, count):
+    """The bridge of the last of count rulings of a neighbor segment. rng is the fresh segment random of that neighbor."""
+    return serpentine_turns(pattern_random(rng), count)[-1][1]
+
+
+def serpentine_edges(g, rng, left_bridge=None):
     """Ring paths with one gap per ruling, joined by one axis edge next to the gap.
 
-    Draws: per ruling the gap, then the bridge end when both gap ends are not corners.
-    Then the left virtual edge, then the row ends of each patch, then one crossing per group.
+    Draws: the turns of the rulings, then the left virtual edge when left_bridge is None,
+    then the row ends of each patch, then one crossing per group.
+    left_bridge is the bridge of the facing ruling of the neighbor before the segment.
     """
     edges = []
     rulings = g.rulings
-    for r, ruling in enumerate(rulings):
-        gap = rng.randrange(RING)
-        ends = [v for v in (gap, (gap + 1) % RING) if not is_corner(v)]
-        bridge = ends[rng.randrange(2)] if len(ends) == 2 else ends[0]
+    for r, (ruling, (gap, bridge)) in enumerate(zip(rulings, serpentine_turns(rng, len(rulings)))):
         for v in range(RING):
             if v != gap:
                 edges.append(edge_key(ruling[v], ruling[(v + 1) % RING]))
@@ -488,8 +511,10 @@ def serpentine_edges(g, rng):
         if nxt >= 0 and nxt in g.axis[ruling[bridge]]:
             edges.append(edge_key(ruling[bridge], nxt))
     if g.left >= 0:
-        positions = [v for v in range(RING) if not is_corner(v)]
-        edges.append(edge_key(g.left, rulings[0][positions[rng.randrange(len(positions))]]))
+        if left_bridge is None:
+            positions = [v for v in range(RING) if not is_corner(v)]
+            left_bridge = positions[rng.randrange(len(positions))]
+        edges.append(edge_key(g.left, rulings[0][left_bridge]))
     for index, axis_on_i, m in g.patches:
         def node(a, r):
             return index[(a, r)] if axis_on_i else index[(r, a)]
@@ -514,14 +539,87 @@ def ribs_root(g, rng, bias):
     return g.rulings[0][bias.pillar]
 
 
-def pattern_edges(g, rng, bias):
+def groove_positions(spacing):
+    """The ring positions of the grooves: every non-corner position, or every second one in ring sequence."""
+    return [v for v in range(RING) if not is_corner(v)][::spacing]
+
+
+def lines_edges(g, spacing):
+    """The axis edges of the grooves. A patch line is a groove when a crossing of it lands on a groove node."""
+    axis_edges = [(a, b) for a in range(len(g.adj)) for b in g.axis[a] if a < b]
+    if spacing == 1:
+        return axis_edges
+    grooves = set(groove_positions(spacing))
+    position = {node: v for ruling in g.rulings for v, node in enumerate(ruling)}
+    patch_line = {}
+    for k, (index, axis_on_i, _) in enumerate(g.patches):
+        for (i, j), node in index.items():
+            patch_line[node] = (k, j if axis_on_i else i)
+    crossings = set()
+    lines = set()
+    for group in g.groups:
+        for p, other in group:
+            # A crossing onto a node without a ruling counts as a groove.
+            if position.get(other) is None or position[other] in grooves:
+                crossings.add(edge_key(p, other))
+                lines.add(patch_line[p])
+    edges = []
+    for a, b in axis_edges:
+        if a in patch_line and b in patch_line:
+            keep = patch_line[a] in lines
+        elif a in patch_line or b in patch_line:
+            keep = (a, b) in crossings
+        else:
+            keep = position.get(a, position.get(b)) in grooves
+        if keep:
+            edges.append((a, b))
+    return edges
+
+
+def join_pieces(g, rng, edges):
+    """Join the pieces of edges into one tree of the segment graph.
+
+    A union-find pass runs over the graph edges that touch no virtual node and are no crossing,
+    in a sequence that rng shuffles. Then each virtual node and each crossing group adds one edge.
+    """
+    n = len(g.adj)
+    crossings = {edge_key(a, b) for group in g.groups for a, b in group}
+    virtual = [x for x in (g.left, g.right) if x >= 0]
+    uf = list(range(n))
+
+    def find(a):
+        while uf[a] != a:
+            uf[a] = uf[uf[a]]
+            a = uf[a]
+        return a
+
+    out = list(edges)
+    for a, b in edges:
+        uf[find(a)] = find(b)
+    candidates = [(a, b) for a in range(n) for b in g.adj[a]
+                  if a < b and a not in virtual and b not in virtual and (a, b) not in crossings]
+    rng.shuffle(candidates)
+    for a, b in candidates:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            uf[ra] = rb
+            out.append((a, b))
+    for x in virtual:
+        out.append(edge_key(x, g.adj[x][rng.randrange(len(g.adj[x]))]))
+    for group in g.groups:
+        if group:
+            out.append(edge_key(*group[rng.randrange(len(group))]))
+    return out
+
+
+def pattern_edges(g, rng, bias, left_bridge=None):
     """The pattern edges of the bias pattern on g, as sorted node pairs."""
     if bias.pattern == SERPENTINE_PATTERN:
-        return serpentine_edges(g, rng)
+        return serpentine_edges(g, rng, left_bridge)
     if bias.pattern == RIBS_PATTERN:
         return [edge_key(n, p) for n, p in parent_edges(bfs_tree(g, ribs_root(g, rng, bias)))]
     if bias.pattern == LINES_PATTERN:
-        return [(a, b) for a in range(len(g.adj)) for b in g.axis[a] if a < b]
+        return lines_edges(g, bias.spacing)
     if bias.pattern == GILBERT_PATTERN:
         edges = []
         for run in ruling_runs(g):
@@ -572,15 +670,21 @@ def pattern_wilson(g, rng, bias, pattern):
     return parent
 
 
-def sample_edges(g, rng, sampler, steps_per_node, bias, trace=None):
-    """Segment edges as node pairs. At strength 0 the pairs of sample. At strength 1 the pattern edges."""
+def sample_edges(g, rng, sampler, steps_per_node, bias, trace=None, left_bridge=None):
+    """Segment edges as node pairs. At strength 0 the pairs of sample. At strength 1 the pattern edges.
+
+    left_bridge is the serpentine bridge of the facing ruling of the neighbor before the segment, or None.
+    """
     s = pattern_strength(bias)
     if s == 0.0:
         return parent_edges(sample(g, rng, sampler, steps_per_node, bias, trace))
     if sampler != "wilson" or bias.rule != DEGREE_RULE:
         raise ValueError("a pattern needs Wilson's algorithm with the degree rule")
-    edges = pattern_edges(g, pattern_random(rng), bias)
+    prng = pattern_random(rng)
+    edges = pattern_edges(g, prng, bias, left_bridge)
     if s >= 1.0:
+        if bias.pattern == GILBERT_PATTERN:
+            return join_pieces(g, prng, edges)
         return edges
     return parent_edges(pattern_wilson(g, rng, bias, set(edges)))
 
@@ -624,6 +728,8 @@ def check_pattern(ap, bias, sampler):
     """A pattern weighs the walk of Wilson's algorithm with the degree rule. Only ribs has a seam."""
     if bias.seam != RANDOM_SEAM and bias.pattern != RIBS_PATTERN:
         ap.error("--seam needs --pattern ribs")
+    if bias.spacing != 1 and bias.pattern != LINES_PATTERN:
+        ap.error("--line-spacing needs --pattern lines")
     if bias.pattern != UNIFORM_PATTERN and (sampler != "wilson" or bias.rule != DEGREE_RULE):
         ap.error("--pattern needs --sampler wilson and --rule degree")
 
@@ -632,13 +738,24 @@ def pattern_suffix(bias):
     """File name suffix of the pattern. The uniform pattern gets none."""
     if bias.pattern == UNIFORM_PATTERN:
         return ""
+    if bias.pattern == LINES_PATTERN:
+        return "_lines" + (f"_spacing{bias.spacing}" if bias.spacing != 1 else "")
     seam = f"_{bias.seam}" if bias.pattern == RIBS_PATTERN and bias.seam != RANDOM_SEAM else ""
     return f"_{bias.pattern}{seam}_s{bias.strength:g}"
 
 
 def pattern_label(bias):
+    if bias.pattern == LINES_PATTERN:
+        return f"lines spacing {bias.spacing}"
     seam = f" {bias.seam}" if bias.pattern == RIBS_PATTERN and bias.seam != RANDOM_SEAM else ""
     return f"{bias.pattern}{seam}"
+
+
+def pattern_text(bias):
+    """The pattern and its strength in words. Lines has no strength."""
+    if bias.pattern == LINES_PATTERN:
+        return pattern_label(bias)
+    return f"{pattern_label(bias)} strength {bias.strength:g}"
 
 
 def check_scaled_steps(ap, scaled, p):
@@ -685,12 +802,12 @@ class Segment:
         self.curve = None
 
 
-def build_segment(kind, length, rng, sampler, steps_per_node, bias):
+def build_segment(kind, length, rng, sampler, steps_per_node, bias, left_bridge=None):
     with_left = kind == "connector"
     with_right = kind in ("connector", "forest")
     g, left, right = segment_graph(length, with_left, with_right)
     trace = {}
-    edges = sample_edges(g, rng, sampler, steps_per_node, bias, trace)
+    edges = sample_edges(g, rng, sampler, steps_per_node, bias, trace, left_bridge)
     seg = Segment(length)
     if "start" in trace:
         seg.start = trace["start"]
@@ -722,12 +839,21 @@ def segment_kind(layout, index):
     return layout
 
 
+def turns_at_neighbor(bias):
+    """A serpentine connector turns into its neighbor next to the gap of the facing neighbor ruling."""
+    return bias.pattern == SERPENTINE_PATTERN and pattern_strength(bias) > 0.0
+
+
 def build_layout(layout, seed, segments, length, sampler, steps_per_node, bias, first_index=0):
     bias = with_pillar(bias, f"{seed}:{layout}")
     out = []
     for k in range(first_index, first_index + segments):
         rng = seg_rng(seed, layout, k)
-        out.append(build_segment(segment_kind(layout, k), length, rng, sampler, steps_per_node, bias))
+        kind = segment_kind(layout, k)
+        left_bridge = None
+        if kind == "connector" and turns_at_neighbor(bias):
+            left_bridge = neighbor_bridge(seg_rng(seed, layout, k - 1), length)
+        out.append(build_segment(kind, length, rng, sampler, steps_per_node, bias, left_bridge))
     return out
 
 
@@ -739,9 +865,10 @@ def paint_band(segments):
     offset = 0
     for seg in segments:
         present = {n for e in seg.edges for n in e}
+        present |= {(0, v) for v in seg.left_cross} | {(seg.length - 1, v) for v in seg.right_cross}
         for u in range(seg.length):
             for v in range(RING):
-                if not is_corner(v) or (u, v) in present:
+                if (u, v) in present:
                     grid[2 * v][2 * (offset + u) + 1] = True
         for (u1, v1), (u2, v2) in seg.edges:
             if u1 == u2:
@@ -958,10 +1085,15 @@ def forest_state(nodes, edges):
     return len(uf), len(edges), components, len(edges) - len(uf) + components
 
 
-def band_state(segments):
+def walls_by_design(bias):
+    """Lines with a spacing above 1 leaves whole node columns as wall."""
+    return bias.pattern == LINES_PATTERN and bias.spacing != 1
+
+
+def band_state(segments, every_node=True):
     """forest_state of a connector band from segment 0 up to its last tree segment.
 
-    Its nodes are the non-corner nodes and the corner nodes that carry an edge.
+    Its nodes are the nodes that carry an edge, plus every non-corner node when every_node is True.
     A tree segment has no crossing, so no crossing leaves that part of the band.
     """
     if len(segments) % 2 == 0:
@@ -972,7 +1104,7 @@ def band_state(segments):
     for seg in segments:
         for u in range(seg.length):
             for v in range(RING):
-                if not is_corner(v):
+                if every_node and not is_corner(v):
                     nodes.add((offset + u, v))
         for (u1, v1), (u2, v2) in seg.edges:
             edges.append(((offset + u1, v1), (offset + u2, v2)))
@@ -991,7 +1123,9 @@ def state_text(state):
 
 
 def pattern_panels(p, pattern, seam):
-    """Label and bias of each strength of the pattern comparison."""
+    """Label and bias of each strength of the pattern comparison. Lines has a panel per line spacing."""
+    if pattern == LINES_PATTERN:
+        return [(pattern_label(b), b) for b in (Bias(p, DEGREE_RULE, pattern=pattern, spacing=k) for k in LINE_SPACINGS)]
     panels = []
     for s in COMPARE_STRENGTHS:
         bias = Bias(p, DEGREE_RULE, pattern=pattern, strength=s, seam=seam)
@@ -1005,7 +1139,7 @@ def render_compare_patterns(out_dir, seed, chunks, length, p, scale, pattern, se
     panels = pattern_panels(p, pattern, seam)
     for label, bias in panels:
         segs = build_layout("connector", seed, chunks, length, "wilson", DEFAULT_STEPS, bias)
-        print(f"{label}: connector band {state_text(band_state(segs))}")
+        print(f"{label}: connector band {state_text(band_state(segs, not walls_by_design(bias)))}")
         grid = paint_band(segs)
         name = f"band_connector_wilson{bias_suffix('wilson', bias)}{pattern_suffix(bias)}.png"
         render_band(grid, os.path.join(out_dir, name), scale)
@@ -1182,9 +1316,10 @@ def main():
     ap.add_argument("--pattern", choices=PATTERNS, default=UNIFORM_PATTERN, help="the pattern type of Wilson's algorithm")
     ap.add_argument("--strength", type=strength_value, default=0.0, help="the pattern strength, from 0 to 1 in steps of 0.05")
     ap.add_argument("--seam", choices=SEAMS, default=RANDOM_SEAM, help="the root of the ribs pattern")
-    ap.add_argument("--compare-patterns", action="store_true", help="render the connector band of the pattern at four strengths and exit")
+    ap.add_argument("--compare-patterns", action="store_true", help="render the connector band of the pattern at four strengths, or of lines at each spacing, and exit")
+    ap.add_argument("--line-spacing", type=int, choices=LINE_SPACINGS, default=1, help="node columns per groove of lines")
     args = ap.parse_args()
-    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps, args.pattern, args.strength, args.seam)
+    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps, args.pattern, args.strength, args.seam, None, args.line_spacing)
     if args.compare_patterns:
         if args.pattern == UNIFORM_PATTERN or args.rule != DEGREE_RULE:
             ap.error("--compare-patterns needs --rule degree and a --pattern other than uniform")
@@ -1221,7 +1356,7 @@ def main():
         segs = build_layout(layout, args.seed, args.chunks, args.length, args.sampler, args.steps_per_node, bias)
         name = f"band_{layout}_{args.sampler}{suffix}.png"
         if args.pattern != UNIFORM_PATTERN and layout == "connector":
-            print(f"{layout} band: {state_text(band_state(segs))}")
+            print(f"{layout} band: {state_text(band_state(segs, not walls_by_design(bias)))}")
         render_band(paint_band(segs), os.path.join(args.out, name), args.scale)
         print("wrote", name)
         render_band(paint_band(segs[:CLOSEUP_CHUNKS]), os.path.join(closeup, name), CLOSEUP_SCALE)

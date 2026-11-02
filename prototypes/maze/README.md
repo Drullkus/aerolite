@@ -129,6 +129,8 @@ The option `--strength s` sets the pattern strength. s is a value from 0 to 1 in
 - At s = 1, the sampler does not run. The pattern edges are the segment edges, with loops or several components as they come.
 - Corner leaves drop after the pattern, like after the sampler.
 - The `uniform` type has no pattern edge. The strength has no effect on it.
+- The `lines` type takes no strength and no bias. It always paints its grooves, like the other types at s = 1.
+- A node carves only when it carries an edge. A sampled tree gives every node an edge, so the earlier images stay the same.
 
 ### Pattern random
 
@@ -143,7 +145,7 @@ The option `--strength s` sets the pattern strength. s is a value from 0 to 1 in
 | `uniform` | None. |
 | `serpentine` | Each ruling is one ring path with one gap. One axis edge next to the gap joins the ruling to the next ruling. |
 | `ribs` | The breadth-first tree of the segment graph from one root. |
-| `lines` | Every axis edge of the segment graph. |
+| `lines` | The axis edges of the grooves. |
 | `gilbert` | The edges of the generalized Hilbert curve of the start trees that the graph has. |
 
 Serpentine:
@@ -152,10 +154,15 @@ Serpentine:
 - The bridge is the end of the gap that is not a corner. When neither end is a corner, the pattern random picks the end.
 - The bridge is the axis edge from the bridge position to the next ruling. A junction box cuts that axis edge, so the last ruling before a box has no bridge.
 - The bridge of the last ruling joins the right virtual node.
-- The left virtual node joins the first ruling at one non-corner position that the pattern random draws.
+- The left virtual node of a connector stands for the neighbor before it. That neighbor is a tree segment or a junction segment.
+- The connector computes the turns of that neighbor again from the pattern random of the neighbor. That random is a pure function of the seed, the pillar and the index of the neighbor.
+- The left virtual node joins the first ruling at the bridge of the last neighbor ruling. So the turn at the border sits next to the gap of the neighbor ruling, like a turn inside a segment.
+- That extra draw replays the ruling draws of the neighbor: one gap per ruling, and one end per gap with no corner end. The connector takes no value from its own pattern random for it.
+- The right border needs no extra draw. The bridge of the last connector ruling already sits next to its own gap.
 - Each patch row across the axis is one path. One axis edge at a row end joins it to the next row. The pattern random picks the end.
 - Each patch side joins its ruling by one crossing that the pattern random draws.
-- The draw sequence is the rulings, the left virtual node, the patch rows, then the patch sides.
+- The draw sequence is the rulings, the patch rows, then the patch sides.
+- In the earlier column model of the junction scene, no ruling faces the patch. There the left virtual node takes one draw after the rulings.
 - A corner node keeps its rules. It has ring edges only, and a corner leaf drops.
 
 Ribs:
@@ -168,15 +175,33 @@ Ribs:
 
 Lines:
 
-- The pattern edges hold every edge to a virtual node and every patch crossing.
-- Lines at strength s and bias P give the same distribution as the degree rule with no pattern at bias P / (P + (1 - P)(1 - s)).
-- So below s = 1, lines is a bias shift. At P = 0.5 and s = 0.9, it is the degree rule at a bias of 0.909.
+- A weighted lines pattern at strength s and bias P gives the same distribution as the degree rule at bias P / (P + (1 - P)(1 - s)). So lines takes no strength.
+- The option `--line-spacing` sets the node columns per groove. The values are 1 and 2. The default is 1.
+- With spacing 1, every non-corner ring position is a groove. The pillar has 20 grooves.
+- With spacing 1, the pattern edges are every axis edge, every edge to a virtual node and every patch crossing.
+- With spacing 2, every second non-corner ring position in ring sequence is a groove: 1, 3, 5, 8, 10, 13, 15, 17, 20 and 22. The pillar has 10 grooves.
+- With spacing 2, the faces of ring positions 1 to 5 and 13 to 17 have 3 grooves each, at the face offsets -4, 0 and 4.
+- With spacing 2, the faces of ring positions 7 to 11 and 19 to 23 have 2 grooves each, at the face offsets -2 and 2.
+- On a shaft and on a column, the faces with 3 grooves are the +Z face and the -Z face. The patches sit on those faces.
+- Inside a face, a ridge of 3 blocks stays between two grooves.
+- Across each corner, a ridge of 5 blocks stays. The corner block sits in the middle of that ridge.
+- A corner node has no axis edge, so it carries no edge and stays wall.
+- A node column that is not a groove carries no edge, so it stays wall.
+- With spacing 2, a patch line is a groove when a crossing of it lands on a groove node. That crossing is a pattern edge too.
+- With `--bezel 3`, only the center patch line has a crossing on a groove. The grooves at the face offsets -4 and 4 end at the box.
+- In the earlier column model of the junction scene, no ruling faces the patch. There every patch crossing counts as a groove.
+- `--line-spacing 2` needs `--pattern lines`.
+- With spacing 2, the stats count only the nodes that carry an edge as maze nodes.
 
 Gilbert:
 
 - The curve runs over each block of rulings that axis edges join, with its seam at the corner ring position 0.
 - The curve breaks where it steps along the axis on a corner ring position.
 - No edge to a virtual node, no patch edge and no patch crossing is a pattern edge.
+- Below s = 1, the curve edges are the pattern edges.
+- At s = 1, every curve edge stays. Then a union-find pass joins the pieces into one tree with the fewest extra edges.
+- The candidates of that pass are the graph edges that touch no virtual node and are no patch crossing. The pattern random shuffles their sequence.
+- Then each virtual node joins by one edge, and each patch side joins by one crossing. The pattern random draws each of them.
 
 ### Tree state at s = 1
 
@@ -185,14 +210,24 @@ Gilbert:
 | `uniform` | Sampled as at s = 0. | One tree. |
 | `serpentine` | One crossing per virtual node and one crossing per patch side. | One tree. |
 | `ribs` | The breadth-first tree holds the virtual nodes and the patches. | One tree. |
-| `lines` | Every crossing. Each line runs straight through the border. | A forest of straight lines. |
-| `gilbert` | No crossing. Each segment stands alone. | A forest. Each segment splits at its corner ring positions. |
+| `lines` | Every crossing of a groove. Each groove runs straight through the border. | A forest of straight grooves. |
+| `gilbert` | One crossing per virtual node and one crossing per patch side. | One tree. |
 
 - Below s = 1, every type keeps the pillar one tree. `--cluster-stats` and `--column-stats` confirm it.
 - With a pattern, the stats print one more line. It counts the pillars that are one tree over every maze node, with the mean components and the mean loops.
 - A maze node is a ruling node that is not a corner, or a patch node. A corner node counts when it carries an edge.
 - At s = 1, the stats print no line per scene that is not one tree.
-- With seed 1 and 24 chunks, the connector band at s = 1 has 20 components for `lines` and 276 components for `gilbert`.
+- With seed 1 and 24 chunks, the connector band of `lines` has 20 components with spacing 1 and 10 components with spacing 2.
+
+### Merged junction segments
+
+- `--merged-stats` puts two boxes 31 to 35 blocks apart on one shaft and on one column.
+- It draws the first box and the gap again until the junction segments of both boxes share a chunk. So one junction segment holds both boxes in every scene.
+- Only the gaps 31 and 32 can share a chunk. A gap of 33 to 35 never does.
+- It checks that each pillar is one tree over every maze node.
+- Its rows are the degree rule of Wilson's algorithm and of Origin Shift, each pattern type at s = 0.5, 0.9 and 1, each ribs seam, and lines at each spacing.
+- With `--count 100 --bezel 3`, every row is one tree in 100 of 100 shafts and 100 of 100 columns, except lines.
+- Lines is a forest in every scene, by design.
 
 ## Layouts
 
@@ -509,9 +544,31 @@ python3 prototypes/maze/junction.py --cluster-stats --count 300 --sampler wilson
 python3 prototypes/maze/junction.py --column-stats --count 60 --sampler wilson --rule degree --bezel 3 --pattern serpentine --strength 1
 ```
 
-Replace `serpentine` with `ribs`, `lines` or `gilbert` for the other types.
+Replace `serpentine` with `ribs` or `gilbert` for the other types.
+
+Print the tree state of lines at each spacing:
+
+```bash
+python3 prototypes/maze/junction.py --cluster-stats --count 300 --sampler wilson --rule degree --bezel 3 --pattern lines --line-spacing 2
+python3 prototypes/maze/junction.py --column-stats --count 60 --sampler wilson --rule degree --bezel 3 --pattern lines --line-spacing 2
+```
+
+Render the bands of lines at one spacing:
+
+```bash
+python3 prototypes/maze/originshift.py --seed 1 --chunks 24 --sampler wilson --rule degree --pattern lines --line-spacing 2
+python3 prototypes/maze/junction.py --column-band --sampler wilson --rule degree --bezel 3 --pattern lines --line-spacing 2
+```
+
+Check that two boxes in one junction segment keep the shaft and the column one tree, for every pattern:
+
+```bash
+python3 prototypes/maze/junction.py --merged-stats --count 100 --bezel 3
+```
 
 `--compare-patterns` needs `--rule degree` and a pattern other than `uniform`. In `junction.py`, it also needs `--column-band`.
+
+With `--pattern lines`, `--compare-patterns` renders spacing 1 and spacing 2 instead of four strengths.
 
 `--stats`, `--compare` and `--compare-starts` take no pattern.
 
@@ -590,6 +647,9 @@ The images are in `images/`.
 
 - A pattern other than `uniform` adds `_<type>_s<s>` after the rule suffix, for example `band_connector_wilson_degree_serpentine_s0.9.png`.
 - A ribs seam other than `random` adds `_<seam>` after the type, for example `band_connector_wilson_degree_ribs_pillar_s1.png`.
+- Lines has no strength suffix. Spacing 2 adds `_spacing2`, for example `band_connector_wilson_degree_lines_spacing2.png`.
+- `compare_pattern_lines_bias<P>.png` stacks the connector bands of spacing 1 and spacing 2. The labels are "lines spacing 1" and "lines spacing 2".
+- `compare_pattern_column_lines_bias<P>_bezel3.png` puts the column bands of both spacings side by side.
 - In a column band, the pattern suffix sits before the bezel suffix, for example `column_band_wilson_degree_gilbert_s0.9_bezel3.png`.
 - `compare_pattern_<type>_bias<P>.png` stacks four connector bands of one type at the strengths 0, 0.5, 0.9 and 1. A label strip sits above each band.
 - The labels are the type, the seam when it is not `random`, and the strength, for example "ribs pillar 0.9".

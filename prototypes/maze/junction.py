@@ -72,6 +72,9 @@ from originshift import (
     DEFAULT_RULE,
     DEFAULT_STEPS,
     DEGREE_RULE,
+    GILBERT_PATTERN,
+    LINE_SPACINGS,
+    LINES_PATTERN,
     NODES_PER_CHUNK,
     PATTERNS,
     RANDOM_SEAM,
@@ -79,6 +82,7 @@ from originshift import (
     RING,
     RING_EDGE,
     SEAMS,
+    SERPENTINE_PATTERN,
     STARTS,
     UNIFORM_PATTERN,
     Bias,
@@ -91,10 +95,11 @@ from originshift import (
     build_layout,
     build_segment,
     forest_state,
+    neighbor_bridge,
     is_corner,
     label_rows,
     label_scale,
-    pattern_label,
+    pattern_text,
     pattern_strength,
     pattern_suffix,
     prune_corner_leaves,
@@ -108,6 +113,8 @@ from originshift import (
     start_suffix,
     state_text,
     strength_value,
+    turns_at_neighbor,
+    walls_by_design,
     with_pillar,
     write_png,
 )
@@ -209,8 +216,24 @@ def plain_nodes(segments):
 
 
 def pillar_state(scene):
-    """forest_state of the scene pillar over all of its maze nodes."""
-    return forest_state(scene.nodes, getattr(scene, "shaft_edges", None) or scene.edges)
+    """forest_state of the scene pillar over all of its maze nodes.
+
+    With lines at a spacing above 1, the maze nodes are the nodes that carry an edge.
+    """
+    nodes = set() if walls_by_design(scene.bias) else scene.nodes
+    return forest_state(nodes, getattr(scene, "shaft_edges", None) or scene.edges)
+
+
+def shaft_left_bridge(seed, c, k, k_end, junction_count, bias):
+    """The serpentine left bridge of the shaft segment that starts at chunk c, or None.
+
+    The neighbor before chunk c is the junction segment from k to k_end, or a plain tree segment.
+    """
+    if not turns_at_neighbor(bias) or c % 2 == 0:
+        return None
+    if c - 1 == k_end:
+        return neighbor_bridge(seg_rng(seed, "junction", k), junction_count)
+    return neighbor_bridge(seg_rng(seed, "connector", c - 1), NODES_PER_CHUNK)
 
 
 class Scene:
@@ -236,12 +259,14 @@ class Scene:
         self.c_lo = (self.k - chunks_each_side) // 2 * 2
         self.c_hi = (self.k_end + chunks_each_side + 1) // 2 * 2
         self.segments = {}
+        count = len(self.junction_rulings())
         for c in range(self.c_lo, self.c_hi + 1):
             if self.k <= c <= self.k_end:
                 continue
-            self.segments[c] = build_segment(segment_kind("connector", c), NODES_PER_CHUNK, seg_rng(seed, "connector", c), sampler, steps_per_node, bias)
+            left_bridge = shaft_left_bridge(seed, c, self.k, self.k_end, count, bias)
+            self.segments[c] = build_segment(segment_kind("connector", c), NODES_PER_CHUNK, seg_rng(seed, "connector", c), sampler, steps_per_node, bias, left_bridge)
         self.shaft_edges = self._plain_shaft_edges()
-        self.shaft_edges += self._junction_segment(seg_rng(seed, "junction", self.k))
+        self.shaft_edges += self._junction_segment(seg_rng(seed, "junction", self.k), shaft_left_bridge(seed, self.k, self.k, self.k_end, count, bias))
         self.below = build_segment("tree", piece_rulings, seg_rng(seed, "piece", 0), sampler, steps_per_node, column_bias)
         self.above = build_segment("tree", piece_rulings, seg_rng(seed, "piece", 1), sampler, steps_per_node, column_bias)
         self.piece_rulings = piece_rulings
@@ -264,7 +289,7 @@ class Scene:
         end = CHUNK * (self.k_end + 1)
         return [x for x in range(start, end, 2) if abs(x - self.cx) > HALF]
 
-    def _junction_segment(self, rng):
+    def _junction_segment(self, rng, left_bridge):
         """Sample the junction segment. Return its tree edges in world names."""
         g = Graph()
         names = {}
@@ -308,7 +333,7 @@ class Scene:
             for v in range(RING):
                 if not is_corner(v):
                     g.add_edge(right, index[(x_end, v)], AXIS)
-        sampled = sample_edges(g, rng, self.sampler, self.spn, self.bias)
+        sampled = sample_edges(g, rng, self.sampler, self.spn, self.bias, None, left_bridge)
         edges = []
         for a, b in tree_edges(sampled, names):
             if a[1] is None:
@@ -354,19 +379,21 @@ class Scene:
         for x in rulings:
             if abs(x - cx) <= reach:
                 for v in range(RING):
-                    if not is_corner(v) or (x, v) in present:
+                    if (x, v) in present:
                         out.append(shaft_carve(self, x, 2 * v))
         for a, b in self.shaft_edges:
             out += shaft_edge_carves(self, a, b, self.shaft_sign, reach)
-        for sign in (self.shaft_sign, self.column_sign):
+        column_present = {n for e in self.column_edges for n in e}
+        for sign, carried in ((self.shaft_sign, present), (self.column_sign, column_present)):
             for i in self.patch.nodes():
                 for j in self.patch.nodes():
-                    out.append(patch_carve(self, cx + 2 * i, cy + 2 * j, sign))
+                    if ("patch", i, j) in carried:
+                        out.append(patch_carve(self, cx + 2 * i, cy + 2 * j, sign))
         for seg, y0, step in ((self.below, self.y_last, -1), (self.above, self.y_first, 1)):
             present = {n for e in seg.edges for n in e}
             for u in range(seg.length):
                 for v in range(RING):
-                    if not is_corner(v) or (u, v) in present:
+                    if (u, v) in present:
                         out.append(column_carve(self, y0 + step * 2 * u, 2 * v))
             for (u1, v1), (u2, v2) in seg.edges:
                 if u1 == u2:
@@ -573,21 +600,25 @@ class ClusterScene:
         self.k_end = max(junction_chunks(c)[1] for c in self.centers)
         self.c_lo = (self.k - chunks_each_side) // 2 * 2
         self.c_hi = (self.k_end + chunks_each_side + 1) // 2 * 2
+        self.bias = bias
         self.segments = {}
+        count = len(self.rulings())
         for c in range(self.c_lo, self.c_hi + 1):
             if self.k <= c <= self.k_end:
                 continue
-            self.segments[c] = build_segment(segment_kind("connector", c), NODES_PER_CHUNK, seg_rng(seed, "connector", c), sampler, steps_per_node, bias)
+            left_bridge = shaft_left_bridge(seed, c, self.k, self.k_end, count, bias)
+            self.segments[c] = build_segment(segment_kind("connector", c), NODES_PER_CHUNK, seg_rng(seed, "connector", c), sampler, steps_per_node, bias, left_bridge)
         self.nodes = plain_nodes(self.segments)
         self.shaft_edges = Scene._plain_shaft_edges(self)
-        self.shaft_edges += self._junction_segment(seg_rng(seed, "junction", self.k), sampler, steps_per_node, bias)
+        left_bridge = shaft_left_bridge(seed, self.k, self.k, self.k_end, count, bias)
+        self.shaft_edges += self._junction_segment(seg_rng(seed, "junction", self.k), sampler, steps_per_node, bias, left_bridge)
 
     def rulings(self):
         start = CHUNK * self.k + 1
         end = CHUNK * (self.k_end + 1)
         return [x for x in range(start, end, 2) if all(abs(x - c) > HALF for c in self.centers)]
 
-    def _junction_segment(self, rng, sampler, steps_per_node, bias):
+    def _junction_segment(self, rng, sampler, steps_per_node, bias, left_bridge):
         g = Graph()
         names = {}
         index = {}
@@ -633,7 +664,7 @@ class ClusterScene:
                 if not is_corner(v):
                     g.add_edge(right, index[(x_end, v)], AXIS)
         self.nodes |= real_names(names)
-        sampled = sample_edges(g, rng, sampler, steps_per_node, bias)
+        sampled = sample_edges(g, rng, sampler, steps_per_node, bias, None, left_bridge)
         edges = []
         for a, b in tree_edges(sampled, names):
             if a[1] is None:
@@ -669,7 +700,63 @@ class PatternTally:
         if not self.active:
             return
         n = self.count
-        print(f"pattern {pattern_label(self.bias)} strength {self.bias.strength:g}: {what} that are one tree with every maze node: {self.trees} of {n}, mean components {self.components / n:.2f}, mean loops {self.loops / n:.2f}")
+        print(f"pattern {pattern_text(self.bias)}: {what} that are one tree with every maze node: {self.trees} of {n}, mean components {self.components / n:.2f}, mean loops {self.loops / n:.2f}")
+
+
+MERGED_GAPS = range(31, 36)
+MERGED_STRENGTHS = (0.5, 0.9, 1.0)
+
+
+def merged_centers(rng, low, high):
+    """Draw a first center from low to high and a gap of 31 to 35 until both junction segments share a chunk."""
+    while True:
+        c1 = rng.randrange(low, high)
+        c2 = c1 + rng.choice(MERGED_GAPS)
+        if junction_chunks(c1)[1] >= junction_chunks(c2)[0]:
+            return c1, c2
+
+
+def merged_variants(p):
+    """Label, sampler and bias of each row of the merged stats."""
+    rows = [("wilson degree", "wilson", Bias(p, DEGREE_RULE)), ("originshift degree", "originshift", Bias(p, DEGREE_RULE))]
+    for pattern, seam in ((SERPENTINE_PATTERN, RANDOM_SEAM), (RIBS_PATTERN, RANDOM_SEAM), (RIBS_PATTERN, "seeded"),
+                          (RIBS_PATTERN, "pillar"), (GILBERT_PATTERN, RANDOM_SEAM)):
+        for s in MERGED_STRENGTHS:
+            bias = Bias(p, DEGREE_RULE, pattern=pattern, strength=s, seam=seam)
+            rows.append((pattern_text(bias), "wilson", bias))
+    for spacing in LINE_SPACINGS:
+        bias = Bias(p, DEGREE_RULE, pattern=LINES_PATTERN, spacing=spacing)
+        rows.append((pattern_text(bias), "wilson", bias))
+    return rows
+
+
+def merged_stats(seed, count, p, patch):
+    """Place two boxes 31 to 35 blocks apart on one shaft and on one column, so that one junction segment holds both.
+
+    Check that each pillar stays one tree over every maze node, for each row of merged_variants.
+    """
+    gaps = {}
+    for k in range(count):
+        for key in ("shaft", "column"):
+            c1, c2 = merged_centers(random.Random(f"{seed}:merged-{key}:{k}"), 100, 400)
+            gaps[c2 - c1] = gaps.get(c2 - c1, 0) + 1
+    print("gaps that put both boxes in one junction segment: " + ", ".join(f"{d}: {n}" for d, n in sorted(gaps.items())))
+    print(f"{'row':<28} {'shafts one tree':>16} {'columns one tree':>17} {'mean components':>16}")
+    for label, sampler, bias in merged_variants(p):
+        shafts = columns = components = 0
+        for k in range(count):
+            c1, c2 = merged_centers(random.Random(f"{seed}:merged-shaft:{k}"), 100, 400)
+            scene = ClusterScene(seed + k, [c1, c2], sampler, DEFAULT_STEPS, bias, patch=patch)
+            _, _, n, loops = pillar_state(scene)
+            shafts += n == 1 and loops == 0
+            components += n
+            rng = random.Random(f"{seed}:merged-column:{k}")
+            y1, y2 = merged_centers(rng, -64 + 24, 320 - 24 - MERGED_GAPS[-1])
+            column = ColumnScene(seed + k, [y1, y2], [rng.choice((1, -1)), rng.choice((1, -1))], -64, 320, sampler, DEFAULT_STEPS, bias, patch)
+            _, _, n, loops = pillar_state(column)
+            columns += n == 1 and loops == 0
+            components += n
+        print(f"{label:<28} {f'{shafts} of {count}':>16} {f'{columns} of {count}':>17} {components / (2 * count):>16.2f}")
 
 
 def cluster_stats(seed, count, sampler, spn, bias, patch):
@@ -727,20 +814,32 @@ class ColumnScene:
         # Kept and total curve edges of a curve start.
         self.curve = [0, 0]
         covered = set()
+        parts = []
         for lo, hi in clusters:
             lo, hi = max(lo, self.s_lo), min(hi, self.s_hi)
             covered.update(range(lo, hi + 1))
             boxes = [(c, g) for c, g in zip(centers, signs) if lo <= junction_chunks(c)[0] <= hi or lo <= junction_chunks(c)[1] <= hi]
-            self._segment(lo, hi, boxes, seg_rng(seed, "column-junction", lo))
+            parts.append((lo, hi, boxes, "column-junction"))
         for c in range(self.s_lo, self.s_hi + 1):
             if c not in covered:
-                self._segment(c, c, [], seg_rng(seed, "column", c))
+                parts.append((c, c, [], "column"))
+        owner = {c: part for part in parts for c in range(part[0], part[1] + 1)}
+        for lo, hi, boxes, key in parts:
+            left_bridge = None
+            if turns_at_neighbor(self.bias) and lo % 2 == 1 and lo - 1 >= self.s_lo:
+                n_lo, n_hi, n_boxes, n_key = owner[lo - 1]
+                left_bridge = neighbor_bridge(seg_rng(seed, n_key, n_lo), len(self.part_rulings(n_lo, n_hi, n_boxes)))
+            self._segment(lo, hi, boxes, seg_rng(seed, key, lo), left_bridge)
 
-    def _segment(self, lo, hi, boxes, rng):
+    @staticmethod
+    def part_rulings(lo, hi, boxes):
+        return [y for y in range(CHUNK * lo + 1, CHUNK * (hi + 1), 2) if all(abs(y - c) > HALF for c, _ in boxes)]
+
+    def _segment(self, lo, hi, boxes, rng, left_bridge=None):
         g = Graph()
         names = {}
         index = {}
-        rulings = [y for y in range(CHUNK * lo + 1, CHUNK * (hi + 1), 2) if all(abs(y - c) > HALF for c, _ in boxes)]
+        rulings = self.part_rulings(lo, hi, boxes)
         self.rulings += rulings
         for y in rulings:
             for v in range(RING):
@@ -784,7 +883,7 @@ class ColumnScene:
                     g.add_edge(right, index[(rulings[-1], v)], AXIS)
         self.nodes |= real_names(names)
         trace = {}
-        sampled = sample_edges(g, rng, self.sampler, self.spn, self.bias, trace)
+        sampled = sample_edges(g, rng, self.sampler, self.spn, self.bias, trace, left_bridge)
         if "curve" in trace:
             self.curve[0] += trace["curve"][0]
             self.curve[1] += trace["curve"][1]
@@ -804,7 +903,7 @@ class ColumnScene:
         present = {n for e in self.edges for n in e}
         for y in self.rulings:
             for v in range(RING):
-                if not is_corner(v) or (y, v) in present:
+                if (y, v) in present:
                     grid[2 * v][y - self.y_min] = True
         for a, b in self.edges:
             if a[0] == "patch" or b[0] == "patch":
@@ -1137,9 +1236,17 @@ def main():
     ap.add_argument("--pattern", choices=PATTERNS, default=UNIFORM_PATTERN, help="the pattern type of Wilson's algorithm")
     ap.add_argument("--strength", type=strength_value, default=0.0, help="the pattern strength, from 0 to 1 in steps of 0.05")
     ap.add_argument("--seam", choices=SEAMS, default=RANDOM_SEAM, help="the root of the ribs pattern")
-    ap.add_argument("--compare-patterns", action="store_true", help="with --column-band, render the column band of the pattern at four strengths side by side and exit")
+    ap.add_argument("--compare-patterns", action="store_true", help="with --column-band, render the column band of the pattern at four strengths, or of lines at each spacing, side by side and exit")
+    ap.add_argument("--line-spacing", type=int, choices=LINE_SPACINGS, default=1, help="node columns per groove of lines")
+    ap.add_argument("--merged-stats", action="store_true", help="check that two boxes in one junction segment keep the pillar one tree for every pattern and exit")
     args = ap.parse_args()
-    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps, args.pattern, args.strength, args.seam)
+    bias = Bias(args.bias, args.rule, args.start, args.scaled_steps, args.pattern, args.strength, args.seam, None, args.line_spacing)
+    if args.merged_stats:
+        if args.corner_crossings and args.bezel == 1:
+            ap.error("--corner-crossings needs --bezel 3")
+        check_weighted_wilson(ap, True, args.bias)
+        merged_stats(args.seed, args.count, args.bias, Patch(args.bezel, args.corner_crossings))
+        return
     if args.compare_patterns:
         if not (args.column_band and args.rule == DEGREE_RULE) or args.pattern == UNIFORM_PATTERN:
             ap.error("--compare-patterns needs --column-band, --rule degree and a --pattern other than uniform")
