@@ -27,6 +27,29 @@
       "Name": "minecraft:polished_deepslate"
     }
   },
+  "pattern": {
+    "type": "aerolite:mazes",
+    "maze": "uniform",
+    "seam": "random",
+    "spacing": 1,
+    "strength": 0.0
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:polished_deepslate"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:deepslate",
+      "Properties": {
+        "axis": "y"
+      }
+    }
+  },
   "wall": {
     "type": "minecraft:simple_state_provider",
     "state": {

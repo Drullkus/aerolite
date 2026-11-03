@@ -25,6 +25,30 @@
       }
     }
   },
+  "pattern": {
+    "type": "aerolite:mazes",
+    "maze": "uniform",
+    "seam": "random",
+    "spacing": 1,
+    "strength": 0.0
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:oxidized_copper_bulb",
+      "Properties": {
+        "lit": "false",
+        "powered": "false"
+      }
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:oxidized_copper"
+    }
+  },
   "wall": {
     "type": "minecraft:simple_state_provider",
     "state": {

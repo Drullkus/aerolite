@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 class AeroliteSettingsTest {
 
@@ -361,9 +362,8 @@ class AeroliteSettingsTest {
     @Test
     void variationEntryWritesEveryField() {
         JsonObject json = ShaftVariation.CODEC.encodeStart(JsonOps.INSTANCE, ShippedShaftData.variation("stone")).getOrThrow().getAsJsonObject();
-        assertEquals(Set.of("bias", "decay_scale", "decay_threshold", "erosion_threshold", "interior", "junction", "wall", "path"), json.keySet());
-        List<String> blocks = json.keySet().stream().filter(key -> List.of("interior", "junction", "wall", "path").contains(key)).toList();
-        assertEquals(List.of("interior", "junction", "wall", "path"), blocks);
+        assertEquals(List.of("bias", "decay_scale", "decay_threshold", "erosion_threshold", "pattern", "shape",
+                "interior", "junction", "wall", "path", "surface", "trusses"), List.copyOf(json.keySet()));
         assertFalse(json.has("weight"));
         JsonObject placement = ShaftPlacement.CODEC.encodeStart(JsonOps.INSTANCE, ShaftPlacement.DEFAULT).getOrThrow().getAsJsonObject();
         assertEquals(Set.of("min_shaft_spacing", "max_shaft_spacing", "column_chance"), placement.keySet());

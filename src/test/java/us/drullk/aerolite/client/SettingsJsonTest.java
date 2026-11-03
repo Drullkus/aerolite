@@ -8,9 +8,14 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.ShippedShaftData;
 import us.drullk.aerolite.world.TestSettings;
+import us.drullk.aerolite.world.pattern.SurfacePathSettings;
+import us.drullk.aerolite.world.pattern.TilesSettings;
+
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 class SettingsJsonTest {
 
@@ -49,24 +55,49 @@ class SettingsJsonTest {
     @Test
     void settingsWithoutJunctionBlocksTakeTheInteriorBlocks() {
         JsonObject json = JsonParser.parseString(this.json.export(TestSettings.SETTINGS, REGISTRIES)).getAsJsonObject();
-        assertTrue(removeJunctions(json) > 0);
+        assertTrue(removeFields(json, Set.of("junction")) > 0);
         assertEquals(TestSettings.SETTINGS, this.json.parse(json.toString(), REGISTRIES).getOrThrow());
     }
 
-    /** Removes every field {@code junction} from the JSON tree. Returns the count of removed fields. */
-    private static int removeJunctions(JsonElement element) {
+    @Test
+    void settingsOf03LoadWithTheDefaults() {
+        JsonObject json = JsonParser.parseString(this.json.export(TestSettings.SETTINGS, REGISTRIES)).getAsJsonObject();
+        assertEquals(4 * 4, removeFields(json, Set.of("pattern", "shape", "surface", "trusses")));
+        assertEquals(TestSettings.SETTINGS, this.json.parse(json.toString(), REGISTRIES).getOrThrow());
+    }
+
+    @Test
+    void exportKeepsThePatternTheShapeAndTheNewBlocks() {
+        ShaftVariation tiles = TestSettings.STONE
+                .withPattern(TilesSettings.DEFAULT.withSize(TilesSettings.Size.SMALL).withStagger(TilesSettings.Stagger.X)
+                        .withPaths(SurfacePathSettings.DEFAULT.withSurfacePaths(true).withCutting(true)))
+                .withShape(PillarShape.BRIDGE)
+                .withSurface(Blocks.DIRT_PATH.defaultBlockState())
+                .withTrusses(Blocks.CHAIN.defaultBlockState());
+        AeroliteSettings settings = TestSettings.SETTINGS.withVariation(Level.OVERWORLD, 0, tiles);
+        String text = this.json.export(settings, REGISTRIES);
+        assertTrue(text.contains("\"type\":\"aerolite:tiles\""), text);
+        assertTrue(text.contains("\"stagger\":\"x\""), text);
+        assertTrue(text.contains("\"shape\":\"bridge\""), text);
+        assertEquals(settings, this.json.parse(text, REGISTRIES).getOrThrow());
+    }
+
+    /** Removes every field with one of the names from the JSON tree. Returns the count of removed fields. */
+    private static int removeFields(JsonElement element, Set<String> names) {
         int removed = 0;
         if (element.isJsonObject()) {
             JsonObject object = element.getAsJsonObject();
-            if (object.remove("junction") != null) {
-                removed++;
+            for (String name : names) {
+                if (object.remove(name) != null) {
+                    removed++;
+                }
             }
             for (String key : object.keySet()) {
-                removed += removeJunctions(object.get(key));
+                removed += removeFields(object.get(key), names);
             }
         } else if (element.isJsonArray()) {
             for (JsonElement child : element.getAsJsonArray()) {
-                removed += removeJunctions(child);
+                removed += removeFields(child, names);
             }
         }
         return removed;

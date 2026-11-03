@@ -21,6 +21,26 @@
       "Name": "minecraft:crying_obsidian"
     }
   },
+  "pattern": {
+    "type": "aerolite:mazes",
+    "maze": "uniform",
+    "seam": "random",
+    "spacing": 1,
+    "strength": 0.0
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:crying_obsidian"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:obsidian"
+    }
+  },
   "wall": {
     "type": "minecraft:simple_state_provider",
     "state": {
