@@ -3,6 +3,7 @@ package us.drullk.aerolite.client;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.components.tabs.TabManager;
@@ -19,21 +20,32 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.StateProviders;
 import us.drullk.aerolite.world.WeightedVariation;
+import us.drullk.aerolite.world.pattern.BricksSettings;
+import us.drullk.aerolite.world.pattern.ChaosSettings;
+import us.drullk.aerolite.world.pattern.MazeSettings;
+import us.drullk.aerolite.world.pattern.PatternSettings;
+import us.drullk.aerolite.world.pattern.PatternType;
+import us.drullk.aerolite.world.pattern.ScalesSettings;
+import us.drullk.aerolite.world.pattern.SurfacePathSettings;
+import us.drullk.aerolite.world.pattern.TilesSettings;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 /**
  * The settings screen of one dimension. It edits a copy of the settings.
  * The tab Shaft Placement holds the placement sliders.
  * The tab Shaft Variations holds the variation rows and the Add Variation button.
+ * The pattern widgets follow the five sliders of a variation. A change of the pattern, the maze type, the tile size or the shape rebuilds the rows on the next tick.
  * Export and Import move one variation without its weight through the system clipboard.
  * Done sends the copy back to the shafts screen. Cancel and Escape drop it.
  *
@@ -41,12 +53,18 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public class DimensionSettingsScreen extends Screen {
 
     private static final String KEY = "createWorld.customize.aerolite.";
     /** The band between the tab bar and the list that holds the title. */
     private static final int TITLE_HEIGHT = 20;
+    /** The pattern rows hold two widgets each. */
+    private static final int PATTERN_COLUMNS = 2;
+    private static final int BLOCK_COLUMNS = 4;
+    /** The opacity of a checkbox that is off. A vanilla checkbox draws no other off state. */
+    private static final float OFF_ALPHA = 0.5F;
 
     private final Screen parent;
     private final PresetTools tools;
@@ -57,6 +75,8 @@ public class DimensionSettingsScreen extends Screen {
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
     private final TabManager tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
     private final List<BlockField> blockFields = new ArrayList<>();
+    /** The combos of the variation rows. The screen draws their open lists over the rows below. */
+    private final List<ChoiceDropdown<?>> dropdowns = new ArrayList<>();
     private AeroliteSettings settings;
     @Nullable
     private TabNavigationBar tabNavigationBar;
@@ -151,6 +171,7 @@ public class DimensionSettingsScreen extends Screen {
     /** The rows of each variation, then the Add Variation button. */
     private void populateVariations(SettingsList list) {
         this.blockFields.clear();
+        this.dropdowns.clear();
         List<ShaftVariation> variations = this.edits.variations(this.settings, this.dimension);
         for (int index = 0; index < variations.size(); index++) {
             list.beginGroup();
@@ -168,7 +189,10 @@ public class DimensionSettingsScreen extends Screen {
         return this.edits.variations(this.settings, this.dimension).get(index);
     }
 
-    /** Adds the slider rows, the label row, the block row and the row of Export, Import and Remove of one variation. */
+    /**
+     * Adds the slider rows, the pattern rows, the shape row, the two block rows and the row of Export, Import and Remove of one variation.
+     * A Lines maze has no maze bias slider.
+     */
     private void addVariation(SettingsList list, int index, ShaftVariation variation) {
         StepSlider[] weight = new StepSlider[1];
         weight[0] = new StepSlider(WeightedVariation.MAX_WEIGHT, this.edits.weight(this.settings, this.dimension, index),
@@ -180,10 +204,14 @@ public class DimensionSettingsScreen extends Screen {
                     this.settings = this.edits.withWeight(this.settings, this.dimension, index, step);
                     weight[0].setStep(this.edits.weight(this.settings, this.dimension, index));
                 });
-        StepSlider bias = new StepSlider(PresetSliders.BIAS_STEPS, this.sliders.biasStep(variation.bias()),
-                step -> Component.translatable(KEY + "maze_bias", this.sliders.biasLabel(step)),
-                step -> this.editVariation(index, current -> current.withBias(this.sliders.bias(step))));
-        list.addRow(weight[0], bias);
+        if (PresetEdits.showsBias(variation)) {
+            StepSlider bias = new StepSlider(PresetSliders.BIAS_STEPS, this.sliders.biasStep(variation.bias()),
+                    step -> Component.translatable(KEY + "maze_bias", this.sliders.biasLabel(step)),
+                    step -> this.editVariation(index, current -> current.withBias(this.sliders.bias(step))));
+            list.addRow(weight[0], bias);
+        } else {
+            list.addColumns(PATTERN_COLUMNS, weight[0]);
+        }
 
         list.addRow(new StepSlider(PresetSliders.DECAY_SCALE_STEPS, this.sliders.decayScaleStep(variation.decayScale()),
                 step -> Component.translatable(KEY + "decay_scale", this.sliders.decayScale(step)),
@@ -210,6 +238,10 @@ public class DimensionSettingsScreen extends Screen {
                 });
         list.addRow(thresholds);
 
+        this.addPattern(list, index, variation);
+        list.addColumns(PATTERN_COLUMNS, this.dropdown(List.of(PillarShape.values()), variation.shape(), shape -> this.edits.choiceName("shape", shape), "shape",
+                shape -> this.editVariationRebuild(index, current -> current.withShape(shape))));
+
         list.addHeadedLabels(
                 Component.translatable(KEY + "blocks"),
                 Component.translatable(KEY + "wall_block"),
@@ -223,6 +255,16 @@ public class DimensionSettingsScreen extends Screen {
                 this.blockField(variation.interior(), KEY + "interior_block", state -> this.editVariation(index, current -> current.withInterior(state))),
                 this.blockField(variation.junction(), KEY + "junction_block", state -> this.editVariation(index, current -> current.withJunction(state)))
         );
+        BlockField surface = this.blockField(variation.surface(), KEY + "surface_block", state -> this.editVariation(index, current -> current.withSurface(state)));
+        if (PresetEdits.showsTrusses(variation)) {
+            list.addHeadedColumnLabels(BLOCK_COLUMNS, Component.translatable(KEY + "blocks"),
+                    Component.translatable(KEY + "surface_block"), Component.translatable(KEY + "trusses_block"));
+            list.addColumns(BLOCK_COLUMNS, surface,
+                    this.blockField(variation.trusses(), KEY + "trusses_block", state -> this.editVariation(index, current -> current.withTrusses(state))));
+        } else {
+            list.addHeadedColumnLabels(BLOCK_COLUMNS, Component.translatable(KEY + "blocks"), Component.translatable(KEY + "surface_block"));
+            list.addColumns(BLOCK_COLUMNS, surface);
+        }
 
         Button remove = Button.builder(Component.translatable(KEY + "remove_variation"), button -> {
             if (this.rebuildPending) {
@@ -241,6 +283,195 @@ public class DimensionSettingsScreen extends Screen {
                 this.clipboardButton("paste_variation", button -> this.importVariation(index)),
                 remove
         );
+    }
+
+    /** The pattern combo and the widgets of the pattern, two per row. */
+    private void addPattern(SettingsList list, int index, ShaftVariation variation) {
+        ChoiceDropdown<PatternType> pattern = this.dropdown(List.of(PatternType.values()), variation.pattern().patternType(), this.edits::patternName, "pattern",
+                type -> this.editVariationRebuild(index, current -> this.edits.withPatternType(current, type)));
+        switch (variation.pattern()) {
+            case MazeSettings maze -> this.addMaze(list, index, pattern, maze);
+            case BricksSettings bricks -> {
+                list.addRow(pattern, this.dropdown(List.of(BricksSettings.Size.values()), bricks.size(), size -> this.edits.choiceName("size", size), "size",
+                        size -> this.editPattern(index, BricksSettings.class, current -> current.withSize(size))));
+                this.addPaths(list, index, bricks.paths(), null);
+            }
+            case TilesSettings tiles -> {
+                list.addRow(pattern, this.dropdown(List.of(TilesSettings.Size.values()), tiles.size(), size -> this.edits.choiceName("size", size), "size",
+                        size -> this.editVariationRebuild(index, current -> this.edits.withPattern(current, TilesSettings.class, edited -> edited.withSize(size)))));
+                ChoiceDropdown<TilesSettings.Stagger> stagger = this.dropdown(PresetEdits.staggerChoices(tiles.size()), tiles.stagger(),
+                        choice -> this.edits.choiceName("stagger", choice), "stagger",
+                        choice -> this.editPattern(index, TilesSettings.class, current -> current.withStagger(choice)));
+                stagger.enabled(choice -> PresetEdits.staggerAllowed(this.tiles(index), choice));
+                stagger.entryTooltips(choice -> PresetEdits.staggerAllowed(this.tiles(index), choice) ? null : Component.translatable(KEY + "stagger.x_encased_tooltip"));
+                Checkbox encased = this.checkbox("encased", tiles.encased(), value -> {
+                    this.editPattern(index, TilesSettings.class, current -> current.withEncased(value));
+                    stagger.choose(this.tiles(index).stagger());
+                });
+                list.addRow(stagger, encased);
+                this.addPaths(list, index, tiles.paths(), null);
+            }
+            case ScalesSettings scales -> {
+                list.addColumns(PATTERN_COLUMNS, pattern);
+                Checkbox overTails = this.checkbox("paths_over_tails", scales.pathsOverTails(),
+                        value -> this.editPattern(index, ScalesSettings.class, current -> current.withPathsOverTails(value)));
+                this.addPaths(list, index, scales.paths(), overTails);
+            }
+            case ChaosSettings chaos -> {
+                list.addRow(pattern, this.dropdown(List.of(ChaosSettings.Cells.values()), chaos.cells(), cells -> this.edits.choiceName("cells", cells), "cells",
+                        cells -> this.editPattern(index, ChaosSettings.class, current -> current.withCells(cells))));
+                StepSlider spacing = this.tipped(new StepSlider(PresetSliders.CHAOS_SPACING_STEPS, this.sliders.chaosSpacingStep(chaos.spacing()),
+                        step -> Component.translatable(KEY + "node_spacing", this.sliders.chaosSpacing(step)),
+                        step -> this.editPattern(index, ChaosSettings.class, current -> current.withSpacing(this.sliders.chaosSpacing(step)))), "node_spacing");
+                StepSlider jitter = this.tipped(new StepSlider(PresetSliders.FRACTION_STEPS, this.sliders.clampedFractionStep(chaos.jitter()),
+                        step -> Component.translatable(KEY + "jitter", this.sliders.percent(step)),
+                        step -> this.editPattern(index, ChaosSettings.class, current -> current.withJitter(this.sliders.clampedFraction(step)))), "jitter");
+                list.addRow(spacing, jitter);
+                list.addColumns(PATTERN_COLUMNS, this.tipped(new StepSlider(PresetSliders.CORNER_RADIUS_STEPS, this.sliders.cornerRadiusStep(chaos.cornerRadius()),
+                        step -> Component.translatable(KEY + "corner_radius", this.sliders.cornerRadius(step)),
+                        step -> this.editPattern(index, ChaosSettings.class, current -> current.withCornerRadius(this.sliders.cornerRadius(step)))), "corner_radius"));
+                this.addPaths(list, index, chaos.paths(), null);
+            }
+        }
+    }
+
+    /** The pattern combo and the maze type combo, then the pattern strength, the seam of a ribs maze or the spacing of a lines maze. */
+    private void addMaze(SettingsList list, int index, ChoiceDropdown<PatternType> pattern, MazeSettings maze) {
+        list.addRow(pattern, this.dropdown(List.of(MazeSettings.Type.values()), maze.type(), type -> this.edits.choiceName("maze_type", type), "maze_type",
+                type -> this.editVariationRebuild(index, current -> this.edits.withPattern(current, MazeSettings.class, edited -> edited.withType(type)))));
+        List<AbstractWidget> options = new ArrayList<>();
+        if (PresetEdits.showsStrength(maze.type())) {
+            options.add(this.tipped(new StepSlider(PresetSliders.FRACTION_STEPS, this.sliders.clampedFractionStep(maze.strength()),
+                    step -> Component.translatable(KEY + "pattern_strength", this.sliders.percent(step)),
+                    step -> this.editPattern(index, MazeSettings.class, current -> current.withStrength(this.sliders.clampedFraction(step)))), "pattern_strength"));
+        }
+        if (maze.type() == MazeSettings.Type.RIBS) {
+            ChoiceDropdown<MazeSettings.Seam> seam = this.dropdown(List.of(MazeSettings.Seam.values()), maze.seam(), choice -> this.edits.choiceName("seam", choice), "seam",
+                    choice -> this.editPattern(index, MazeSettings.class, current -> current.withSeam(choice)));
+            seam.entryTooltips(DimensionSettingsScreen::seamTooltip);
+            seam.setTooltip(Tooltip.create(seamTooltip(maze.seam())));
+            seam.onPick(choice -> {
+                this.editPattern(index, MazeSettings.class, current -> current.withSeam(choice));
+                seam.setTooltip(Tooltip.create(seamTooltip(choice)));
+            });
+            options.add(seam);
+        }
+        if (maze.type() == MazeSettings.Type.LINES) {
+            List<Integer> spacings = new ArrayList<>();
+            for (int spacing = MazeSettings.MIN_SPACING; spacing <= MazeSettings.MAX_SPACING; spacing++) {
+                spacings.add(spacing);
+            }
+            ChoiceDropdown<Integer> spacing = this.dropdown(spacings, maze.spacing(), value -> Component.literal(Integer.toString(value)), "line_spacing",
+                    value -> this.editPattern(index, MazeSettings.class, current -> current.withSpacing(value)));
+            spacing.setTooltip(Tooltip.create(Component.translatable(KEY + "line_spacing_tooltip")));
+            options.add(spacing);
+        }
+        if (!options.isEmpty()) {
+            list.addColumns(PATTERN_COLUMNS, options.toArray(AbstractWidget[]::new));
+        }
+    }
+
+    /** The full name of a seam. The combo shows the short name. */
+    private static Component seamTooltip(MazeSettings.Seam seam) {
+        return Component.translatable(KEY + "seam." + seam.getSerializedName() + "_tooltip");
+    }
+
+    /**
+     * The loop and surface path rows. Loop Share is off while Allow loops is off.
+     * Cutting, Path Chance and the extra checkbox are off while Surface paths is off.
+     *
+     * @param extra the checkbox right of Path Chance, or null
+     */
+    private void addPaths(SettingsList list, int index, SurfacePathSettings paths, @Nullable Checkbox extra) {
+        StepSlider loopShare = this.tipped(new StepSlider(PresetSliders.FRACTION_STEPS, this.sliders.clampedFractionStep(paths.loopShare()),
+                step -> Component.translatable(KEY + "loop_share", this.sliders.percent(step)),
+                step -> this.editPaths(index, current -> this.edits.withLoopShareStep(current, step))), "loop_share");
+        Checkbox allowLoops = this.checkbox("allow_loops", paths.allowLoops(), value -> {
+            this.editPaths(index, current -> current.withAllowLoops(value));
+            setOff(loopShare, !value);
+        });
+        setOff(loopShare, !paths.allowLoops());
+        list.addRow(allowLoops, loopShare);
+
+        Checkbox cutting = this.checkbox("cutting", paths.cutting(), value -> this.editPaths(index, current -> current.withCutting(value)));
+        StepSlider pathChance = this.tipped(new StepSlider(PresetSliders.FRACTION_STEPS, this.sliders.clampedFractionStep(paths.pathChance()),
+                step -> Component.translatable(KEY + "path_chance", this.sliders.percent(step)),
+                step -> this.editPaths(index, current -> this.edits.withPathChanceStep(current, step))), "path_chance");
+        Checkbox surfacePaths = this.checkbox("surface_paths", paths.surfacePaths(), value -> {
+            this.editPaths(index, current -> current.withSurfacePaths(value));
+            setOff(cutting, !value);
+            setOff(pathChance, !value);
+            if (extra != null) {
+                setOff(extra, !value);
+            }
+        });
+        setOff(cutting, !paths.surfacePaths());
+        setOff(pathChance, !paths.surfacePaths());
+        list.addRow(surfacePaths, cutting);
+        if (extra != null) {
+            setOff(extra, !paths.surfacePaths());
+            list.addRow(pathChance, extra);
+        } else {
+            list.addColumns(PATTERN_COLUMNS, pathChance);
+        }
+    }
+
+    /** Turns a widget on or off. A checkbox that is off draws translucent. */
+    private static void setOff(AbstractWidget widget, boolean off) {
+        widget.active = !off;
+        if (widget instanceof Checkbox) {
+            widget.setAlpha(off ? OFF_ALPHA : 1);
+        }
+    }
+
+    /** A combo whose button shows the text of {@code key} with the chosen name. A pick during a rebuild changes nothing. */
+    private <T> ChoiceDropdown<T> dropdown(List<T> choices, T chosen, Function<T, Component> names, String key, Consumer<T> onPick) {
+        ChoiceDropdown<T> dropdown = new ChoiceDropdown<>(choices, chosen, names, CommonComponents.EMPTY)
+                .buttonNames(choice -> Component.translatable(KEY + key, names.apply(choice)))
+                .onPick(choice -> {
+                    if (!this.rebuildPending) {
+                        onPick.accept(choice);
+                    }
+                });
+        this.dropdowns.add(dropdown);
+        return dropdown;
+    }
+
+    /** A vanilla checkbox with the text of {@code key} and the tooltip of {@code key} plus {@code _tooltip}. */
+    private Checkbox checkbox(String key, boolean selected, Consumer<Boolean> onChange) {
+        return Checkbox.builder(Component.translatable(KEY + key), this.font)
+                .selected(selected)
+                .tooltip(Tooltip.create(Component.translatable(KEY + key + "_tooltip")))
+                .onValueChange((checkbox, value) -> onChange.accept(value))
+                .build();
+    }
+
+    /** Gives the slider the tooltip of {@code key} plus {@code _tooltip}. */
+    private StepSlider tipped(StepSlider slider, String key) {
+        slider.setTooltip(Tooltip.create(Component.translatable(KEY + key + "_tooltip")));
+        return slider;
+    }
+
+    /** The tile options of a variation, or the defaults when its pattern is not tiles. */
+    private TilesSettings tiles(int index) {
+        return this.variation(index).pattern() instanceof TilesSettings tiles ? tiles : TilesSettings.DEFAULT;
+    }
+
+    private <T extends PatternSettings> void editPattern(int index, Class<T> type, UnaryOperator<T> edit) {
+        this.editVariation(index, current -> this.edits.withPattern(current, type, edit));
+    }
+
+    private void editPaths(int index, UnaryOperator<SurfacePathSettings> edit) {
+        this.editVariation(index, current -> this.edits.withPaths(current, edit));
+    }
+
+    /** Edits a variation and rebuilds the variation rows on the next tick. */
+    private void editVariationRebuild(int index, UnaryOperator<ShaftVariation> edit) {
+        if (this.rebuildPending) {
+            return;
+        }
+        this.editVariation(index, edit);
+        this.rebuildPending = true;
     }
 
     /** A button whose tooltip has the key of the button plus {@code _tooltip}. */
@@ -316,6 +547,23 @@ public class DimensionSettingsScreen extends Screen {
         return null;
     }
 
+    /** The combo whose list shows while its button lies inside the list area of the current tab, or null. It closes the other lists. */
+    @Nullable
+    private ChoiceDropdown<?> openChoice() {
+        ListTab tab = this.variationsTab;
+        boolean current = tab != null && this.tabManager.getCurrentTab() == tab;
+        ChoiceDropdown<?> open = null;
+        for (ChoiceDropdown<?> dropdown : this.dropdowns) {
+            boolean inside = current && dropdown.getY() >= tab.list.getY() && dropdown.getBottom() <= tab.list.getBottom();
+            if (open == null && dropdown.listVisible() && inside) {
+                open = dropdown;
+            } else {
+                dropdown.closeList();
+            }
+        }
+        return open;
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -327,10 +575,21 @@ public class DimensionSettingsScreen extends Screen {
         if (open != null) {
             open.renderDropdown(graphics, this.font, this.width, mouseX, mouseY);
         }
+        ChoiceDropdown<?> choice = this.openChoice();
+        if (choice != null) {
+            this.clearTooltipForNextRenderPass();
+            choice.renderList(graphics, this.font, this.height, mouseX, mouseY);
+        }
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        ChoiceDropdown<?> choice = this.openChoice();
+        if (choice != null) {
+            choice.listClicked(mouseX, mouseY, this.height);
+            choice.closeList();
+            return true;
+        }
         BlockField open = this.openDropdown();
         if (open != null && open.dropdownClicked(mouseX, mouseY, this.width)) {
             return true;
@@ -340,6 +599,11 @@ public class DimensionSettingsScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        ChoiceDropdown<?> choice = this.openChoice();
+        if (choice != null && keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            choice.closeList();
+            return true;
+        }
         BlockField open = this.openDropdown();
         if (open != null && keyCode == GLFW.GLFW_KEY_ESCAPE) {
             open.closeDropdown();

@@ -27,6 +27,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entry> {
 
@@ -113,7 +114,15 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
 
     /** Adds a label row with a heading on the line above the labels, inside the same row. */
     public void addHeadedLabels(@Nullable Component heading, Component... labels) {
-        int width = columnWidth(labels.length);
+        this.addHeadedColumnLabels(labels.length, heading, labels);
+    }
+
+    /** Adds a label row at the column widths of a row of {@code columns} widgets. It can hold fewer labels than columns. */
+    public void addHeadedColumnLabels(int columns, @Nullable Component heading, Component... labels) {
+        if (labels.length > columns) {
+            throw new IllegalArgumentException(labels.length + " labels do not fit " + columns + " columns");
+        }
+        int width = columnWidth(columns);
         List<StringWidget> widgets = new ArrayList<>();
         for (Component label : labels) {
             widgets.add(new StringWidget(width, this.minecraft.font.lineHeight, label, this.minecraft.font).alignLeft().setColor(LABEL_COLOR));
@@ -144,7 +153,15 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
 
     /** Adds a row of one to four widgets of equal width. The row sets the widget widths. */
     public void addRow(AbstractWidget... widgets) {
-        int width = columnWidth(widgets.length);
+        this.addColumns(widgets.length, widgets);
+    }
+
+    /** Adds a row of widgets at the column width of a row of {@code columns} widgets. It can hold fewer widgets than columns. */
+    public void addColumns(int columns, AbstractWidget... widgets) {
+        if (widgets.length > columns) {
+            throw new IllegalArgumentException(widgets.length + " widgets do not fit " + columns + " columns");
+        }
+        int width = columnWidth(columns);
         for (AbstractWidget widget : widgets) {
             widget.setWidth(width);
         }
@@ -387,7 +404,7 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         }
     }
 
-    /** A row of one to four widgets. */
+    /** A row of one to four widgets. A widget lower than a row widget sits in the middle of the row widget height. */
     public class RowEntry extends Entry {
 
         private final List<AbstractWidget> widgets;
@@ -400,7 +417,7 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
             int x = SettingsList.this.contentLeft();
             for (AbstractWidget widget : this.widgets) {
-                widget.setPosition(x, top);
+                widget.setPosition(x, top + Math.max(0, (WIDGET_HEIGHT - widget.getHeight()) / 2));
                 widget.render(guiGraphics, mouseX, mouseY, partialTick);
                 x += widget.getWidth() + ROW_SPACING;
             }

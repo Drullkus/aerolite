@@ -13,6 +13,7 @@ import imgui.flag.ImGuiChildFlags;
 import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiHoveredFlags;
 import imgui.flag.ImGuiMouseCursor;
+import imgui.flag.ImGuiSelectableFlags;
 import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiTreeNodeFlags;
 import imgui.flag.ImGuiWindowFlags;
@@ -34,19 +35,31 @@ import us.drullk.aerolite.client.preview.PreviewDimension;
 import us.drullk.aerolite.client.preview.PreviewPanel;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.StateProviders;
 import us.drullk.aerolite.world.VariationList;
 import us.drullk.aerolite.world.WeightedVariation;
+import us.drullk.aerolite.world.pattern.BricksSettings;
+import us.drullk.aerolite.world.pattern.ChaosSettings;
+import us.drullk.aerolite.world.pattern.MazeSettings;
+import us.drullk.aerolite.world.pattern.PatternSettings;
+import us.drullk.aerolite.world.pattern.PatternType;
+import us.drullk.aerolite.world.pattern.ScalesSettings;
+import us.drullk.aerolite.world.pattern.SurfacePathSettings;
+import us.drullk.aerolite.world.pattern.TilesSettings;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 /**
  * The ImGui panel on the right edge of the preview screen. It edits the settings with the steps and rules of the vanilla screen.
@@ -54,6 +67,7 @@ import java.util.function.Function;
  * The Preview section comes first. One collapsing header per configured dimension follows, then the add row.
  * Each dimension header holds the groups Shaft Placement and Shaft Variations.
  * A radio left of each dimension name and the dimension combo of the Preview section select the previewed dimension.
+ * The pattern widgets of a variation sit at a half indent under the combo Pattern.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -63,11 +77,13 @@ import java.util.function.Function;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
     private static final String KEY = "createWorld.customize.aerolite.";
-    private static final List<String> BLOCK_LABELS = List.of("wall_block", "path_block", "interior_block", "junction_block");
+    private static final String TRUSSES_LABEL = "trusses_block";
+    private static final List<String> BLOCK_LABELS = List.of("wall_block", "path_block", "interior_block", "junction_block", "surface_block", TRUSSES_LABEL);
     /** The red, green and blue of the default ImGui blue. The variation box draws it at 25% opacity. */
     private static final float[] GROUP_BLUE = {0.26F, 0.59F, 0.98F};
     private static final float GROUP_ALPHA = 0.25F;
@@ -547,11 +563,13 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         if (weight >= 0) {
             edited = this.tools().edits().withWeight(edited, dimension, index, weight);
         }
-        int biasStep = sliders.biasStep(variation.bias());
-        int bias = this.stepSlider("##bias", biasStep, PresetSliders.BIAS_STEPS, text("maze_bias", sliders.biasLabel(biasStep).getString()));
-        if (bias >= 0) {
-            float chosen = sliders.bias(bias);
-            edited = this.editVariation(edited, dimension, index, current -> current.withBias(chosen));
+        if (PresetEdits.showsBias(variation)) {
+            int biasStep = sliders.biasStep(variation.bias());
+            int bias = this.stepSlider("##bias", biasStep, PresetSliders.BIAS_STEPS, text("maze_bias", sliders.biasLabel(biasStep).getString()));
+            if (bias >= 0) {
+                float chosen = sliders.bias(bias);
+                edited = this.editVariation(edited, dimension, index, current -> current.withBias(chosen));
+            }
         }
         int scale = this.stepSlider("##decay_scale", sliders.decayScaleStep(variation.decayScale()), PresetSliders.DECAY_SCALE_STEPS,
                 text("decay_scale", variation.decayScale()));
@@ -569,17 +587,268 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         if (erosion >= 0) {
             edited = this.editVariation(edited, dimension, index, current -> this.tools().edits().withErosionStep(current, erosion + 1));
         }
+        edited = this.drawPattern(edited, dimension, index, variation);
+        PillarShape shape = this.combo("##shape", text("shape", this.tools().edits().choiceName("shape", variation.shape()).getString()),
+                List.of(PillarShape.values()), variation.shape(), choice -> this.tools().edits().choiceName("shape", choice).getString(), choice -> true, choice -> null);
+        if (shape != null) {
+            edited = this.editVariation(edited, dimension, index, current -> current.withShape(shape));
+        }
+
         ImGui.text(text("blocks"));
+        boolean trusses = PresetEdits.showsTrusses(variation);
         float labelWidth = 0;
         for (String key : BLOCK_LABELS) {
-            labelWidth = Math.max(labelWidth, ImGui.calcTextSize(text(key)).x);
+            if (trusses || !key.equals(TRUSSES_LABEL)) {
+                labelWidth = Math.max(labelWidth, ImGui.calcTextSize(text(key)).x);
+            }
         }
         float fieldStart = labelWidth + ImGui.getStyle().getItemSpacingX();
         edited = this.blockField(edited, dimension, index, fieldKey + "/wall", BLOCK_LABELS.get(0), fieldStart, variation.wall(), ShaftVariation::withWall);
         edited = this.blockField(edited, dimension, index, fieldKey + "/path", BLOCK_LABELS.get(1), fieldStart, variation.path(), ShaftVariation::withPath);
         edited = this.blockField(edited, dimension, index, fieldKey + "/interior", BLOCK_LABELS.get(2), fieldStart, variation.interior(), ShaftVariation::withInterior);
         edited = this.blockField(edited, dimension, index, fieldKey + "/junction", BLOCK_LABELS.get(3), fieldStart, variation.junction(), ShaftVariation::withJunction);
+        edited = this.blockField(edited, dimension, index, fieldKey + "/surface", BLOCK_LABELS.get(4), fieldStart, variation.surface(), ShaftVariation::withSurface);
+        if (trusses) {
+            edited = this.blockField(edited, dimension, index, fieldKey + "/trusses", TRUSSES_LABEL, fieldStart, variation.trusses(), ShaftVariation::withTrusses);
+        }
         return this.drawVariationClipboard(edited, dimension, index);
+    }
+
+    /** The combo Pattern, then the widgets of the pattern at a half indent. */
+    private AeroliteSettings drawPattern(AeroliteSettings settings, ResourceKey<Level> dimension, int index, ShaftVariation variation) {
+        PresetEdits edits = this.tools().edits();
+        PatternType current = variation.pattern().patternType();
+        PatternType type = this.combo("##pattern", text("pattern", edits.patternName(current).getString()), List.of(PatternType.values()), current,
+                choice -> edits.patternName(choice).getString(), choice -> true, choice -> null);
+        AeroliteSettings edited = settings;
+        if (type != null) {
+            edited = this.editVariation(edited, dimension, index, value -> edits.withPatternType(value, type));
+        }
+        float indent = ImGui.getStyle().getIndentSpacing() / 2;
+        ImGui.indent(indent);
+        try {
+            edited = switch (variation.pattern()) {
+                case MazeSettings maze -> this.drawMaze(edited, dimension, index, maze);
+                case BricksSettings bricks -> this.drawBricks(edited, dimension, index, bricks);
+                case TilesSettings tiles -> this.drawTiles(edited, dimension, index, tiles);
+                case ScalesSettings scales -> this.drawPaths(edited, dimension, index, scales.paths(), scales);
+                case ChaosSettings chaos -> this.drawChaos(edited, dimension, index, chaos);
+            };
+        } finally {
+            ImGui.unindent(indent);
+        }
+        return edited;
+    }
+
+    /** The maze type, then the pattern strength, the seam of a ribs maze or the spacing of a lines maze. */
+    private AeroliteSettings drawMaze(AeroliteSettings settings, ResourceKey<Level> dimension, int index, MazeSettings maze) {
+        PresetEdits edits = this.tools().edits();
+        PresetSliders sliders = this.tools().sliders();
+        AeroliteSettings edited = settings;
+        MazeSettings.Type type = this.combo("##maze_type", text("maze_type", edits.choiceName("maze_type", maze.type()).getString()),
+                List.of(MazeSettings.Type.values()), maze.type(), choice -> edits.choiceName("maze_type", choice).getString(), choice -> true, choice -> null);
+        if (type != null) {
+            edited = this.editPattern(edited, dimension, index, MazeSettings.class, current -> current.withType(type));
+        }
+        if (PresetEdits.showsStrength(maze.type())) {
+            int strengthStep = sliders.clampedFractionStep(maze.strength());
+            int strength = this.stepSlider("##strength", strengthStep, PresetSliders.FRACTION_STEPS, text("pattern_strength", sliders.percent(strengthStep)));
+            this.tooltip("pattern_strength_tooltip");
+            if (strength >= 0) {
+                edited = this.editPattern(edited, dimension, index, MazeSettings.class, current -> current.withStrength(sliders.clampedFraction(strength)));
+            }
+        }
+        if (maze.type() == MazeSettings.Type.RIBS) {
+            MazeSettings.Seam seam = this.combo("##seam", text("seam", edits.choiceName("seam", maze.seam()).getString()), List.of(MazeSettings.Seam.values()), maze.seam(),
+                    choice -> edits.choiceName("seam", choice).getString(), choice -> true, ImGuiPreviewPanel::seamTooltip);
+            this.tooltipText(seamTooltip(maze.seam()));
+            if (seam != null) {
+                edited = this.editPattern(edited, dimension, index, MazeSettings.class, current -> current.withSeam(seam));
+            }
+        }
+        if (maze.type() == MazeSettings.Type.LINES) {
+            List<Integer> spacings = new ArrayList<>();
+            for (int spacing = MazeSettings.MIN_SPACING; spacing <= MazeSettings.MAX_SPACING; spacing++) {
+                spacings.add(spacing);
+            }
+            Integer spacing = this.combo("##line_spacing", text("line_spacing", maze.spacing()), spacings, maze.spacing(),
+                    choice -> Integer.toString(choice), choice -> true, choice -> null);
+            this.tooltip("line_spacing_tooltip");
+            if (spacing != null) {
+                edited = this.editPattern(edited, dimension, index, MazeSettings.class, current -> current.withSpacing(spacing));
+            }
+        }
+        return edited;
+    }
+
+    private static String seamTooltip(MazeSettings.Seam seam) {
+        return text("seam." + seam.getSerializedName() + "_tooltip");
+    }
+
+    private AeroliteSettings drawBricks(AeroliteSettings settings, ResourceKey<Level> dimension, int index, BricksSettings bricks) {
+        PresetEdits edits = this.tools().edits();
+        AeroliteSettings edited = settings;
+        BricksSettings.Size size = this.combo("##brick_size", text("size", edits.choiceName("size", bricks.size()).getString()),
+                List.of(BricksSettings.Size.values()), bricks.size(), choice -> edits.choiceName("size", choice).getString(), choice -> true, choice -> null);
+        if (size != null) {
+            edited = this.editPattern(edited, dimension, index, BricksSettings.class, current -> current.withSize(size));
+        }
+        return this.drawPaths(edited, dimension, index, bricks.paths(), null);
+    }
+
+    /** The size, the stagger and Encased. Encased turns the X stagger off. Large tiles have no X stagger. */
+    private AeroliteSettings drawTiles(AeroliteSettings settings, ResourceKey<Level> dimension, int index, TilesSettings tiles) {
+        PresetEdits edits = this.tools().edits();
+        AeroliteSettings edited = settings;
+        TilesSettings.Size size = this.combo("##tile_size", text("size", edits.choiceName("size", tiles.size()).getString()),
+                List.of(TilesSettings.Size.values()), tiles.size(), choice -> edits.choiceName("size", choice).getString(), choice -> true, choice -> null);
+        if (size != null) {
+            edited = this.editPattern(edited, dimension, index, TilesSettings.class, current -> current.withSize(size));
+        }
+        TilesSettings.Stagger stagger = this.combo("##stagger", text("stagger", edits.choiceName("stagger", tiles.stagger()).getString()),
+                PresetEdits.staggerChoices(tiles.size()), tiles.stagger(), choice -> edits.choiceName("stagger", choice).getString(),
+                choice -> PresetEdits.staggerAllowed(tiles, choice),
+                choice -> PresetEdits.staggerAllowed(tiles, choice) ? null : text("stagger.x_encased_tooltip"));
+        if (stagger != null) {
+            edited = this.editPattern(edited, dimension, index, TilesSettings.class, current -> current.withStagger(stagger));
+        }
+        if (ImGui.checkbox(text("encased") + "##encased", tiles.encased())) {
+            edited = this.editPattern(edited, dimension, index, TilesSettings.class, current -> current.withEncased(!current.encased()));
+        }
+        this.tooltip("encased_tooltip");
+        return this.drawPaths(edited, dimension, index, tiles.paths(), null);
+    }
+
+    private AeroliteSettings drawChaos(AeroliteSettings settings, ResourceKey<Level> dimension, int index, ChaosSettings chaos) {
+        PresetEdits edits = this.tools().edits();
+        PresetSliders sliders = this.tools().sliders();
+        AeroliteSettings edited = settings;
+        ChaosSettings.Cells cells = this.combo("##cells", text("cells", edits.choiceName("cells", chaos.cells()).getString()),
+                List.of(ChaosSettings.Cells.values()), chaos.cells(), choice -> edits.choiceName("cells", choice).getString(), choice -> true, choice -> null);
+        if (cells != null) {
+            edited = this.editPattern(edited, dimension, index, ChaosSettings.class, current -> current.withCells(cells));
+        }
+        int spacing = this.stepSlider("##node_spacing", sliders.chaosSpacingStep(chaos.spacing()), PresetSliders.CHAOS_SPACING_STEPS,
+                text("node_spacing", chaos.spacing()));
+        this.tooltip("node_spacing_tooltip");
+        if (spacing >= 0) {
+            edited = this.editPattern(edited, dimension, index, ChaosSettings.class, current -> current.withSpacing(sliders.chaosSpacing(spacing)));
+        }
+        int jitterStep = sliders.clampedFractionStep(chaos.jitter());
+        int jitter = this.stepSlider("##jitter", jitterStep, PresetSliders.FRACTION_STEPS, text("jitter", sliders.percent(jitterStep)));
+        this.tooltip("jitter_tooltip");
+        if (jitter >= 0) {
+            edited = this.editPattern(edited, dimension, index, ChaosSettings.class, current -> current.withJitter(sliders.clampedFraction(jitter)));
+        }
+        int corner = this.stepSlider("##corner_radius", sliders.cornerRadiusStep(chaos.cornerRadius()), PresetSliders.CORNER_RADIUS_STEPS,
+                text("corner_radius", chaos.cornerRadius()));
+        this.tooltip("corner_radius_tooltip");
+        if (corner >= 0) {
+            edited = this.editPattern(edited, dimension, index, ChaosSettings.class, current -> current.withCornerRadius(sliders.cornerRadius(corner)));
+        }
+        return this.drawPaths(edited, dimension, index, chaos.paths(), null);
+    }
+
+    /**
+     * Allow loops with Loop Share one indent under it, then Surface paths, Cutting and Path Chance with no indent.
+     * Loop Share is off while Allow loops is off. Cutting, Path Chance and Paths over tails are off while Surface paths is off.
+     *
+     * @param scales the scales options for the checkbox Paths over tails, or null for another pattern
+     */
+    private AeroliteSettings drawPaths(AeroliteSettings settings, ResourceKey<Level> dimension, int index, SurfacePathSettings paths, @Nullable ScalesSettings scales) {
+        PresetEdits edits = this.tools().edits();
+        PresetSliders sliders = this.tools().sliders();
+        AeroliteSettings edited = settings;
+        if (ImGui.checkbox(text("allow_loops") + "##allow_loops", paths.allowLoops())) {
+            edited = this.editPaths(edited, dimension, index, current -> current.withAllowLoops(!current.allowLoops()));
+        }
+        this.tooltip("allow_loops_tooltip");
+        ImGui.indent();
+        ImGui.beginDisabled(!paths.allowLoops());
+        try {
+            int shareStep = sliders.clampedFractionStep(paths.loopShare());
+            int share = this.stepSlider("##loop_share", shareStep, PresetSliders.FRACTION_STEPS, text("loop_share", sliders.percent(shareStep)));
+            this.tooltip("loop_share_tooltip");
+            if (share >= 0) {
+                edited = this.editPaths(edited, dimension, index, current -> edits.withLoopShareStep(current, share));
+            }
+        } finally {
+            ImGui.endDisabled();
+            ImGui.unindent();
+        }
+        if (ImGui.checkbox(text("surface_paths") + "##surface_paths", paths.surfacePaths())) {
+            edited = this.editPaths(edited, dimension, index, current -> current.withSurfacePaths(!current.surfacePaths()));
+        }
+        this.tooltip("surface_paths_tooltip");
+        ImGui.beginDisabled(!paths.surfacePaths());
+        try {
+            if (ImGui.checkbox(text("cutting") + "##cutting", paths.cutting())) {
+                edited = this.editPaths(edited, dimension, index, current -> current.withCutting(!current.cutting()));
+            }
+            this.tooltip("cutting_tooltip");
+            int chanceStep = sliders.clampedFractionStep(paths.pathChance());
+            int chance = this.stepSlider("##path_chance", chanceStep, PresetSliders.FRACTION_STEPS, text("path_chance", sliders.percent(chanceStep)));
+            this.tooltip("path_chance_tooltip");
+            if (chance >= 0) {
+                edited = this.editPaths(edited, dimension, index, current -> edits.withPathChanceStep(current, chance));
+            }
+            if (scales != null && ImGui.checkbox(text("paths_over_tails") + "##paths_over_tails", scales.pathsOverTails())) {
+                edited = this.editPattern(edited, dimension, index, ScalesSettings.class, current -> current.withPathsOverTails(!current.pathsOverTails()));
+            }
+            if (scales != null) {
+                this.tooltip("paths_over_tails_tooltip");
+            }
+        } finally {
+            ImGui.endDisabled();
+        }
+        return edited;
+    }
+
+    /**
+     * A full width combo. A choice that the enabled test rejects shows off. Returns the picked choice, or null when the choice stays.
+     *
+     * @param tooltips the tooltip of each entry, or null for none
+     */
+    @Nullable
+    private <T> T combo(String id, String preview, List<T> choices, T chosen, Function<T, String> names, Predicate<T> enabled, Function<T, String> tooltips) {
+        ImGui.setNextItemWidth(-1);
+        T picked = null;
+        if (ImGui.beginCombo(id, preview)) {
+            try {
+                for (T choice : choices) {
+                    int flags = enabled.test(choice) ? 0 : ImGuiSelectableFlags.Disabled;
+                    if (ImGui.selectable(names.apply(choice) + "##" + choice, choice.equals(chosen), flags) && !choice.equals(chosen)) {
+                        picked = choice;
+                    }
+                    String tooltip = tooltips.apply(choice);
+                    if (tooltip != null && ImGui.isItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) {
+                        ImGui.setTooltip(tooltip);
+                    }
+                }
+            } finally {
+                ImGui.endCombo();
+            }
+        }
+        return picked;
+    }
+
+    /** Shows the text of the key as the tooltip of the last item, also while it is off. */
+    private void tooltip(String key) {
+        this.tooltipText(text(key));
+    }
+
+    private void tooltipText(String tooltip) {
+        if (ImGui.isItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)) {
+            ImGui.setTooltip(format(tooltip));
+        }
+    }
+
+    private <T extends PatternSettings> AeroliteSettings editPattern(AeroliteSettings settings, ResourceKey<Level> dimension, int index, Class<T> type, UnaryOperator<T> edit) {
+        return this.editVariation(settings, dimension, index, current -> this.tools().edits().withPattern(current, type, edit));
+    }
+
+    private AeroliteSettings editPaths(AeroliteSettings settings, ResourceKey<Level> dimension, int index, UnaryOperator<SurfacePathSettings> edit) {
+        return this.editVariation(settings, dimension, index, current -> this.tools().edits().withPaths(current, edit));
     }
 
     /** Export and Import of one variation. A good import replaces the variation and keeps its weight. */

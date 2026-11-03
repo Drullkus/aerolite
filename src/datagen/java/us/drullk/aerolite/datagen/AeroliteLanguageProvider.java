@@ -19,6 +19,7 @@ import us.drullk.aerolite.world.VariationList;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -73,8 +74,69 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.junction_block", "Junction");
         this.add("createWorld.customize.aerolite.wall_block", "Wall");
         this.add("createWorld.customize.aerolite.path_block", "Path");
+        this.add("createWorld.customize.aerolite.surface_block", "Surface");
+        this.add("createWorld.customize.aerolite.trusses_block", "Trusses");
+        this.add("createWorld.customize.aerolite.pattern", "Pattern: %s");
+        this.add("createWorld.customize.aerolite.pattern.mazes", "Mazes");
+        this.add("createWorld.customize.aerolite.pattern.bricks", "Bricks");
+        this.add("createWorld.customize.aerolite.pattern.tiles", "Tiles");
+        this.add("createWorld.customize.aerolite.pattern.scales", "Scales");
+        this.add("createWorld.customize.aerolite.pattern.chaos", "Chaos");
+        this.add("createWorld.customize.aerolite.maze_type", "Type: %s");
+        this.add("createWorld.customize.aerolite.maze_type.uniform", "Uniform");
+        this.add("createWorld.customize.aerolite.maze_type.serpentine", "Serpentine");
+        this.add("createWorld.customize.aerolite.maze_type.ribs", "Ribs");
+        this.add("createWorld.customize.aerolite.maze_type.lines", "Lines");
+        this.add("createWorld.customize.aerolite.maze_type.gilbert", "Gilbert");
+        this.add("createWorld.customize.aerolite.pattern_strength", "Strength: %s");
+        this.add("createWorld.customize.aerolite.pattern_strength_tooltip", "Pattern Strength. At 100%, the maze follows the pattern exactly.");
+        this.add("createWorld.customize.aerolite.seam", "Seam: %s");
+        this.add("createWorld.customize.aerolite.seam.random", "Random");
+        this.add("createWorld.customize.aerolite.seam.seeded", "Seeded");
+        this.add("createWorld.customize.aerolite.seam.pillar", "Per pillar");
+        this.add("createWorld.customize.aerolite.seam.random_tooltip", "Random per segment");
+        this.add("createWorld.customize.aerolite.seam.seeded_tooltip", "Seeded per segment");
+        this.add("createWorld.customize.aerolite.seam.pillar_tooltip", "Per pillar");
+        this.add("createWorld.customize.aerolite.line_spacing", "Spacing: %s");
+        this.add("createWorld.customize.aerolite.line_spacing_tooltip", "The node columns per groove");
+        this.add("createWorld.customize.aerolite.size", "Size: %s");
+        this.add("createWorld.customize.aerolite.size.small", "Small");
+        this.add("createWorld.customize.aerolite.size.jumbled", "Jumbled");
+        this.add("createWorld.customize.aerolite.size.large", "Large");
+        this.add("createWorld.customize.aerolite.stagger", "Stagger: %s");
+        this.add("createWorld.customize.aerolite.stagger.none", "None");
+        this.add("createWorld.customize.aerolite.stagger.x", "X");
+        this.add("createWorld.customize.aerolite.stagger.y", "Y");
+        this.add("createWorld.customize.aerolite.stagger.x_encased_tooltip", "Encased tiles and large tiles do not stagger along X");
+        this.add("createWorld.customize.aerolite.encased", "Encased");
+        this.add("createWorld.customize.aerolite.encased_tooltip", "Keep the corner strip solid");
+        this.add("createWorld.customize.aerolite.cells", "Cells: %s");
+        this.add("createWorld.customize.aerolite.cells.voronoi", "Voronoi");
+        this.add("createWorld.customize.aerolite.cells.delaunay", "Delaunay");
+        this.add("createWorld.customize.aerolite.node_spacing", "Node Spacing: %s");
+        this.add("createWorld.customize.aerolite.node_spacing_tooltip", "The node spacing in blocks");
+        this.add("createWorld.customize.aerolite.jitter", "Jitter: %s");
+        this.add("createWorld.customize.aerolite.jitter_tooltip", "The offset range of each cell point");
+        this.add("createWorld.customize.aerolite.corner_radius", "Corner Radius: %s");
+        this.add("createWorld.customize.aerolite.corner_radius_tooltip", "The chamfer at each T junction, in blocks");
+        this.add("createWorld.customize.aerolite.allow_loops", "Allow loops");
+        this.add("createWorld.customize.aerolite.allow_loops_tooltip", "Keep a share of the pattern cycles");
+        this.add("createWorld.customize.aerolite.loop_share", "Loop Share: %s");
+        this.add("createWorld.customize.aerolite.loop_share_tooltip", "The share of the cycle grooves that stays");
+        this.add("createWorld.customize.aerolite.surface_paths", "Surface paths");
+        this.add("createWorld.customize.aerolite.surface_paths_tooltip", "Put surface paths on the pattern");
+        this.add("createWorld.customize.aerolite.cutting", "Cutting");
+        this.add("createWorld.customize.aerolite.cutting_tooltip", "Carve each surface path as a groove");
+        this.add("createWorld.customize.aerolite.path_chance", "Path Chance: %s");
+        this.add("createWorld.customize.aerolite.path_chance_tooltip", "The chance of a surface path in one region");
+        this.add("createWorld.customize.aerolite.paths_over_tails", "Paths over tails");
+        this.add("createWorld.customize.aerolite.paths_over_tails_tooltip", "A cut surface path carves the tail blocks");
+        this.add("createWorld.customize.aerolite.shape", "Shape: %s");
+        this.add("createWorld.customize.aerolite.shape.pillar", "Pillar");
+        this.add("createWorld.customize.aerolite.shape.i_beam", "I-beam");
+        this.add("createWorld.customize.aerolite.shape.bridge", "Bridge");
         this.add("createWorld.customize.aerolite.add_variation", "Add Variation");
-        this.add("createWorld.customize.aerolite.remove_variation", "Remove Variation");
+        this.add("createWorld.customize.aerolite.remove_variation", "Remove");
         this.add("createWorld.customize.aerolite.copy_variation", "Copy");
         this.add("createWorld.customize.aerolite.paste_variation", "Paste");
         this.add("createWorld.customize.aerolite.copy_variation_tooltip", "Export this variation to the clipboard");

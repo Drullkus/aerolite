@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * A button that shows one chosen candidate. A click opens a list of the candidates below the button.
@@ -18,9 +19,12 @@ import java.util.function.Function;
  * The screen draws the list and sends clicks to it, so the list covers the rows below.
  * The list shows only while the button has focus.
  * With no candidate, the button is off and shows the empty text.
+ * The button can show another text than the list, such as a label before the name.
+ * A candidate that the enabled test rejects draws gray and takes no pick. A list entry can show a tooltip on hover.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  *
  * @param <T> the type of the candidates
  */
@@ -31,9 +35,14 @@ public class ChoiceDropdown<T> extends AbstractButton {
     private static final int BACKGROUND_COLOR = 0xF0101010;
     private static final int HIGHLIGHT_COLOR = 0xFF404060;
     private static final int OUTLINE_COLOR = 0xFFA0A0A0;
+    private static final int TEXT_COLOR = 0xFFFFFFFF;
+    private static final int DISABLED_TEXT_COLOR = 0xFF707070;
 
     private final List<T> candidates;
     private final Function<T, Component> names;
+    private Function<T, Component> buttonNames;
+    private Predicate<T> enabled = candidate -> true;
+    private Function<T, Component> entryTooltips = candidate -> null;
     private Consumer<T> onPick = picked -> {
     };
     private int chosen;
@@ -48,6 +57,7 @@ public class ChoiceDropdown<T> extends AbstractButton {
         super(0, 0, SettingsList.HALF_WIDTH, 20, empty);
         this.candidates = List.copyOf(candidates);
         this.names = names;
+        this.buttonNames = names;
         this.chosen = preferred == null ? 0 : Math.max(0, this.candidates.indexOf(preferred));
         this.active = !this.candidates.isEmpty();
         if (this.active) {
@@ -61,6 +71,27 @@ public class ChoiceDropdown<T> extends AbstractButton {
         return this.candidates.isEmpty() ? null : this.candidates.get(this.chosen);
     }
 
+    /** Sets the text of the button for the chosen candidate. The list keeps the names. */
+    public ChoiceDropdown<T> buttonNames(Function<T, Component> buttonNames) {
+        this.buttonNames = buttonNames;
+        if (this.active) {
+            this.setMessage(buttonNames.apply(this.candidates.get(this.chosen)));
+        }
+        return this;
+    }
+
+    /** Sets the test of the candidates that the list can pick. The test runs at each draw and each pick. */
+    public ChoiceDropdown<T> enabled(Predicate<T> enabled) {
+        this.enabled = enabled;
+        return this;
+    }
+
+    /** Sets the tooltip of each list entry. A null tooltip shows nothing. */
+    public ChoiceDropdown<T> entryTooltips(Function<T, Component> entryTooltips) {
+        this.entryTooltips = entryTooltips;
+        return this;
+    }
+
     /** Sets the listener that a pick from the list calls. */
     public ChoiceDropdown<T> onPick(Consumer<T> onPick) {
         this.onPick = onPick;
@@ -72,7 +103,7 @@ public class ChoiceDropdown<T> extends AbstractButton {
         int index = this.candidates.indexOf(candidate);
         if (index >= 0) {
             this.chosen = index;
-            this.setMessage(this.names.apply(candidate));
+            this.setMessage(this.buttonNames.apply(candidate));
         }
     }
 
@@ -94,8 +125,11 @@ public class ChoiceDropdown<T> extends AbstractButton {
     }
 
     private void pick(int index) {
+        if (!this.enabled.test(this.candidates.get(index))) {
+            return;
+        }
         this.chosen = index;
-        this.setMessage(this.names.apply(this.candidates.get(index)));
+        this.setMessage(this.buttonNames.apply(this.candidates.get(index)));
         this.open = false;
         this.onPick.accept(this.candidates.get(index));
     }
@@ -118,17 +152,26 @@ public class ChoiceDropdown<T> extends AbstractButton {
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 200);
         graphics.fill(x, y, x + width, y + this.listHeight(), BACKGROUND_COLOR);
+        Component tooltip = null;
         for (int k = 0; k < this.candidates.size(); k++) {
+            T candidate = this.candidates.get(k);
+            boolean pickable = this.enabled.test(candidate);
             int top = y + k * ENTRY_HEIGHT;
             boolean hovered = mouseX >= x && mouseX < x + width && mouseY >= top && mouseY < top + ENTRY_HEIGHT;
-            if (hovered || k == this.highlighted) {
+            if (pickable && (hovered || k == this.highlighted)) {
                 graphics.fill(x, top, x + width, top + ENTRY_HEIGHT, HIGHLIGHT_COLOR);
             }
-            String name = font.plainSubstrByWidth(this.names.apply(this.candidates.get(k)).getString(), width - 8);
-            graphics.drawString(font, name, x + 4, top + (ENTRY_HEIGHT - font.lineHeight) / 2 + 1, 0xFFFFFFFF);
+            if (hovered) {
+                tooltip = this.entryTooltips.apply(candidate);
+            }
+            String name = font.plainSubstrByWidth(this.names.apply(candidate).getString(), width - 8);
+            graphics.drawString(font, name, x + 4, top + (ENTRY_HEIGHT - font.lineHeight) / 2 + 1, pickable ? TEXT_COLOR : DISABLED_TEXT_COLOR);
         }
         graphics.renderOutline(x, y, width, this.listHeight(), OUTLINE_COLOR);
         graphics.pose().popPose();
+        if (tooltip != null) {
+            graphics.renderTooltip(font, tooltip, mouseX, mouseY);
+        }
     }
 
     /** Picks the list entry under the mouse. Returns true when the click hits the list. */

@@ -6,6 +6,7 @@ import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.pattern.ChaosSettings;
 
 /**
  * Maps the slider steps of the preset screen to setting values.
@@ -13,6 +14,7 @@ import us.drullk.aerolite.world.ShaftVariation;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetSliders {
@@ -33,6 +35,10 @@ public final class PresetSliders {
     public static final int DECAY_SCALE_STEPS = MAX_SCALE_EXPONENT - MIN_SCALE_EXPONENT;
     /** The erosion slider skips the 0% step, so its steps run from 1 to {@link #FRACTION_STEPS}. */
     public static final int EROSION_STEPS = FRACTION_STEPS - 1;
+    /** One step per block from the smallest to the largest chaos node spacing. */
+    public static final int CHAOS_SPACING_STEPS = ChaosSettings.MAX_SPACING - ChaosSettings.MIN_SPACING;
+    /** One step per block from the smallest to the largest chaos corner radius. */
+    public static final int CORNER_RADIUS_STEPS = ChaosSettings.MAX_CORNER_RADIUS - ChaosSettings.MIN_CORNER_RADIUS;
 
     public int fractionStep(float fraction) {
         return Math.round(fraction * FRACTION_STEPS);
@@ -40,6 +46,32 @@ public final class PresetSliders {
 
     public float fraction(int step) {
         return step / (float) FRACTION_STEPS;
+    }
+
+    /** The fraction step of a value from 0 to 1, clamped to the slider. */
+    public int clampedFractionStep(float fraction) {
+        return Mth.clamp(this.fractionStep(fraction), 0, FRACTION_STEPS);
+    }
+
+    /** The fraction of a step, clamped to the slider. */
+    public float clampedFraction(int step) {
+        return this.fraction(Mth.clamp(step, 0, FRACTION_STEPS));
+    }
+
+    public int chaosSpacing(int step) {
+        return ChaosSettings.MIN_SPACING + Mth.clamp(step, 0, CHAOS_SPACING_STEPS);
+    }
+
+    public int chaosSpacingStep(int spacing) {
+        return Mth.clamp(spacing - ChaosSettings.MIN_SPACING, 0, CHAOS_SPACING_STEPS);
+    }
+
+    public int cornerRadius(int step) {
+        return ChaosSettings.MIN_CORNER_RADIUS + Mth.clamp(step, 0, CORNER_RADIUS_STEPS);
+    }
+
+    public int cornerRadiusStep(int radius) {
+        return Mth.clamp(radius - ChaosSettings.MIN_CORNER_RADIUS, 0, CORNER_RADIUS_STEPS);
     }
 
     public int decayScale(int step) {

@@ -6,6 +6,8 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.neoforged.api.distmarker.Dist;
@@ -13,12 +15,21 @@ import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.DimensionSettings;
+import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftLookup;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftRegistries;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.VariationList;
 import us.drullk.aerolite.world.WeightedVariation;
+import us.drullk.aerolite.world.pattern.BricksSettings;
+import us.drullk.aerolite.world.pattern.ChaosSettings;
+import us.drullk.aerolite.world.pattern.MazeSettings;
+import us.drullk.aerolite.world.pattern.PatternSettings;
+import us.drullk.aerolite.world.pattern.PatternType;
+import us.drullk.aerolite.world.pattern.ScalesSettings;
+import us.drullk.aerolite.world.pattern.SurfacePathSettings;
+import us.drullk.aerolite.world.pattern.TilesSettings;
 
 import javax.annotation.Nullable;
 
@@ -30,6 +41,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 /**
  * The edit rules of the shaft settings. The vanilla screens and the preview panel share them.
@@ -39,9 +51,12 @@ import java.util.Optional;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetEdits {
+
+    private static final String KEY = "createWorld.customize.aerolite.";
 
     /** The vanilla dimensions, in screen sequence. They come before every other dimension. */
     private static final List<ResourceKey<Level>> VANILLA_DIMENSIONS = List.of(Level.OVERWORLD, Level.NETHER, Level.END);
@@ -298,6 +313,99 @@ public final class PresetEdits {
 
     private WeightedVariation stoneVariation() {
         return this.lookup().resolve(blankList()).getFirst();
+    }
+
+
+    /** The pattern of a type with the defaults of that type. */
+    public static PatternSettings defaultPattern(PatternType type) {
+        return switch (type) {
+            case MAZES -> MazeSettings.DEFAULT;
+            case BRICKS -> BricksSettings.DEFAULT;
+            case TILES -> TilesSettings.DEFAULT;
+            case SCALES -> ScalesSettings.DEFAULT;
+            case CHAOS -> ChaosSettings.DEFAULT;
+        };
+    }
+
+    /** A new pattern type replaces the pattern with the defaults of that type. The same type keeps the pattern. */
+    public ShaftVariation withPatternType(ShaftVariation variation, PatternType type) {
+        return variation.pattern().patternType() == type ? variation : variation.withPattern(defaultPattern(type));
+    }
+
+    /** Edits the pattern when it is of the given class. Any other pattern stays. */
+    public <T extends PatternSettings> ShaftVariation withPattern(ShaftVariation variation, Class<T> type, UnaryOperator<T> edit) {
+        PatternSettings pattern = variation.pattern();
+        return type.isInstance(pattern) ? variation.withPattern(edit.apply(type.cast(pattern))) : variation;
+    }
+
+    /** The loop and surface path options of the pattern. A maze has none. */
+    public static Optional<SurfacePathSettings> paths(PatternSettings pattern) {
+        return switch (pattern) {
+            case MazeSettings maze -> Optional.empty();
+            case BricksSettings bricks -> Optional.of(bricks.paths());
+            case TilesSettings tiles -> Optional.of(tiles.paths());
+            case ScalesSettings scales -> Optional.of(scales.paths());
+            case ChaosSettings chaos -> Optional.of(chaos.paths());
+        };
+    }
+
+    /** Edits the loop and surface path options. A maze stays. */
+    public ShaftVariation withPaths(ShaftVariation variation, UnaryOperator<SurfacePathSettings> edit) {
+        PatternSettings edited = switch (variation.pattern()) {
+            case MazeSettings maze -> maze;
+            case BricksSettings bricks -> bricks.withPaths(edit.apply(bricks.paths()));
+            case TilesSettings tiles -> tiles.withPaths(edit.apply(tiles.paths()));
+            case ScalesSettings scales -> scales.withPaths(edit.apply(scales.paths()));
+            case ChaosSettings chaos -> chaos.withPaths(edit.apply(chaos.paths()));
+        };
+        return variation.withPattern(edited);
+    }
+
+    /** The loop share of a step from 0% to 100%. A step outside the slider clamps to it. */
+    public SurfacePathSettings withLoopShareStep(SurfacePathSettings paths, int step) {
+        return paths.withLoopShare(this.sliders.clampedFraction(step));
+    }
+
+    /** The path chance of a step from 0% to 100%. A step outside the slider clamps to it. */
+    public SurfacePathSettings withPathChanceStep(SurfacePathSettings paths, int step) {
+        return paths.withPathChance(this.sliders.clampedFraction(step));
+    }
+
+    /** The stagger choices of a tile size. Large tiles have no X stagger. */
+    public static List<TilesSettings.Stagger> staggerChoices(TilesSettings.Size size) {
+        return size == TilesSettings.Size.LARGE
+                ? List.of(TilesSettings.Stagger.NONE, TilesSettings.Stagger.Y)
+                : List.of(TilesSettings.Stagger.values());
+    }
+
+    /** False for the X stagger of encased tiles or large tiles. */
+    public static boolean staggerAllowed(TilesSettings tiles, TilesSettings.Stagger stagger) {
+        return stagger != TilesSettings.Stagger.X || tiles.size() != TilesSettings.Size.LARGE && !tiles.encased();
+    }
+
+    /** True for a maze type with the pattern strength slider. Uniform and Lines have none. */
+    public static boolean showsStrength(MazeSettings.Type type) {
+        return type != MazeSettings.Type.UNIFORM && type != MazeSettings.Type.LINES;
+    }
+
+    /** True when the variation shows the maze bias slider. A Lines maze has none. */
+    public static boolean showsBias(ShaftVariation variation) {
+        return !(variation.pattern() instanceof MazeSettings maze && maze.type() == MazeSettings.Type.LINES);
+    }
+
+    /** True when the variation shows the trusses block field. Only the shape Bridge has trusses. */
+    public static boolean showsTrusses(ShaftVariation variation) {
+        return variation.shape() == PillarShape.BRIDGE;
+    }
+
+    /** The name of a pattern type. It reads {@code createWorld.customize.aerolite.pattern.<id path>}. */
+    public net.minecraft.network.chat.Component patternName(PatternType type) {
+        return net.minecraft.network.chat.Component.translatable(KEY + "pattern." + ResourceLocation.parse(type.getSerializedName()).getPath());
+    }
+
+    /** The name of one entry of a combo. It reads {@code createWorld.customize.aerolite.<group>.<serialized name>}. */
+    public net.minecraft.network.chat.Component choiceName(String group, StringRepresentable choice) {
+        return net.minecraft.network.chat.Component.translatable(KEY + group + "." + choice.getSerializedName());
     }
 
 }
