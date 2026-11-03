@@ -1,5 +1,5 @@
-modLoader="lowcodefml"
-loaderVersion="[4,)"
+modLoader="javafml"
+loaderVersion="[1,)"
 license="All Rights Reserved"
 
 [[mods]]
@@ -18,4 +18,12 @@ config="aerolitedevtools.mixins.json"
     type="required"
     versionRange="[21.1.0,)"
     ordering="NONE"
+    side="CLIENT"
+
+# The provider prototypes reuse the widgets of Aerolite.
+[[dependencies.aerolitedevtools]]
+    modId="aerolite"
+    type="required"
+    versionRange="[0,)"
+    ordering="AFTER"
     side="CLIENT"

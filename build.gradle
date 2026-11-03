@@ -396,6 +396,8 @@ dependencies {
     }
 
     datagenImplementation sourceSets.main.output
+    // The dev tools reuse the widgets of the mod. The runs load the mod itself.
+    devtoolsCompileOnly sourceSets.main.output
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
