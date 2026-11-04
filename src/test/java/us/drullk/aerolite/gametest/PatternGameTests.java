@@ -7,13 +7,14 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import tamaized.beanification.Autowired;
 import us.drullk.aerolite.Aerolite;
-import us.drullk.aerolite.world.TestSettings;
+import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.pattern.BricksSettings;
 import us.drullk.aerolite.world.pattern.MazeSettings;
 import us.drullk.aerolite.world.shaft.binding.PatternBindings;
+import us.drullk.aerolite.world.shaft.binding.PatternContext;
 import us.drullk.aerolite.world.shaft.maze.MazePattern;
 import us.drullk.aerolite.world.shaft.binding.maze.MazePatternBinding;
-import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
+import us.drullk.aerolite.world.shaft.surface.PillarRing;
 
 import java.util.List;
 
@@ -29,8 +30,6 @@ public final class PatternGameTests {
     // GameTest methods are static. Beanification fills these fields.
     @Autowired
     private static PatternBindings bindings;
-    @Autowired
-    private static ShaftMazes mazes;
 
     private PatternGameTests() {
     }
@@ -42,10 +41,13 @@ public final class PatternGameTests {
         helper.succeed();
     }
 
+    /** A collector with only the maze binding paints other settings as the maze, whatever bindings the mod holds. */
     @GameTest(template = "empty")
     public static void patternWithoutBindingPaintsTheMaze(GameTestHelper helper) {
-        helper.assertTrue(mazes.pattern(TestSettings.STONE.withPattern(BricksSettings.DEFAULT), (min, max) -> List.of(), new XoroshiroRandomSource(1).forkPositional(), -4, 4)
-                instanceof MazePattern, "The bricks pattern does not fall back to the maze");
+        PatternBindings mazeOnly = PatternBindings.of(List.of(bindings.binding(MazeSettings.class)));
+        PatternContext context = new PatternContext(BricksSettings.DEFAULT, PillarRing.INSTANCE, (min, max) -> List.of(),
+                new XoroshiroRandomSource(1).forkPositional(), ShaftVariation.UNIFORM_BIAS, -4, 4);
+        helper.assertTrue(mazeOnly.create(context) instanceof MazePattern, "Settings without a binding do not fall back to the maze");
         helper.succeed();
     }
 
