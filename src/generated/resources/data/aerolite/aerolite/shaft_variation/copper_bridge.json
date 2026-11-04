@@ -1,5 +1,5 @@
 {
-  "bias": 0.5,
+  "bias": 0.95,
   "decay_scale": 128,
   "decay_threshold": 0.85,
   "erosion_threshold": 0.95,
@@ -27,16 +27,16 @@
   },
   "pattern": {
     "type": "aerolite:tiles",
-    "allow_loops": true,
+    "allow_loops": false,
     "cutting": true,
     "encased": false,
-    "loop_share": 1.0,
+    "loop_share": 0.0,
     "path_chance": 1.0,
     "size": "large",
     "stagger": "none",
     "surface_paths": true
   },
-  "shape": "i_beam",
+  "shape": "bridge",
   "surface": {
     "type": "minecraft:simple_state_provider",
     "state": {
@@ -46,7 +46,7 @@
   "trusses": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:oxidized_copper"
+      "Name": "minecraft:waxed_exposed_copper"
     }
   },
   "wall": {

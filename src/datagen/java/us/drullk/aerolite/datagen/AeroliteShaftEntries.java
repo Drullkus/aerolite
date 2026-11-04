@@ -30,7 +30,7 @@ public final class AeroliteShaftEntries {
     public static final ResourceKey<ShaftVariation> MOSSY_MAZE = variation("mossy_maze");
     public static final ResourceKey<ShaftVariation> TUFF_BRICKS = variation("tuff_bricks");
     public static final ResourceKey<ShaftVariation> DEEPSLATE = variation("deepslate");
-    public static final ResourceKey<ShaftVariation> COPPER_BEAM = variation("copper_beam");
+    public static final ResourceKey<ShaftVariation> COPPER_BRIDGE = variation("copper_bridge");
     public static final ResourceKey<ShaftVariation> MUD_TILES = variation("mud_tiles");
     public static final ResourceKey<ShaftVariation> ANDESITE = variation("andesite");
     public static final ResourceKey<ShaftVariation> DIORITE = variation("diorite");
@@ -87,19 +87,19 @@ public final class AeroliteShaftEntries {
                 BlockStateProvider.simple(Blocks.TUFF)
         ));
         register(context, DEEPSLATE, 0.3F, Blocks.DEEPSLATE, Blocks.DEEPSLATE_BRICKS, Blocks.POLISHED_DEEPSLATE);
-        register(context, COPPER_BEAM, new ShaftVariation(
-                ShaftVariation.UNIFORM_BIAS,
+        register(context, COPPER_BRIDGE, new ShaftVariation(
+                ShaftVariation.MAX_BIAS,
                 128,
                 0.85f,
                 0.95f,
-                new TilesSettings(TilesSettings.Size.LARGE, TilesSettings.Stagger.NONE, false, new SurfacePathSettings(true, 1f, true, true, 1f)),
-                PillarShape.I_BEAM,
+                new TilesSettings(TilesSettings.Size.LARGE, TilesSettings.Stagger.NONE, false, new SurfacePathSettings(false, 0f, true, true, 1f)),
+                PillarShape.BRIDGE,
                 BlockStateProvider.simple(Blocks.OXIDIZED_COPPER),
                 BlockStateProvider.simple(Blocks.OXIDIZED_COPPER),
                 BlockStateProvider.simple(Blocks.OXIDIZED_CUT_COPPER),
                 BlockStateProvider.simple(Blocks.OXIDIZED_COPPER_BULB),
                 BlockStateProvider.simple(Blocks.OXIDIZED_CHISELED_COPPER),
-                BlockStateProvider.simple(Blocks.OXIDIZED_COPPER)
+                BlockStateProvider.simple(Blocks.WAXED_EXPOSED_COPPER)
         ));
         register(context, MUD_TILES, new ShaftVariation(
                 ShaftVariation.MIN_BIAS,
@@ -242,7 +242,7 @@ public final class AeroliteShaftEntries {
     }
 
     private VariationList overworldList() {
-        return list(entry(STONE, 16), entry(MOSSY_MAZE, 4), entry(TUFF_BRICKS, 4), entry(DEEPSLATE, 2), entry(COPPER_BEAM, 1),
+        return list(entry(STONE, 16), entry(MOSSY_MAZE, 4), entry(TUFF_BRICKS, 4), entry(DEEPSLATE, 2), entry(COPPER_BRIDGE, 1),
                 entry(MUD_TILES, 1), entry(ANDESITE, 1), entry(DIORITE, 1), entry(GRANITE, 1));
     }
 
