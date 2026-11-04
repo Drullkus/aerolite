@@ -3,6 +3,7 @@ package us.drullk.aerolite.client;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractStringWidget;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.StringWidget;
@@ -21,6 +22,7 @@ import java.util.List;
 /**
  * A scrollable list of section headers, label rows and widget rows for the preset screens.
  * A group of rows draws a translucent box behind its rows. The box pads the rows by {@link #GROUP_PADDING} on each side.
+ * A line keeps the width of each widget and gives the rest of the row to one flexible widget.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -39,12 +41,18 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
     /** The size of each square button at the right end of a trailing row. */
     public static final int TRAILING_SIZE = 20;
     private static final int TRAILING_SPACING = 4;
+    /** The width of a label that {@link #label} makes. */
+    public static final int LABEL_WIDTH = 64;
+    /** The space between the widgets of a line. */
+    public static final int LINE_GAP = 4;
+    /** The flexible widget index of a line whose widgets all keep their widths. */
+    public static final int NO_FLEX = -1;
     /** The width of the title of a value row. */
     private static final int VALUE_TITLE_WIDTH = 80;
     /** The most widgets of one row. */
     private static final int MAX_COLUMNS = 4;
     private static final int ITEM_HEIGHT = 24;
-    private static final int LABEL_COLOR = 0xFFA0A0A0;
+    public static final int LABEL_COLOR = 0xFFA0A0A0;
     /** The space between the rows of a group and the edge of its box. */
     private static final int GROUP_PADDING = 4;
     /** The height of a widget in a row. The rest of the row height is the gap below it. */
@@ -107,29 +115,45 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         this.addEntry(new ValueEntry(titleText, valueText, List.of(trailing)));
     }
 
-    /** Adds a row of one to four labels at the column widths of {@link #addRow} with as many widgets. */
-    public void addLabels(Component... labels) {
-        this.addHeadedLabels(null, labels);
+    /** A gray label of {@link #LABEL_WIDTH}. */
+    public StringWidget label(Component text) {
+        return this.label(text, LABEL_WIDTH);
     }
 
-    /** Adds a label row with a heading on the line above the labels, inside the same row. */
-    public void addHeadedLabels(@Nullable Component heading, Component... labels) {
-        this.addHeadedColumnLabels(labels.length, heading, labels);
+    /** A gray label of the width. */
+    public StringWidget label(Component text, int width) {
+        return new StringWidget(width, this.minecraft.font.lineHeight, text, this.minecraft.font).alignLeft().setColor(LABEL_COLOR);
     }
 
-    /** Adds a label row at the column widths of a row of {@code columns} widgets. It can hold fewer labels than columns. */
-    public void addHeadedColumnLabels(int columns, @Nullable Component heading, Component... labels) {
-        if (labels.length > columns) {
-            throw new IllegalArgumentException(labels.length + " labels do not fit " + columns + " columns");
+    /**
+     * Adds a line of widgets. Each widget keeps its width, except the widget at {@code flex}.
+     * That widget takes the rest of the row. {@link #NO_FLEX} keeps every width.
+     */
+    public void addLine(int flex, AbstractWidget... widgets) {
+        if (flex != NO_FLEX) {
+            int fixed = LINE_GAP * (widgets.length - 1);
+            for (int i = 0; i < widgets.length; i++) {
+                if (i != flex) {
+                    fixed += widgets[i].getWidth();
+                }
+            }
+            widgets[flex].setWidth(ROW_WIDTH - fixed);
         }
-        int width = columnWidth(columns);
-        List<StringWidget> widgets = new ArrayList<>();
-        for (Component label : labels) {
-            widgets.add(new StringWidget(width, this.minecraft.font.lineHeight, label, this.minecraft.font).alignLeft().setColor(LABEL_COLOR));
+        this.addEntry(new LineEntry(List.of(widgets)));
+    }
+
+    /** Adds a line of widgets of equal width. */
+    public void addEqual(AbstractWidget... widgets) {
+        int width = (ROW_WIDTH - LINE_GAP * (widgets.length - 1)) / widgets.length;
+        for (AbstractWidget widget : widgets) {
+            widget.setWidth(width);
         }
-        StringWidget headingWidget = heading == null ? null
-                : new StringWidget(ROW_WIDTH, this.minecraft.font.lineHeight, heading, this.minecraft.font).alignLeft();
-        this.addEntry(new LabelEntry(headingWidget, widgets));
+        this.addEntry(new LineEntry(List.of(widgets)));
+    }
+
+    /** Adds a line of white text. It takes no focus. */
+    public void addText(Component text) {
+        this.addEntry(new LineEntry(List.of(new StringWidget(ROW_WIDTH, this.minecraft.font.lineHeight, text, this.minecraft.font).alignLeft())));
     }
 
     /** Adds an empty row. */
@@ -337,49 +361,6 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         }
     }
 
-    /** A row of labels above a row of widgets, with an optional heading on the line above the labels. It takes no focus. */
-    public class LabelEntry extends Entry {
-
-        @Nullable
-        private final StringWidget heading;
-        private final List<StringWidget> labels;
-
-        LabelEntry(@Nullable StringWidget heading, List<StringWidget> labels) {
-            this.heading = heading;
-            this.labels = labels;
-        }
-
-        @Override
-        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
-            int x = SettingsList.this.contentLeft();
-            if (this.heading != null) {
-                this.heading.setPosition(x, top + 1);
-                this.heading.render(guiGraphics, mouseX, mouseY, partialTick);
-            }
-            for (StringWidget label : this.labels) {
-                label.setPosition(x + 1, top + height - label.getHeight() + 3);
-                label.render(guiGraphics, mouseX, mouseY, partialTick);
-                x += label.getWidth() + ROW_SPACING;
-            }
-        }
-
-        @Nullable
-        @Override
-        public ComponentPath nextFocusPath(FocusNavigationEvent event) {
-            return null;
-        }
-
-        @Override
-        public List<? extends GuiEventListener> children() {
-            return List.of();
-        }
-
-        @Override
-        public List<? extends NarratableEntry> narratables() {
-            return List.of();
-        }
-    }
-
     /** An empty row. It takes no focus. */
     public class SpacerEntry extends Entry {
 
@@ -401,6 +382,44 @@ public class SettingsList extends ContainerObjectSelectionList<SettingsList.Entr
         @Override
         public List<? extends NarratableEntry> narratables() {
             return List.of();
+        }
+    }
+
+    /** A line of widgets with fixed gaps. A text widget sits in the middle of the row widget height. */
+    public class LineEntry extends Entry {
+
+        private final List<AbstractWidget> widgets;
+
+        LineEntry(List<AbstractWidget> widgets) {
+            this.widgets = widgets;
+        }
+
+        @Override
+        public void render(GuiGraphics guiGraphics, int index, int top, int left, int width, int height, int mouseX, int mouseY, boolean hovering, float partialTick) {
+            int x = SettingsList.this.contentLeft();
+            for (AbstractWidget widget : this.widgets) {
+                int y = widget instanceof AbstractStringWidget ? top + (WIDGET_HEIGHT - widget.getHeight()) / 2 + 1 : top;
+                widget.setPosition(x, y);
+                widget.render(guiGraphics, mouseX, mouseY, partialTick);
+                x += widget.getWidth() + LINE_GAP;
+            }
+        }
+
+        /** A line of text only takes no focus. */
+        @Nullable
+        @Override
+        public ComponentPath nextFocusPath(FocusNavigationEvent event) {
+            return this.widgets.stream().allMatch(widget -> widget instanceof AbstractStringWidget) ? null : super.nextFocusPath(event);
+        }
+
+        @Override
+        public List<? extends GuiEventListener> children() {
+            return this.widgets;
+        }
+
+        @Override
+        public List<? extends NarratableEntry> narratables() {
+            return this.widgets;
         }
     }
 

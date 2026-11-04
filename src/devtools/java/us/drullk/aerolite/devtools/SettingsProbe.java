@@ -2,9 +2,12 @@ package us.drullk.aerolite.devtools;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.logging.LogUtils;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
+import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.components.tabs.TabNavigationBar;
@@ -12,7 +15,21 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
+import net.minecraft.util.InclusiveRange;
+import net.minecraft.util.random.SimpleWeightedRandomList;
+import net.minecraft.util.valueproviders.UniformInt;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.SeaPickleBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.DualNoiseProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.NoiseProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.NoiseThresholdProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.RandomizedIntStateProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.RotatedBlockProvider;
+import net.minecraft.world.level.levelgen.feature.stateproviders.WeightedStateProvider;
+import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.GLFW;
@@ -30,9 +47,12 @@ import us.drullk.aerolite.client.PresetSliders;
 import us.drullk.aerolite.client.SettingsList;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
 import us.drullk.aerolite.client.preview.PreviewScreen;
+import us.drullk.aerolite.client.provider.ProviderScreen;
+import us.drullk.aerolite.client.provider.ProviderType;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.pattern.ChaosSettings;
 import us.drullk.aerolite.world.pattern.MazeSettings;
 import us.drullk.aerolite.world.pattern.PatternType;
 import us.drullk.aerolite.world.pattern.TilesSettings;
@@ -45,12 +65,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BooleanSupplier;
 
 /**
  * The screenshot probe of the settings screens. The system property {@value #PROPERTY} turns it on.
  * After the first screen shows, it opens the create world screen, the pillars screen with the defaults,
  * the dimension screen of the Overworld on the tab Pillar Variations with each pattern type picked in turn, and the preview with the panel.
+ * On the tab Pillar Variations it also opens the provider screen of each block field with one provider type each.
  * The last preview state shows the panel at its narrowest width. The run keeps that width only until the next resize.
  * It saves one PNG per state from the window front buffer under {@code screenshots/} of the game directory. Then it stops the game.
  *
@@ -77,6 +99,8 @@ public final class SettingsProbe {
     private static final int NARROW_PANEL = 240;
     /** The height of one entry of an open combo list. */
     private static final int ENTRY_HEIGHT = 14;
+    /** The count of block fields of a Bridge variation. */
+    private static final int BRIDGE_FIELDS = 6;
 
     private final List<Step> steps = new ArrayList<>();
     private int ticks;
@@ -169,6 +193,7 @@ public final class SettingsProbe {
         this.grab("settings-10-chaos-bridge.png");
         this.scrollList(LOWER_ROWS);
         this.grab("settings-10b-chaos-bridge-lower.png");
+        this.queueProviders();
         this.act("done", () -> press(minecraft.screen, "gui.done"));
         this.step("preview", RENDER_WAIT, () -> minecraft.screen instanceof AerolitePresetScreen && press(minecraft.screen, KEY + "preview"));
         this.step("preview built", RENDER_WAIT, () -> minecraft.screen instanceof PreviewScreen screen && screen.progress().phase() == PreviewBuilder.Phase.DONE);
@@ -205,6 +230,117 @@ public final class SettingsProbe {
             minecraft.stop();
             return true;
         });
+    }
+
+    /**
+     * The steps of the provider editor. The Wall field opens with its simple state, then the type changes to weighted.
+     * A paste gives the six block fields one provider type each. Each Edit button then opens its provider screen.
+     * The last steps add a weighted entry with Done, and hover the cut summary of the Wall field.
+     */
+    private void queueProviders() {
+        Minecraft minecraft = Minecraft.getInstance();
+        this.revealBlocks();
+        this.grab("provider-01-dimension-simple.png");
+        this.pressEdit(0);
+        this.grab("provider-02-simple.png");
+        this.pick("provider.type", ProviderType.WEIGHTED.ordinal());
+        this.grab("provider-03-simple-to-weighted.png");
+        this.act("cancel simple", () -> press(minecraft.screen, "gui.cancel"));
+        this.act("paste samples", () -> {
+            String kept = minecraft.keyboardHandler.getClipboard();
+            minecraft.keyboardHandler.setClipboard(ShaftVariation.CODEC.encodeStart(JsonOps.INSTANCE, sampleVariation()).getOrThrow().toString());
+            press(minecraft.screen, KEY + "paste_variation");
+            minecraft.keyboardHandler.setClipboard(kept);
+        });
+        this.step("rebuild paste", 2, () -> true);
+        this.revealBlocks();
+        this.grab("provider-04-dimension-summaries.png");
+        String[] names = {"weighted", "noise-threshold", "noise", "dual-noise", "rotated", "randomized-int"};
+        for (int field = 0; field < names.length; field++) {
+            String name = String.format(Locale.ROOT, "provider-%02d-%s", 5 + field, names[field]);
+            this.pressEdit(field);
+            this.grab(name + ".png");
+            if (field == 1 || field == 3) {
+                this.scrollList(1000);
+                this.grab(name + "-lower.png");
+            }
+            this.act("cancel " + names[field], () -> press(minecraft.screen, "gui.cancel"));
+        }
+        this.grab("provider-11-dimension-return.png");
+        this.pressEdit(0);
+        this.act("add entry", () -> press(minecraft.screen, KEY + "provider.add_entry"));
+        this.step("rebuild entries", 2, () -> true);
+        this.grab("provider-12-weighted-added.png");
+        this.act("done weighted", () -> press(minecraft.screen, "gui.done"));
+        this.step("rebuild done", 2, () -> minecraft.screen instanceof DimensionSettingsScreen);
+        this.act("hover summary", () -> {
+            StringWidget summary = widgets(minecraft.screen, StringWidget.class).stream().filter(widget -> widget.getTooltip() != null).findFirst().orElseThrow();
+            moveCursor(summary.getX() + summary.getWidth() / 2.0, summary.getY() + summary.getHeight() / 2.0);
+        });
+        this.grab("provider-13-dimension-after-done.png");
+        this.act("cursor away", () -> moveCursor(0, 0));
+    }
+
+    /** Six providers of the six provider types other than simple, with the values of {@code prototypes/ui/providers.js}. */
+    private static ShaftVariation sampleVariation() {
+        NormalNoise.NoiseParameters noise = new NormalNoise.NoiseParameters(-3, 1.0);
+        BlockStateProvider weighted = new WeightedStateProvider(SimpleWeightedRandomList.<BlockState>builder()
+                .add(Blocks.STONE_BRICKS.defaultBlockState(), 3)
+                .add(Blocks.MOSSY_STONE_BRICKS.defaultBlockState(), 1)
+                .add(Blocks.ANDESITE.defaultBlockState(), 1));
+        BlockStateProvider threshold = new NoiseThresholdProvider(2345L, noise, 0.01F, -0.8F, 0.35F, Blocks.STONE_BRICKS.defaultBlockState(),
+                List.of(Blocks.MOSSY_STONE_BRICKS.defaultBlockState()), List.of(Blocks.COBBLESTONE.defaultBlockState(), Blocks.GRAVEL.defaultBlockState()));
+        BlockStateProvider noiseProvider = new NoiseProvider(2345L, new NormalNoise.NoiseParameters(-3, 1.0, 1.0), 0.02F,
+                List.of(Blocks.STONE.defaultBlockState(), Blocks.ANDESITE.defaultBlockState(), Blocks.TUFF.defaultBlockState()));
+        BlockStateProvider dual = new DualNoiseProvider(new InclusiveRange<>(1, 3), new NormalNoise.NoiseParameters(-10, 1.0), 1.0F, 2345L, noise, 0.05F,
+                List.of(Blocks.STONE_BRICKS.defaultBlockState(), Blocks.MOSSY_STONE_BRICKS.defaultBlockState(),
+                        Blocks.COBBLESTONE.defaultBlockState(), Blocks.ANDESITE.defaultBlockState()));
+        BlockStateProvider rotated = new RotatedBlockProvider(Blocks.OAK_LOG);
+        BlockStateProvider randomized = new RandomizedIntStateProvider(BlockStateProvider.simple(Blocks.SEA_PICKLE), SeaPickleBlock.PICKLES, UniformInt.of(1, 4));
+        return ShaftVariation.standard(ShaftVariation.UNIFORM_BIAS, noiseProvider, weighted, threshold)
+                .withPattern(ChaosSettings.DEFAULT)
+                .withShape(PillarShape.BRIDGE)
+                .withJunction(dual)
+                .withSurface(rotated)
+                .withTrusses(randomized);
+    }
+
+    /** Presses the Edit button of one block field row of the dimension screen. */
+    private void pressEdit(int field) {
+        this.act("edit " + field, () -> widgets(Minecraft.getInstance().screen, Button.class).stream()
+                .filter(button -> hasKey(button.getMessage(), KEY + "provider.edit"))
+                .skip(field).findFirst().orElseThrow().onPress());
+        this.step("provider screen " + field, 2, () -> Minecraft.getInstance().screen instanceof ProviderScreen);
+    }
+
+    /**
+     * Scrolls the settings list from the top until the six Edit buttons of the first variation show inside the list.
+     * A row that the list never drew reports the position 0.
+     */
+    private void revealBlocks() {
+        this.scrollList(0);
+        this.step("reveal blocks", 2, () -> {
+            Screen screen = Minecraft.getInstance().screen;
+            SettingsList list = widgets(screen, SettingsList.class).getFirst();
+            List<Button> edits = widgets(screen, Button.class).stream().filter(button -> hasKey(button.getMessage(), KEY + "provider.edit")).limit(BRIDGE_FIELDS).toList();
+            if (edits.stream().allMatch(edit -> edit.getY() >= list.getY() && edit.getBottom() <= list.getBottom())) {
+                return true;
+            }
+            list.setScrollAmount(list.getScrollAmount() + ENTRY_HEIGHT);
+            return false;
+        });
+    }
+
+    /** Moves the cursor to a point in GUI units through the window callback, which the mouse handler reads. */
+    private static void moveCursor(double x, double y) {
+        Minecraft minecraft = Minecraft.getInstance();
+        long window = minecraft.getWindow().getWindow();
+        double scale = minecraft.getWindow().getScreenWidth() / (double) minecraft.getWindow().getGuiScaledWidth();
+        GLFWCursorPosCallback move = GLFW.glfwSetCursorPosCallback(window, null);
+        GLFW.glfwSetCursorPosCallback(window, move);
+        if (move != null) {
+            move.invoke(window, x * scale, y * scale);
+        }
     }
 
     /** Opens the list of the first combo whose button text has the key {@code createWorld.customize.aerolite.<key>}. */
@@ -345,7 +481,7 @@ public final class SettingsProbe {
     /** Presses the first button whose text has the key. Returns false when no such button exists. */
     private static boolean press(@Nullable Screen screen, String key) {
         for (AbstractWidget widget : widgets(screen, AbstractWidget.class)) {
-            if (widget instanceof net.minecraft.client.gui.components.Button button && hasKey(button.getMessage(), key)) {
+            if (widget instanceof Button button && hasKey(button.getMessage(), key)) {
                 button.onPress();
                 return true;
             }

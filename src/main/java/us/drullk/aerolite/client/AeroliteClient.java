@@ -24,6 +24,7 @@ import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class AeroliteClient {
@@ -37,8 +38,9 @@ public final class AeroliteClient {
                           @Autowired ShaftPainter painter, @Autowired ShaftMazes mazes, @Autowired PreviewPanel panel,
                           @Autowired PreviewViewport viewport, @Autowired AeroliteClientConfig config, @Autowired ItemIconAtlas icons,
                           @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync, @Autowired SettingsJson json,
-                          @Autowired ShaftSettingsHolder holder, @Autowired VoidPresetBiomes presetBiomes) {
-        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json, holder);
+                          @Autowired ShaftSettingsHolder holder, @Autowired VoidPresetBiomes presetBiomes,
+                          @Autowired ProviderText providerText) {
+        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json, holder, providerText);
         this.cloudHeight = cloudHeight;
         this.cloudHeightSync = cloudHeightSync;
         this.presetBiomes = presetBiomes;

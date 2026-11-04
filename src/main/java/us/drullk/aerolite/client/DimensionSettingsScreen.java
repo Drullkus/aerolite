@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
+import net.minecraft.client.gui.components.StringWidget;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.tabs.Tab;
 import net.minecraft.client.gui.components.tabs.TabManager;
@@ -19,6 +20,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import org.lwjgl.glfw.GLFW;
+import us.drullk.aerolite.client.provider.ProviderScreen;
+import us.drullk.aerolite.client.provider.VariationBlock;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftPlacement;
@@ -46,6 +49,8 @@ import java.util.function.UnaryOperator;
  * The tab Shaft Placement holds the placement sliders.
  * The tab Shaft Variations holds the variation rows and the Add Variation button.
  * The pattern widgets follow the five sliders of a variation. A change of the pattern, the maze type, the tile size or the shape rebuilds the rows on the next tick.
+ * Each block field has one row with its label, its value and an Edit button. Edit pushes a {@link ProviderScreen} for the field.
+ * The return from that screen keeps the selected tab and the scroll position.
  * Export and Import move one variation without its weight through the system clipboard.
  * Done sends the copy back to the shafts screen. Cancel and Escape drop it.
  *
@@ -62,7 +67,8 @@ public class DimensionSettingsScreen extends Screen {
     private static final int TITLE_HEIGHT = 20;
     /** The pattern rows hold two widgets each. */
     private static final int PATTERN_COLUMNS = 2;
-    private static final int BLOCK_COLUMNS = 4;
+    /** The space on each side of the text of an Edit button. */
+    private static final int BUTTON_PADDING = 8;
     /** The opacity of a checkbox that is off. A vanilla checkbox draws no other off state. */
     private static final float OFF_ALPHA = 0.5F;
 
@@ -190,7 +196,7 @@ public class DimensionSettingsScreen extends Screen {
     }
 
     /**
-     * Adds the slider rows, the pattern rows, the shape row, the two block rows and the row of Export, Import and Remove of one variation.
+     * Adds the slider rows, the pattern rows, the shape row, the block rows and the row of Export, Import and Remove of one variation.
      * A Lines maze has no maze bias slider.
      */
     private void addVariation(SettingsList list, int index, ShaftVariation variation) {
@@ -242,28 +248,9 @@ public class DimensionSettingsScreen extends Screen {
         list.addColumns(PATTERN_COLUMNS, this.dropdown(List.of(PillarShape.values()), variation.shape(), shape -> this.edits.choiceName("shape", shape), "shape",
                 shape -> this.editVariationRebuild(index, current -> current.withShape(shape))));
 
-        list.addHeadedLabels(
-                Component.translatable(KEY + "blocks"),
-                Component.translatable(KEY + "wall_block"),
-                Component.translatable(KEY + "path_block"),
-                Component.translatable(KEY + "interior_block"),
-                Component.translatable(KEY + "junction_block")
-        );
-        list.addRow(
-                this.blockField(variation.wall(), KEY + "wall_block", state -> this.editVariation(index, current -> current.withWall(state))),
-                this.blockField(variation.path(), KEY + "path_block", state -> this.editVariation(index, current -> current.withPath(state))),
-                this.blockField(variation.interior(), KEY + "interior_block", state -> this.editVariation(index, current -> current.withInterior(state))),
-                this.blockField(variation.junction(), KEY + "junction_block", state -> this.editVariation(index, current -> current.withJunction(state)))
-        );
-        BlockField surface = this.blockField(variation.surface(), KEY + "surface_block", state -> this.editVariation(index, current -> current.withSurface(state)));
-        if (PresetEdits.showsTrusses(variation)) {
-            list.addHeadedColumnLabels(BLOCK_COLUMNS, Component.translatable(KEY + "blocks"),
-                    Component.translatable(KEY + "surface_block"), Component.translatable(KEY + "trusses_block"));
-            list.addColumns(BLOCK_COLUMNS, surface,
-                    this.blockField(variation.trusses(), KEY + "trusses_block", state -> this.editVariation(index, current -> current.withTrusses(state))));
-        } else {
-            list.addHeadedColumnLabels(BLOCK_COLUMNS, Component.translatable(KEY + "blocks"), Component.translatable(KEY + "surface_block"));
-            list.addColumns(BLOCK_COLUMNS, surface);
+        list.addText(Component.translatable(KEY + "blocks"));
+        for (VariationBlock block : VariationBlock.shown(variation)) {
+            this.addBlockRow(list, index, variation, block);
         }
 
         Button remove = Button.builder(Component.translatable(KEY + "remove_variation"), button -> {
@@ -494,14 +481,47 @@ public class DimensionSettingsScreen extends Screen {
                 .ifError(error -> this.tools.json().showImportFailed(error.message()));
     }
 
-    /** A provider other than a simple provider shows its type id in a read-only field. */
-    private BlockField blockField(BlockStateProvider provider, String key, Consumer<BlockState> onChange) {
+    /**
+     * Adds the row of one block field: the label, the value and the Edit button.
+     * A simple provider shows its block field as the value. Any other provider shows its summary in gray.
+     * A cut summary shows the full text as its tooltip.
+     */
+    private void addBlockRow(SettingsList list, int index, ShaftVariation variation, VariationBlock block) {
+        BlockStateProvider provider = block.get(variation);
+        Component name = Component.translatable(block.key());
         BlockState state = StateProviders.simpleState(provider);
-        BlockField field = state != null
-                ? new BlockField(this.font, this.tools.blocks(), state, Component.translatable(key), onChange)
-                : BlockField.readOnly(this.font, this.tools.blocks(), StateProviders.typeId(provider), Component.translatable(key));
-        this.blockFields.add(field);
-        return field;
+        AbstractWidget value;
+        Component summary = null;
+        if (state != null) {
+            BlockField field = new BlockField(this.font, this.tools.blocks(), state, name,
+                    edited -> this.editVariation(index, current -> block.with(current, BlockStateProvider.simple(edited))));
+            this.blockFields.add(field);
+            value = field;
+        } else {
+            summary = this.tools.providerText().typedSummary(provider);
+            value = new StringWidget(SettingsList.ROW_WIDTH, this.font.lineHeight, summary, this.font).alignLeft().setColor(SettingsList.LABEL_COLOR);
+        }
+        Component editText = Component.translatable(KEY + "provider.edit");
+        Button edit = Button.builder(editText, button -> this.openProvider(index, block))
+                .size(this.font.width(editText) + 2 * BUTTON_PADDING, SettingsList.TRAILING_SIZE)
+                .createNarration(message -> CommonComponents.joinForNarration(message.get(), name))
+                .build();
+        list.addLine(1, list.label(name), value, edit);
+        if (summary != null && this.font.width(summary) > value.getWidth()) {
+            value.setTooltip(Tooltip.create(summary));
+        }
+    }
+
+    /** Pushes the provider screen of one block field. Its Done writes the provider to the edited settings and rebuilds the rows. */
+    private void openProvider(int index, VariationBlock block) {
+        if (this.rebuildPending) {
+            return;
+        }
+        Component title = Component.translatable(KEY + "provider.title", Component.translatable(block.key()), this.title);
+        this.minecraft.setScreen(new ProviderScreen(this, this.tools.blocks(), this.tools.providerText(), title, block.get(this.variation(index)), provider -> {
+            this.editVariation(index, current -> block.with(current, provider));
+            this.rebuildPending = true;
+        }));
     }
 
     private void editVariation(int index, UnaryOperator<ShaftVariation> edit) {

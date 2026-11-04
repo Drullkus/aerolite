@@ -236,9 +236,6 @@ Data generation writes:
 - `-Pmute` sets the master volume to zero, turns the early loading window off and keeps the window focus off.
 - The dev tools mod is a `javafml` mod. Only the client creates its mod class.
 - The devtools source set compiles against the output of the main source set. The production jar does not hold the devtools classes.
-- The client command `/aerolitedevtools providers` opens the hub of the provider editor prototypes. The hub lists one screen per layout.
-- The prototypes edit in-memory sample data only. Done keeps a sample in the hub for the game session.
-- The system property `aerolite.devtools.providersProbe` makes the client grab screenshots of the prototypes into `screenshots/` and stop.
 - The build passes no JVM option to the client run. Set the probe property through `JAVA_TOOL_OPTIONS`.
 
 ## Prototypes
