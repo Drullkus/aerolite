@@ -1,10 +1,10 @@
 {
   "aerolite:stone": 16,
-  "aerolite:mossy": 4,
-  "aerolite:tuff": 4,
+  "aerolite:mossy_maze": 4,
+  "aerolite:tuff_bricks": 4,
   "aerolite:deepslate": 2,
-  "aerolite:copper": 1,
-  "aerolite:mud": 1,
+  "aerolite:copper_beam": 1,
+  "aerolite:mud_tiles": 1,
   "aerolite:andesite": 1,
   "aerolite:diorite": 1,
   "aerolite:granite": 1

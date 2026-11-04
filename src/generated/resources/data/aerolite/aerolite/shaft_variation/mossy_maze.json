@@ -1,18 +1,18 @@
 {
-  "bias": 0.5,
-  "decay_scale": 64,
-  "decay_threshold": 0.35,
-  "erosion_threshold": 0.5,
+  "bias": 0.05,
+  "decay_scale": 32,
+  "decay_threshold": 0.2,
+  "erosion_threshold": 0.6,
   "interior": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:packed_mud"
+      "Name": "minecraft:mossy_cobblestone"
     }
   },
   "junction": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:packed_mud"
+      "Name": "minecraft:mossy_cobblestone"
     }
   },
   "path": {
@@ -22,11 +22,15 @@
     }
   },
   "pattern": {
-    "type": "aerolite:mazes",
-    "maze": "uniform",
-    "seam": "random",
-    "spacing": 1,
-    "strength": 0.0
+    "type": "aerolite:tiles",
+    "allow_loops": false,
+    "cutting": true,
+    "encased": false,
+    "loop_share": 0.0,
+    "path_chance": 0.75,
+    "size": "small",
+    "stagger": "x",
+    "surface_paths": true
   },
   "shape": "pillar",
   "surface": {
@@ -38,13 +42,13 @@
   "trusses": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:packed_mud"
+      "Name": "minecraft:mossy_cobblestone"
     }
   },
   "wall": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:mud_bricks"
+      "Name": "minecraft:mossy_stone_bricks"
     }
   }
 }

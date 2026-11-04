@@ -27,11 +27,11 @@ import java.util.Map;
 public final class AeroliteShaftEntries {
 
     public static final ResourceKey<ShaftVariation> STONE = ShaftRegistries.STONE;
-    public static final ResourceKey<ShaftVariation> MOSSY = variation("mossy");
-    public static final ResourceKey<ShaftVariation> TUFF = variation("tuff");
+    public static final ResourceKey<ShaftVariation> MOSSY_MAZE = variation("mossy_maze");
+    public static final ResourceKey<ShaftVariation> TUFF_BRICKS = variation("tuff_bricks");
     public static final ResourceKey<ShaftVariation> DEEPSLATE = variation("deepslate");
-    public static final ResourceKey<ShaftVariation> COPPER = variation("copper");
-    public static final ResourceKey<ShaftVariation> MUD = variation("mud");
+    public static final ResourceKey<ShaftVariation> COPPER_BEAM = variation("copper_beam");
+    public static final ResourceKey<ShaftVariation> MUD_TILES = variation("mud_tiles");
     public static final ResourceKey<ShaftVariation> ANDESITE = variation("andesite");
     public static final ResourceKey<ShaftVariation> DIORITE = variation("diorite");
     public static final ResourceKey<ShaftVariation> GRANITE = variation("granite");
@@ -51,18 +51,73 @@ public final class AeroliteShaftEntries {
     }
 
     public void variations(BootstrapContext<ShaftVariation> context) {
+        this.overworldPillars(context);
+        this.netherPillars(context);
+        this.endPillars(context);
+    }
+
+    private void overworldPillars(BootstrapContext<ShaftVariation> context) {
         register(context, STONE, ShaftVariation.UNIFORM_BIAS, Blocks.STONE, Blocks.STONE_BRICKS, Blocks.COBBLESTONE);
-        register(context, MOSSY, ShaftVariation.UNIFORM_BIAS, Blocks.MOSSY_COBBLESTONE, Blocks.MOSSY_STONE_BRICKS, Blocks.MOSS_BLOCK);
-        register(context, TUFF, 0.7F, Blocks.TUFF, Blocks.TUFF_BRICKS, Blocks.POLISHED_TUFF);
+        register(context, MOSSY_MAZE, new ShaftVariation(
+                ShaftVariation.MIN_BIAS,
+                32,
+                0.2f,
+                0.6f,
+                new TilesSettings(TilesSettings.Size.SMALL, TilesSettings.Stagger.X, false, new SurfacePathSettings(false, 0f, true, true, 0.75f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.MOSSY_COBBLESTONE),
+                BlockStateProvider.simple(Blocks.MOSSY_COBBLESTONE),
+                BlockStateProvider.simple(Blocks.MOSSY_STONE_BRICKS),
+                BlockStateProvider.simple(Blocks.MOSS_BLOCK),
+                BlockStateProvider.simple(Blocks.MOSS_BLOCK),
+                BlockStateProvider.simple(Blocks.MOSSY_COBBLESTONE)
+        ));
+        register(context, TUFF_BRICKS, new ShaftVariation(
+                ShaftVariation.MAX_BIAS,
+                128,
+                0.5f,
+                0.85f,
+                new BricksSettings(BricksSettings.Size.SMALL, new SurfacePathSettings(false, 0f, true, true, 1f)),
+                PillarShape.I_BEAM,
+                BlockStateProvider.simple(Blocks.TUFF),
+                BlockStateProvider.simple(Blocks.TUFF),
+                BlockStateProvider.simple(Blocks.TUFF_BRICKS),
+                BlockStateProvider.simple(Blocks.POLISHED_TUFF),
+                BlockStateProvider.simple(Blocks.POLISHED_TUFF),
+                BlockStateProvider.simple(Blocks.TUFF)
+        ));
         register(context, DEEPSLATE, 0.3F, Blocks.DEEPSLATE, Blocks.DEEPSLATE_BRICKS, Blocks.POLISHED_DEEPSLATE);
-        register(context, COPPER, 0.8F, Blocks.OXIDIZED_COPPER, Blocks.OXIDIZED_CUT_COPPER, Blocks.OXIDIZED_COPPER_BULB);
-        register(context, MUD, ShaftVariation.UNIFORM_BIAS, Blocks.PACKED_MUD, Blocks.MUD_BRICKS, Blocks.MOSS_BLOCK);
+        register(context, COPPER_BEAM, new ShaftVariation(
+                ShaftVariation.UNIFORM_BIAS,
+                128,
+                0.85f,
+                0.95f,
+                new TilesSettings(TilesSettings.Size.LARGE, TilesSettings.Stagger.NONE, false, new SurfacePathSettings(true, 1f, true, true, 1f)),
+                PillarShape.I_BEAM,
+                BlockStateProvider.simple(Blocks.OXIDIZED_COPPER),
+                BlockStateProvider.simple(Blocks.OXIDIZED_COPPER),
+                BlockStateProvider.simple(Blocks.OXIDIZED_CUT_COPPER),
+                BlockStateProvider.simple(Blocks.OXIDIZED_COPPER_BULB),
+                BlockStateProvider.simple(Blocks.OXIDIZED_CHISELED_COPPER),
+                BlockStateProvider.simple(Blocks.OXIDIZED_COPPER)
+        ));
+        register(context, MUD_TILES, new ShaftVariation(
+                ShaftVariation.MIN_BIAS,
+                32,
+                0.2f,
+                0.6f,
+                new TilesSettings(TilesSettings.Size.LARGE, TilesSettings.Stagger.Y, false, new SurfacePathSettings(false, 0f, true, true, 1f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.PACKED_MUD),
+                BlockStateProvider.simple(Blocks.PACKED_MUD),
+                BlockStateProvider.simple(Blocks.MUD_BRICKS),
+                BlockStateProvider.simple(Blocks.MOSS_BLOCK),
+                BlockStateProvider.simple(Blocks.MOSS_BLOCK),
+                BlockStateProvider.simple(Blocks.PACKED_MUD)
+        ));
         register(context, ANDESITE, ShaftVariation.UNIFORM_BIAS, Blocks.ANDESITE, Blocks.POLISHED_ANDESITE, Blocks.POLISHED_DIORITE);
         register(context, DIORITE, ShaftVariation.UNIFORM_BIAS, Blocks.DIORITE, Blocks.POLISHED_DIORITE, Blocks.POLISHED_GRANITE);
         register(context, GRANITE, ShaftVariation.UNIFORM_BIAS, Blocks.GRANITE, Blocks.POLISHED_GRANITE, Blocks.POLISHED_ANDESITE);
-
-        this.netherPillars(context);
-        this.endPillars(context);
     }
 
     private void netherPillars(BootstrapContext<ShaftVariation> context) {
@@ -187,8 +242,8 @@ public final class AeroliteShaftEntries {
     }
 
     private VariationList overworldList() {
-        return list(entry(STONE, 16), entry(MOSSY, 4), entry(TUFF, 4), entry(DEEPSLATE, 2), entry(COPPER, 1),
-                entry(MUD, 1), entry(ANDESITE, 1), entry(DIORITE, 1), entry(GRANITE, 1));
+        return list(entry(STONE, 16), entry(MOSSY_MAZE, 4), entry(TUFF_BRICKS, 4), entry(DEEPSLATE, 2), entry(COPPER_BEAM, 1),
+                entry(MUD_TILES, 1), entry(ANDESITE, 1), entry(DIORITE, 1), entry(GRANITE, 1));
     }
 
     private VariationList netherList() {
