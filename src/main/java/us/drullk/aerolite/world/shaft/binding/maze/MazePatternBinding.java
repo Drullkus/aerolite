@@ -12,7 +12,7 @@ import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
 
 /**
- * The binding of the maze pattern. Every maze type samples the uniform maze until the maze types have their own edge weights.
+ * The binding of the maze pattern. The maze settings of the context pick the maze type.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
@@ -32,7 +32,8 @@ public final class MazePatternBinding implements PatternBinding {
 
     @Override
     public SurfacePattern create(PatternContext context) {
-        return new MazePattern(new ShaftMaze(context.ring(), this.mazeEdges, context.boxes(), context.random(), context.minChunk(), context.maxChunk(), context.bias()));
+        return new MazePattern(new ShaftMaze(context.ring(), this.mazeEdges, context.boxes(), context.random(), context.minChunk(), context.maxChunk(), context.bias(),
+                (MazeSettings) context.settings()));
     }
 
 }

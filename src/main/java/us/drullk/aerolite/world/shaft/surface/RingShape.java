@@ -1,5 +1,7 @@
 package us.drullk.aerolite.world.shaft.surface;
 
+import net.minecraft.util.RandomSource;
+import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 import us.drullk.aerolite.world.shaft.surface.path.Band;
 
 import java.util.List;
@@ -52,6 +54,19 @@ public interface RingShape {
      * A foreign candidate faces the opposite face of the box.
      */
     List<CrossingCandidate> crossings(SectionAxis normal, int sign);
+
+    /**
+     * The crossing candidates of one junction box. The maze calls this form.
+     * The random is a pure function of the seed, the pillar and the box center, so a shape can pick candidates per junction.
+     */
+    default List<CrossingCandidate> crossings(SectionAxis normal, int sign, ShaftMaze.Box box, RandomSource random) {
+        return this.crossings(normal, sign);
+    }
+
+    /** True when the junction segment drops the rulings that the box covers. */
+    default boolean boxCutsRings(ShaftMaze.Box box) {
+        return true;
+    }
 
     /** The ring indices where an axis step never links. */
     default int[] bandCorners(int ring) {

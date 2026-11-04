@@ -2,8 +2,11 @@ package us.drullk.aerolite.world.shaft.maze;
 
 import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.longs.LongList;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +15,7 @@ import java.util.List;
  * A ruling holds the nodes of every ring of the shape.
  * Ring edges join neighbor nodes of one ring on one ruling. Axis edges join two rulings two blocks apart, except at corner nodes.
  * Virtual node edges are axis edges.
+ * The graph also keeps the parts that a maze type reads: the rulings, the virtual nodes, the patches and the crossing groups.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -22,12 +26,32 @@ import java.util.List;
 final class RulingGraph {
 
     final MazeGraph graph = new MazeGraph();
+    /** The rulings along the shaft axis, in ascending sequence. */
+    final int[] rulings;
+    /** The virtual node of each ring before the first ruling, or no node. */
+    int[] left = new int[0];
+    /** The virtual node of each ring after the last ruling, or no node. */
+    int[] right = new int[0];
+    /** The patches of the junction boxes, in box sequence. */
+    final List<PatchNodes> patches = new ArrayList<>();
+    /** The crossing edges of each patch side and of each foreign virtual node, as edge keys, in box sequence. */
+    final List<LongList> groups = new ArrayList<>();
     private final RingShape ring;
     private final List<MazeNode> names = new ArrayList<>();
     private final Int2IntMap firstNodeOfRuling = new Int2IntOpenHashMap();
 
+    /**
+     * The patch nodes of one junction box.
+     *
+     * @param box   the box
+     * @param first the graph node of the lowest patch indices
+     */
+    record PatchNodes(ShaftMaze.Box box, int first) {
+    }
+
     RulingGraph(RingShape ring, int[] rulings) {
         this.ring = ring;
+        this.rulings = rulings;
         int nodes = ring.nodeCount();
         for (int along : rulings) {
             this.firstNodeOfRuling.put(along, this.graph.size());
@@ -110,6 +134,19 @@ final class RulingGraph {
 
     MazeNode[] names() {
         return this.names.toArray(MazeNode[]::new);
+    }
+
+    /** The name of a node, or null for a virtual node. */
+    @Nullable
+    MazeNode name(int node) {
+        return this.names.get(node);
+    }
+
+    /** Adds an empty crossing group. */
+    LongList addGroup() {
+        LongList group = new LongArrayList();
+        this.groups.add(group);
+        return group;
     }
 
 }

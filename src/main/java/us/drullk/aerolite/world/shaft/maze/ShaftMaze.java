@@ -2,11 +2,16 @@ package us.drullk.aerolite.world.shaft.maze;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongList;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.levelgen.PositionalRandomFactory;
+import us.drullk.aerolite.world.pattern.MazeSettings;
 import us.drullk.aerolite.world.shaft.surface.CrossingCandidate;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
 import us.drullk.aerolite.world.shaft.surface.SectionAxis;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -23,6 +28,7 @@ import java.util.stream.IntStream;
  * The ring description of the shape gives the nodes of each ruling and the crossing candidates of each box.
  * A shape with several rings samples one tree per ring piece. A connector gets one virtual node per ring on each side.
  * A crossing onto a foreign patch joins one virtual node per box, which stands for the tree of the other pillar.
+ * The maze settings pick the maze type. A uniform maze or a strength of 0 samples as before the maze types.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -37,6 +43,12 @@ public final class ShaftMaze {
 
     private static final int PLAIN = 0;
     private static final int JUNCTION = 1;
+    /** The third coordinate of the pattern random of a segment. The first two are those of the segment random. */
+    private static final int PATTERN = 2;
+    /** The first coordinate of the pillar random of the ribs seam. */
+    private static final int PILLAR_SEAM = 3;
+    /** The first coordinate of the crossing random of a junction box. The second is the box center. */
+    private static final int CROSSING = 4;
 
     private final RingShape ring;
     private final MazeEdges mazeEdges;
@@ -45,13 +57,26 @@ public final class ShaftMaze {
     private final int minChunk;
     private final int maxChunk;
     private final float bias;
+    private final MazeTypes types;
+    private final int[] pillarPositions;
 
     /**
-     * A shaft from the chunk {@code minChunk} to the chunk {@code maxChunk}, both included.
+     * A uniform maze shaft from the chunk {@code minChunk} to the chunk {@code maxChunk}, both included.
      *
      * @param bias the axis edge weight of the maze sampler
      */
     public ShaftMaze(RingShape ring, MazeEdges mazeEdges, BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk, float bias) {
+        this(ring, mazeEdges, boxes, random, minChunk, maxChunk, bias, MazeSettings.DEFAULT);
+    }
+
+    /**
+     * A shaft from the chunk {@code minChunk} to the chunk {@code maxChunk}, both included.
+     *
+     * @param bias     the axis edge weight of the maze sampler
+     * @param settings the maze type and its options
+     */
+    public ShaftMaze(RingShape ring, MazeEdges mazeEdges, BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk, float bias,
+                     MazeSettings settings) {
         this.ring = ring;
         this.mazeEdges = mazeEdges;
         this.boxes = boxes;
@@ -59,6 +84,12 @@ public final class ShaftMaze {
         this.minChunk = minChunk;
         this.maxChunk = maxChunk;
         this.bias = bias;
+        this.types = new MazeTypes(ring, settings);
+        this.pillarPositions = this.types.pillarSeam() ? this.types.pillarPositions(random.at(PILLAR_SEAM, 0, 0)) : new int[0];
+    }
+
+    public MazeSettings settings() {
+        return this.types.settings();
     }
 
     public int minChunk() {
@@ -139,7 +170,8 @@ public final class ShaftMaze {
 
     private List<Crossing> crossings(Box box, boolean foreign) {
         List<Crossing> crossings = new ArrayList<>();
-        for (CrossingCandidate candidate : this.ring.crossings(normal(box), box.sign())) {
+        RandomSource random = this.random.at(CROSSING, box.center(), 0);
+        for (CrossingCandidate candidate : this.ring.crossings(normal(box), box.sign(), box, random)) {
             if (candidate.foreign() == foreign) {
                 crossings.add(new Crossing(-Ring.PATCH_INDEX, candidate.across(), this.lastRulingBefore(box), candidate.node()));
                 crossings.add(new Crossing(Ring.PATCH_INDEX, candidate.across(), this.firstRulingAfter(box), candidate.node()));
@@ -193,18 +225,36 @@ public final class ShaftMaze {
         return this.boxes.boxes(min - Ring.BOX, max + Ring.BOX);
     }
 
+    /**
+     * The layout of one segment before sampling.
+     *
+     * @param salt    the first coordinate of the segment random, {@link #PLAIN} or {@link #JUNCTION}
+     * @param rulings the rulings of the segment, in ascending sequence
+     */
+    private record Plan(int salt, int lo, int hi, List<Box> boxes, int[] rulings) {
+    }
+
     /** The segment that holds the chunk at index {@code chunk} along the shaft axis. */
     public Segment segmentAt(int chunk) {
+        return this.build(this.plan(chunk));
+    }
+
+    private Plan plan(int chunk) {
         List<Box> members = this.boxesIn(chunk, chunk, true);
         if (members.isEmpty()) {
-            return this.plain(chunk);
+            int base = CHUNK * chunk;
+            int[] rulings = new int[RULINGS_PER_CHUNK];
+            for (int u = 0; u < RULINGS_PER_CHUNK; u++) {
+                rulings[u] = base + 2 * u + 1;
+            }
+            return new Plan(PLAIN, chunk, chunk, List.of(), rulings);
         }
         while (true) {
             int lo = members.stream().mapToInt(this::firstChunk).min().orElseThrow();
             int hi = members.stream().mapToInt(this::lastChunk).max().orElseThrow();
             List<Box> found = this.boxesIn(lo, hi, false);
             if (found.size() == members.size()) {
-                return this.junction(lo, hi, found);
+                return this.junctionPlan(lo, hi, found);
             }
             members = found;
         }
@@ -228,52 +278,80 @@ public final class ShaftMaze {
         return chunk >= this.minChunk && chunk <= this.maxChunk;
     }
 
-    private Segment plain(int chunk) {
-        int base = CHUNK * chunk;
-        int[] rulings = new int[RULINGS_PER_CHUNK];
-        for (int u = 0; u < RULINGS_PER_CHUNK; u++) {
-            rulings[u] = base + 2 * u + 1;
-        }
-        RulingGraph graph = new RulingGraph(this.ring, rulings);
-        int[] left = (chunk & 1) != 0 && this.inRange(chunk - 1) ? graph.addVirtuals(rulings[0]) : new int[0];
-        if ((chunk & 1) != 0 && this.inRange(chunk + 1)) {
-            graph.addVirtuals(rulings[rulings.length - 1]);
-        }
-        int[] parent = graph.graph.sampleForest(this.random.at(PLAIN, chunk, 0), this.bias);
-        List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> this.crossing(partner, contains(left, virtual) ? -2 : 2));
-        return new Segment(chunk, chunk, List.of(), rulings, this.mazeEdges.pruneCornerLeaves(edges, this.ring));
-    }
-
     private static boolean contains(int[] nodes, int node) {
         return Arrays.stream(nodes).anyMatch(n -> n == node);
     }
 
-    private Segment junction(int clusterLo, int clusterHi, List<Box> members) {
+    private Plan junctionPlan(int clusterLo, int clusterHi, List<Box> members) {
         int lo = Math.max(clusterLo, this.minChunk);
         int hi = Math.min(clusterHi, this.maxChunk);
         int[] rulings = IntStream.iterate(CHUNK * lo + 1, along -> along < CHUNK * (hi + 1), along -> along + 2)
-                .filter(along -> members.stream().noneMatch(box -> box.covers(along)))
+                .filter(along -> members.stream().noneMatch(box -> this.ring.boxCutsRings(box) && box.covers(along)))
                 .toArray();
-        RulingGraph graph = new RulingGraph(this.ring, rulings);
+        return new Plan(JUNCTION, lo, hi, List.copyOf(members), rulings);
+    }
+
+    private Segment build(Plan plan) {
+        RulingGraph graph = new RulingGraph(this.ring, plan.rulings());
         Int2ObjectMap<Map<MazeNode, MazeNode>> foreignTargets = new Int2ObjectOpenHashMap<>();
-        for (Box box : members) {
+        for (Box box : plan.boxes()) {
             int patch = graph.addPatch(box.center(), box.patching() == Patching.SHAFT);
+            graph.patches.add(new RulingGraph.PatchNodes(box, patch));
+            LongList low = graph.addGroup();
+            LongList high = graph.addGroup();
             for (Crossing crossing : this.crossings(box)) {
                 if (graph.has(crossing.ruling())) {
-                    graph.graph.addEdge(this.patchNode(graph, box, patch, crossing.along(), crossing.across()), graph.node(crossing.ruling(), crossing.node()), true);
+                    int patchNode = this.patchNode(graph, box, patch, crossing.along(), crossing.across());
+                    int rulingNode = graph.node(crossing.ruling(), crossing.node());
+                    graph.graph.addEdge(patchNode, rulingNode, true);
+                    (crossing.along() < 0 ? low : high).add(MazeGraph.key(patchNode, rulingNode));
                 }
             }
             this.addForeign(graph, box, foreignTargets);
         }
-        int[] left = (lo & 1) != 0 && this.inRange(lo - 1) ? graph.addVirtuals(rulings[0]) : new int[0];
-        if ((hi & 1) != 0 && this.inRange(hi + 1)) {
-            graph.addVirtuals(rulings[rulings.length - 1]);
+        int[] rulings = plan.rulings();
+        int[] left = (plan.lo() & 1) != 0 && this.inRange(plan.lo() - 1) ? graph.addVirtuals(rulings[0]) : new int[0];
+        if ((plan.hi() & 1) != 0 && this.inRange(plan.hi() + 1)) {
+            graph.right = graph.addVirtuals(rulings[rulings.length - 1]);
         }
-        int[] parent = graph.graph.sampleForest(this.random.at(JUNCTION, lo, 0), this.bias);
-        List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> foreignTargets.containsKey(virtual)
+        graph.left = left;
+        MazeEdge.VirtualTarget target = (virtual, partner) -> foreignTargets.containsKey(virtual)
                 ? foreignTargets.get(virtual).get(partner)
-                : this.crossing(partner, contains(left, virtual) ? -2 : 2));
-        return new Segment(lo, hi, List.copyOf(members), rulings, this.mazeEdges.pruneCornerLeaves(edges, this.ring));
+                : this.crossing(partner, contains(left, virtual) ? -2 : 2);
+        List<MazeEdge> edges = this.edges(plan, graph, target);
+        return new Segment(plan.lo(), plan.hi(), plan.boxes(), rulings, this.mazeEdges.pruneCornerLeaves(edges, this.ring));
+    }
+
+    /**
+     * The edges of one segment. The uniform maze samples one weighted spanning tree.
+     * A maze type draws its pattern edges from the pattern random, which takes no value from the segment random.
+     * Below full strength the sampler weighs each edge by its pattern factor. At full strength the pattern edges are the segment edges.
+     */
+    private List<MazeEdge> edges(Plan plan, RulingGraph graph, MazeEdge.VirtualTarget target) {
+        RandomSource random = this.random.at(plan.salt(), plan.lo(), 0);
+        if (!this.types.active()) {
+            return this.mazeEdges.treeEdges(graph.graph.sampleForest(random, this.bias), graph.names(), target);
+        }
+        RandomSource patternRandom = this.random.at(plan.salt(), plan.lo(), PATTERN);
+        int[] leftBridges = this.types.turnsAtNeighbor() && graph.left.length > 0 ? this.neighborBridges(plan) : null;
+        LongLinkedOpenHashSet pattern = this.types.patternEdges(graph, patternRandom, leftBridges, this.pillarPositions);
+        if (!this.types.sampled()) {
+            return this.mazeEdges.keyEdges(this.types.fullEdges(graph, patternRandom, pattern), graph.names(), target);
+        }
+        graph.graph.setPatternFactors(pattern, 1 - this.types.settings().strength());
+        return this.mazeEdges.treeEdges(graph.graph.sampleForest(random, this.bias), graph.names(), target);
+    }
+
+    /** The serpentine bridge of each ring on the last ruling of the segment before the plan, replayed from the pattern random of that segment. */
+    @Nullable
+    private int[] neighborBridges(Plan plan) {
+        Plan neighbor = this.plan(plan.lo() - 1);
+        int count = neighbor.rulings().length;
+        if (count == 0) {
+            return null;
+        }
+        MazeTypes.Turns turns = this.types.turns(this.random.at(neighbor.salt(), neighbor.lo(), PATTERN), count);
+        return turns.bridges()[count - 1];
     }
 
     /**
@@ -286,10 +364,13 @@ public final class ShaftMaze {
             return;
         }
         int virtual = graph.addVirtual();
+        LongList group = graph.addGroup();
         Map<MazeNode, MazeNode> targets = new HashMap<>();
         for (Crossing crossing : foreign) {
             if (graph.has(crossing.ruling())) {
-                graph.graph.addEdge(virtual, graph.node(crossing.ruling(), crossing.node()), true);
+                int rulingNode = graph.node(crossing.ruling(), crossing.node());
+                graph.graph.addEdge(virtual, rulingNode, true);
+                group.add(MazeGraph.key(virtual, rulingNode));
                 MazeNode.Foreign target = box.patching() == Patching.SHAFT
                         ? new MazeNode.Foreign(box.center(), crossing.along(), crossing.across())
                         : new MazeNode.Foreign(box.center(), crossing.across(), crossing.along());

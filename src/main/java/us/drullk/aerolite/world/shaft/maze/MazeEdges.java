@@ -1,5 +1,6 @@
 package us.drullk.aerolite.world.shaft.maze;
 
+import it.unimi.dsi.fastutil.longs.LongList;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
 
@@ -35,6 +36,24 @@ public final class MazeEdges {
                 a = virtualTarget.target(node, b);
             } else if (b == null) {
                 b = virtualTarget.target(p, a);
+            }
+            edges.add(new MazeEdge(a, b));
+        }
+        return edges;
+    }
+
+    /** Collects the edges of a set of edge keys, in key sequence. A node without a name is a virtual node. */
+    List<MazeEdge> keyEdges(LongList keys, @Nullable MazeNode[] names, MazeEdge.VirtualTarget virtualTarget) {
+        List<MazeEdge> edges = new ArrayList<>(keys.size());
+        for (long key : keys) {
+            int nodeA = (int) (key >>> 32);
+            int nodeB = (int) key;
+            MazeNode a = names[nodeA];
+            MazeNode b = names[nodeB];
+            if (a == null) {
+                a = virtualTarget.target(nodeA, b);
+            } else if (b == null) {
+                b = virtualTarget.target(nodeB, a);
             }
             edges.add(new MazeEdge(a, b));
         }
