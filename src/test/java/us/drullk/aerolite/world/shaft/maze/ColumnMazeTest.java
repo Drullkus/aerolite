@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ColumnMazeTest {
 
     private final Ring ring = new Ring();
-    private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
+    private final ShaftMazes mazes = new ShaftMazes(new MazeEdges());
 
     private ShaftMaze column(long seed, int minY, int maxY, List<ColumnJunction> junctions) {
         return this.column(seed, minY, maxY, junctions, 0.5F);

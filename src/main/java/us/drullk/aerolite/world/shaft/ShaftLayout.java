@@ -12,6 +12,8 @@ import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
+import us.drullk.aerolite.world.shaft.surface.RingShape;
+import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public final class ShaftLayout {
 
@@ -284,26 +287,46 @@ public final class ShaftLayout {
         return found;
     }
 
-    /** The maze of one horizontal shaft. */
-    public ShaftMaze shaftMaze(Shaft shaft) {
-        ShaftMaze.BoxLookup boxes = (min, max) -> this.columnsOn(shaft, min, max).stream()
+    /** The junction boxes of one horizontal shaft whose centers lie in a range along the shaft axis. */
+    private ShaftMaze.BoxLookup shaftBoxes(Shaft shaft) {
+        return (min, max) -> this.columnsOn(shaft, min, max).stream()
                 .map(column -> shaft.axis() == Axis.X
                         ? new ShaftMaze.Box(column.x(), column.xShaftSign())
                         : new ShaftMaze.Box(column.z(), column.zShaftSign()))
                 .toList();
-        return this.mazes.shaft(boxes, this.shaftMazeRandom.fork(shaft.axis().ordinal(), shaft.cell(), 0), ShaftVariation.clampBias(this.variation(shaft).bias()));
     }
 
-    /** The maze of one column. Its chunks are the chunk sections from the bottom build limit to the top build limit. */
-    public ShaftMaze columnMaze(Column column) {
+    /** The junction boxes of one horizontal shaft that cover at least one block of a range along the shaft axis. */
+    public List<ShaftMaze.Box> boxesNear(Shaft shaft, int min, int max) {
+        return this.shaftBoxes(shaft).boxes(min - Ring.BOX, max + Ring.BOX);
+    }
+
+    /** The ring description of the shape of one horizontal shaft. */
+    public RingShape ring(Shaft shaft) {
+        return this.mazes.ring(this.variation(shaft).shape());
+    }
+
+    /** The ring description of the shape of one column. */
+    public RingShape ring(Column column) {
+        return this.mazes.ring(this.variation(column).shape());
+    }
+
+    /** The surface pattern of one horizontal shaft, from the pattern and the shape of its variation. */
+    public SurfacePattern shaftMaze(Shaft shaft) {
+        return this.mazes.pattern(this.variation(shaft), this.shaftBoxes(shaft), this.shaftMazeRandom.fork(shaft.axis().ordinal(), shaft.cell(), 0),
+                Integer.MIN_VALUE / ShaftMaze.CHUNK, Integer.MAX_VALUE / ShaftMaze.CHUNK - 1);
+    }
+
+    /** The surface pattern of one column. Its chunks are the chunk sections from the bottom build limit to the top build limit. */
+    public SurfacePattern columnMaze(Column column) {
         List<ShaftMaze.Box> boxes = column.junctions().stream().map(ColumnJunction::box).toList();
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();
-        return this.mazes.bounded(
+        return this.mazes.pattern(
+                this.variation(column),
                 lookup,
                 this.columnMazeRandom.fork(column.zShaft().cell(), column.xShaft().cell(), 0),
                 Math.floorDiv(this.minY, ShaftMaze.CHUNK),
-                Math.floorDiv(this.maxY - 1, ShaftMaze.CHUNK),
-                ShaftVariation.clampBias(this.variation(column).bias())
+                Math.floorDiv(this.maxY - 1, ShaftMaze.CHUNK)
         );
     }
 

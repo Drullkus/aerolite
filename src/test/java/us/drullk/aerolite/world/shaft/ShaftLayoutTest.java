@@ -54,7 +54,7 @@ class ShaftLayoutTest {
     private static final int MAX_Y = 320;
 
     private final Ring ring = new Ring();
-    private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
+    private final ShaftMazes mazes = new ShaftMazes(new MazeEdges());
 
     private ShaftLayout layout(long seed, int minSpacing, int maxSpacing) {
         return new ShaftLayout(this.mazes, seed, Level.OVERWORLD, MIN_Y, MAX_Y, TestSettings.OVERWORLD.withPlacement(TestSettings.PLACEMENT.withShaftSpacing(minSpacing, maxSpacing)));

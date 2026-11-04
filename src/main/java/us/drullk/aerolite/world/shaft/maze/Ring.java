@@ -6,10 +6,13 @@ import tamaized.beanification.Component;
  * The maze grid around one shaft, seen as a ring of 48 blocks.
  * Block 0 is the corner at offset (-6, 6). The ring runs along the face where the second offset is 6.
  * Nodes sit on even blocks, so node {@code v} is block {@code 2v}.
+ * The tables are the reference of the Pillar ring description. The maze and the paint read the ring description of the shape.
+ * The junction box constants stay here.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 @Component
 public final class Ring {
@@ -79,22 +82,9 @@ public final class Ring {
         return -1;
     }
 
-    /** The node on the face where the second offset is {@code 6 * sign}, at the first offset {@code 2k}. */
-    public int faceNode(int sign, int k) {
-        return block(2 * k, OUTER * sign) / 2;
-    }
-
     /** The ring block between two neighbor nodes. */
     public int blockBetween(int node1, int node2) {
         return Math.abs(node1 - node2) == 1 ? 2 * Math.min(node1, node2) + 1 : BLOCKS - 1;
-    }
-
-    public int oddBelow(int a) {
-        return (a & 1) != 0 ? a : a - 1;
-    }
-
-    public int oddAbove(int a) {
-        return (a & 1) != 0 ? a : a + 1;
     }
 
 }

@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ShaftMazeTest {
 
     private final Ring ring = new Ring();
-    private final ShaftMazes mazes = new ShaftMazes(this.ring, new MazeEdges(this.ring));
+    private final ShaftMazes mazes = new ShaftMazes(new MazeEdges());
 
     /** The smallest, the uniform and the largest maze bias. */
     static final float[] BIASES = {0.05F, 0.5F, 0.95F};

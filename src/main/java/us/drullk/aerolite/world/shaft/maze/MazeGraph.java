@@ -9,10 +9,11 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * An undirected graph of axis edges and ring edges, with the weighted Wilson sampler.
+ * An undirected graph of axis edges and ring edges, with the weighted Wilson sampler of a spanning forest.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public final class MazeGraph {
 
@@ -41,20 +42,24 @@ public final class MazeGraph {
     }
 
     /**
-     * Samples a spanning tree with Wilson's algorithm from a random root.
+     * Samples a spanning forest with Wilson's algorithm, one tree per connected component.
+     * Each component draws its root first, in the sequence of its lowest node.
      * The loop-erased random walk takes an axis edge with weight {@code bias} and a ring edge with weight {@code 1 - bias}.
+     * A connected graph draws exactly the values of a single spanning tree from one random root.
      *
      * @param bias the axis edge weight, strictly between 0 and 1
-     * @return the parent of each node, -1 for the root
+     * @return the parent of each node, -1 for each root
      */
-    public int[] sampleTree(RandomSource random, float bias) {
+    public int[] sampleForest(RandomSource random, float bias) {
         if (!(bias > 0 && bias < 1)) {
             throw new IllegalArgumentException("The maze bias is not strictly between 0 and 1: " + bias);
         }
         int[] parent = new int[this.size()];
         Arrays.fill(parent, -1);
         boolean[] inTree = new boolean[this.size()];
-        inTree[random.nextInt(this.size())] = true;
+        for (IntList component : this.components()) {
+            inTree[component.getInt(random.nextInt(component.size()))] = true;
+        }
         for (int start = 0; start < this.size(); start++) {
             int node = start;
             while (!inTree[node]) {
@@ -69,6 +74,37 @@ public final class MazeGraph {
             }
         }
         return parent;
+    }
+
+    /** The connected components, each sorted, in the sequence of their lowest node. */
+    private List<IntList> components() {
+        int[] component = new int[this.size()];
+        Arrays.fill(component, -1);
+        List<IntList> components = new ArrayList<>();
+        IntArrayList stack = new IntArrayList();
+        for (int root = 0; root < this.size(); root++) {
+            if (component[root] >= 0) {
+                continue;
+            }
+            IntList members = new IntArrayList();
+            component[root] = components.size();
+            stack.add(root);
+            while (!stack.isEmpty()) {
+                int node = stack.popInt();
+                members.add(node);
+                for (List<IntList> side : List.of(this.axisNeighbors, this.ringNeighbors)) {
+                    for (int next : side.get(node)) {
+                        if (component[next] < 0) {
+                            component[next] = components.size();
+                            stack.add(next);
+                        }
+                    }
+                }
+            }
+            members.sort(null);
+            components.add(members);
+        }
+        return components;
     }
 
     /** Picks one edge at the node in proportion to its weight. */

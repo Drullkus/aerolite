@@ -1,10 +1,18 @@
 package us.drullk.aerolite.world.shaft.maze;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.world.level.levelgen.PositionalRandomFactory;
+import us.drullk.aerolite.world.shaft.surface.CrossingCandidate;
+import us.drullk.aerolite.world.shaft.surface.RingShape;
+import us.drullk.aerolite.world.shaft.surface.SectionAxis;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
 
 /**
@@ -12,11 +20,15 @@ import java.util.stream.IntStream;
  * Tree segments sit on even chunks and connector segments on odd chunks.
  * A junction segment replaces the chunks around one or more junction boxes.
  * A column uses chunk sections as its chunks, bounded by the build limits.
+ * The ring description of the shape gives the nodes of each ruling and the crossing candidates of each box.
+ * A shape with several rings samples one tree per ring piece. A connector gets one virtual node per ring on each side.
+ * A crossing onto a foreign patch joins one virtual node per box, which stands for the tree of the other pillar.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public final class ShaftMaze {
 
@@ -26,7 +38,7 @@ public final class ShaftMaze {
     private static final int PLAIN = 0;
     private static final int JUNCTION = 1;
 
-    private final Ring ring;
+    private final RingShape ring;
     private final MazeEdges mazeEdges;
     private final BoxLookup boxes;
     private final PositionalRandomFactory random;
@@ -39,7 +51,7 @@ public final class ShaftMaze {
      *
      * @param bias the axis edge weight of the maze sampler
      */
-    ShaftMaze(Ring ring, MazeEdges mazeEdges, BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk, float bias) {
+    public ShaftMaze(RingShape ring, MazeEdges mazeEdges, BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk, float bias) {
         this.ring = ring;
         this.mazeEdges = mazeEdges;
         this.boxes = boxes;
@@ -59,6 +71,10 @@ public final class ShaftMaze {
 
     public float bias() {
         return this.bias;
+    }
+
+    public RingShape ring() {
+        return this.ring;
     }
 
     /** How the patch of a box sits on the shaft. */
@@ -87,13 +103,17 @@ public final class ShaftMaze {
         }
     }
 
-    /** The ring node under the patch border node of the box at cross index {@code k}. */
+    /** The offset of the section that is constant on the patch face of the box. */
+    public static SectionAxis normal(Box box) {
+        return box.patching() == Patching.COLUMN_ALONG_Z ? SectionAxis.FIRST : SectionAxis.SECOND;
+    }
+
+    /** The node of the first ring under the patch border node of the box at cross index {@code k}, on the outer face of the 13x13 square. */
     public int crossingNode(Box box, int k) {
-        return switch (box.patching()) {
-            case SHAFT -> this.ring.faceNode(box.sign(), k);
-            case COLUMN_ALONG_X -> this.ring.block(2 * k, Ring.OUTER * box.sign()) / 2;
-            case COLUMN_ALONG_Z -> this.ring.block(Ring.OUTER * box.sign(), 2 * k) / 2;
-        };
+        int index = normal(box) == SectionAxis.SECOND
+                ? this.ring.index(0, 2 * k, Ring.OUTER * box.sign())
+                : this.ring.index(0, Ring.OUTER * box.sign(), 2 * k);
+        return this.ring.node(0, index);
     }
 
     /**
@@ -107,13 +127,23 @@ public final class ShaftMaze {
     record Crossing(int along, int across, int ruling, int node) {
     }
 
-    /** The possible crossings of a box. A patch corner node gets no crossing. */
+    /** The possible crossings of a box onto its own patch, from the crossing candidates of the ring. */
     List<Crossing> crossings(Box box) {
+        return this.crossings(box, false);
+    }
+
+    /** The possible crossings of a box onto the patch of the other pillar. */
+    List<Crossing> foreignCrossings(Box box) {
+        return this.crossings(box, true);
+    }
+
+    private List<Crossing> crossings(Box box, boolean foreign) {
         List<Crossing> crossings = new ArrayList<>();
-        for (int k = 1 - Ring.PATCH_INDEX; k < Ring.PATCH_INDEX; k++) {
-            int v = this.crossingNode(box, k);
-            crossings.add(new Crossing(-Ring.PATCH_INDEX, k, this.lastRulingBefore(box), v));
-            crossings.add(new Crossing(Ring.PATCH_INDEX, k, this.firstRulingAfter(box), v));
+        for (CrossingCandidate candidate : this.ring.crossings(normal(box), box.sign())) {
+            if (candidate.foreign() == foreign) {
+                crossings.add(new Crossing(-Ring.PATCH_INDEX, candidate.across(), this.lastRulingBefore(box), candidate.node()));
+                crossings.add(new Crossing(Ring.PATCH_INDEX, candidate.across(), this.firstRulingAfter(box), candidate.node()));
+            }
         }
         return crossings;
     }
@@ -126,11 +156,13 @@ public final class ShaftMaze {
     }
 
     private int lastRulingBefore(Box box) {
-        return this.ring.oddBelow(box.center() - Ring.BOX - 1);
+        int a = box.center() - Ring.BOX - 1;
+        return (a & 1) != 0 ? a : a - 1;
     }
 
     private int firstRulingAfter(Box box) {
-        return this.ring.oddAbove(box.center() + Ring.BOX + 1);
+        int a = box.center() + Ring.BOX + 1;
+        return (a & 1) != 0 ? a : a + 1;
     }
 
     private int firstChunk(Box box) {
@@ -203,18 +235,17 @@ public final class ShaftMaze {
             rulings[u] = base + 2 * u + 1;
         }
         RulingGraph graph = new RulingGraph(this.ring, rulings);
-        int left = -1;
-        int right = -1;
-        if ((chunk & 1) != 0 && this.inRange(chunk - 1)) {
-            left = graph.addVirtual(rulings[0]);
-        }
+        int[] left = (chunk & 1) != 0 && this.inRange(chunk - 1) ? graph.addVirtuals(rulings[0]) : new int[0];
         if ((chunk & 1) != 0 && this.inRange(chunk + 1)) {
-            right = graph.addVirtual(rulings[rulings.length - 1]);
+            graph.addVirtuals(rulings[rulings.length - 1]);
         }
-        int[] parent = graph.graph.sampleTree(this.random.at(PLAIN, chunk, 0), this.bias);
-        int leftNode = left;
-        List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> this.crossing(partner, virtual == leftNode ? -2 : 2));
-        return new Segment(chunk, chunk, List.of(), rulings, this.mazeEdges.pruneCornerLeaves(edges));
+        int[] parent = graph.graph.sampleForest(this.random.at(PLAIN, chunk, 0), this.bias);
+        List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> this.crossing(partner, contains(left, virtual) ? -2 : 2));
+        return new Segment(chunk, chunk, List.of(), rulings, this.mazeEdges.pruneCornerLeaves(edges, this.ring));
+    }
+
+    private static boolean contains(int[] nodes, int node) {
+        return Arrays.stream(nodes).anyMatch(n -> n == node);
     }
 
     private Segment junction(int clusterLo, int clusterHi, List<Box> members) {
@@ -224,6 +255,7 @@ public final class ShaftMaze {
                 .filter(along -> members.stream().noneMatch(box -> box.covers(along)))
                 .toArray();
         RulingGraph graph = new RulingGraph(this.ring, rulings);
+        Int2ObjectMap<Map<MazeNode, MazeNode>> foreignTargets = new Int2ObjectOpenHashMap<>();
         for (Box box : members) {
             int patch = graph.addPatch(box.center(), box.patching() == Patching.SHAFT);
             for (Crossing crossing : this.crossings(box)) {
@@ -231,14 +263,40 @@ public final class ShaftMaze {
                     graph.graph.addEdge(this.patchNode(graph, box, patch, crossing.along(), crossing.across()), graph.node(crossing.ruling(), crossing.node()), true);
                 }
             }
+            this.addForeign(graph, box, foreignTargets);
         }
-        int left = (lo & 1) != 0 && this.inRange(lo - 1) ? graph.addVirtual(rulings[0]) : -1;
+        int[] left = (lo & 1) != 0 && this.inRange(lo - 1) ? graph.addVirtuals(rulings[0]) : new int[0];
         if ((hi & 1) != 0 && this.inRange(hi + 1)) {
-            graph.addVirtual(rulings[rulings.length - 1]);
+            graph.addVirtuals(rulings[rulings.length - 1]);
         }
-        int[] parent = graph.graph.sampleTree(this.random.at(JUNCTION, lo, 0), this.bias);
-        List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> this.crossing(partner, virtual == left ? -2 : 2));
-        return new Segment(lo, hi, List.copyOf(members), rulings, this.mazeEdges.pruneCornerLeaves(edges));
+        int[] parent = graph.graph.sampleForest(this.random.at(JUNCTION, lo, 0), this.bias);
+        List<MazeEdge> edges = this.mazeEdges.treeEdges(parent, graph.names(), (virtual, partner) -> foreignTargets.containsKey(virtual)
+                ? foreignTargets.get(virtual).get(partner)
+                : this.crossing(partner, contains(left, virtual) ? -2 : 2));
+        return new Segment(lo, hi, List.copyOf(members), rulings, this.mazeEdges.pruneCornerLeaves(edges, this.ring));
+    }
+
+    /**
+     * Joins the foreign crossings of a box to one virtual node, which stands for the tree of the other pillar.
+     * So each tree edge at that node is one crossing onto the foreign patch, and no such edge closes a loop.
+     */
+    private void addForeign(RulingGraph graph, Box box, Int2ObjectMap<Map<MazeNode, MazeNode>> foreignTargets) {
+        List<Crossing> foreign = this.foreignCrossings(box);
+        if (foreign.isEmpty()) {
+            return;
+        }
+        int virtual = graph.addVirtual();
+        Map<MazeNode, MazeNode> targets = new HashMap<>();
+        for (Crossing crossing : foreign) {
+            if (graph.has(crossing.ruling())) {
+                graph.graph.addEdge(virtual, graph.node(crossing.ruling(), crossing.node()), true);
+                MazeNode.Foreign target = box.patching() == Patching.SHAFT
+                        ? new MazeNode.Foreign(box.center(), crossing.along(), crossing.across())
+                        : new MazeNode.Foreign(box.center(), crossing.across(), crossing.along());
+                targets.put(new MazeNode.Ruling(crossing.ruling(), crossing.node()), target);
+            }
+        }
+        foreignTargets.put(virtual, targets);
     }
 
     /** The node on the facing ruling of the neighbor segment. */
