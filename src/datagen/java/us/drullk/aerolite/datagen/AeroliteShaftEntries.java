@@ -35,10 +35,10 @@ public final class AeroliteShaftEntries {
     public static final ResourceKey<ShaftVariation> ANDESITE = variation("andesite");
     public static final ResourceKey<ShaftVariation> DIORITE = variation("diorite");
     public static final ResourceKey<ShaftVariation> GRANITE = variation("granite");
-    public static final ResourceKey<ShaftVariation> NETHER = variation("nether");
-    public static final ResourceKey<ShaftVariation> BLACKSTONE = variation("blackstone");
-    public static final ResourceKey<ShaftVariation> SOUL = variation("soul");
-    public static final ResourceKey<ShaftVariation> QUARTZ = variation("quartz");
+    public static final ResourceKey<ShaftVariation> NETHER_BRICKS = variation("nether_bricks");
+    public static final ResourceKey<ShaftVariation> BLACKSTONE_RIBS = variation("blackstone_ribs");
+    public static final ResourceKey<ShaftVariation> SOUL_CONDUIT = variation("soul_conduit");
+    public static final ResourceKey<ShaftVariation> QUARTZ_BEAM = variation("quartz");
     public static final ResourceKey<ShaftVariation> END_BRICKS = variation("end_bricks");
     public static final ResourceKey<ShaftVariation> END_MAZE = variation("end_maze");
     public static final ResourceKey<ShaftVariation> PURPUR_PILLAR = variation("purpur_pillar");
@@ -60,12 +60,68 @@ public final class AeroliteShaftEntries {
         register(context, ANDESITE, ShaftVariation.UNIFORM_BIAS, Blocks.ANDESITE, Blocks.POLISHED_ANDESITE, Blocks.POLISHED_DIORITE);
         register(context, DIORITE, ShaftVariation.UNIFORM_BIAS, Blocks.DIORITE, Blocks.POLISHED_DIORITE, Blocks.POLISHED_GRANITE);
         register(context, GRANITE, ShaftVariation.UNIFORM_BIAS, Blocks.GRANITE, Blocks.POLISHED_GRANITE, Blocks.POLISHED_ANDESITE);
-        register(context, NETHER, 0.25F, Blocks.NETHERRACK, Blocks.NETHER_BRICKS, Blocks.RED_NETHER_BRICKS);
-        register(context, BLACKSTONE, ShaftVariation.UNIFORM_BIAS, Blocks.BLACKSTONE, Blocks.POLISHED_BLACKSTONE_BRICKS, Blocks.POLISHED_BLACKSTONE);
-        register(context, SOUL, 0.6F, Blocks.SOUL_SOIL, Blocks.SOUL_SAND, Blocks.WARPED_WART_BLOCK);
-        register(context, QUARTZ, 0.8F, Blocks.SMOOTH_QUARTZ, Blocks.QUARTZ_BRICKS, Blocks.QUARTZ_BLOCK);
 
+        this.netherPillars(context);
         this.endPillars(context);
+    }
+
+    private void netherPillars(BootstrapContext<ShaftVariation> context) {
+        register(context, NETHER_BRICKS, new ShaftVariation(
+                0.25F,
+                32,
+                0.35f,
+                0.4f,
+                new BricksSettings(BricksSettings.Size.SMALL, new SurfacePathSettings(false, 0f, true, false, 1f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.NETHERRACK),
+                BlockStateProvider.simple(Blocks.NETHERRACK),
+                BlockStateProvider.simple(Blocks.NETHER_BRICKS),
+                BlockStateProvider.simple(Blocks.NETHER_WART_BLOCK),
+                BlockStateProvider.simple(Blocks.RED_NETHER_BRICKS),
+                BlockStateProvider.simple(Blocks.NETHERRACK)
+        ));
+        register(context, BLACKSTONE_RIBS, new ShaftVariation(
+                0.1F,
+                64,
+                0.35f,
+                0.6f,
+                new MazeSettings(MazeSettings.Type.RIBS, 0.95f, MazeSettings.Seam.RANDOM, MazeSettings.MIN_SPACING),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.BLACKSTONE),
+                BlockStateProvider.simple(Blocks.BLACKSTONE),
+                BlockStateProvider.simple(Blocks.POLISHED_BLACKSTONE_BRICKS),
+                BlockStateProvider.simple(Blocks.POLISHED_BLACKSTONE),
+                BlockStateProvider.simple(Blocks.BLACKSTONE),
+                BlockStateProvider.simple(Blocks.BLACKSTONE)
+        ));
+        register(context, SOUL_CONDUIT, new ShaftVariation(
+                ShaftVariation.MIN_BIAS,
+                256,
+                0.5f,
+                0.65f,
+                new TilesSettings(TilesSettings.Size.SMALL, TilesSettings.Stagger.X, false, new SurfacePathSettings(false, 0f, true, true, 0.25f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.SOUL_SOIL),
+                BlockStateProvider.simple(Blocks.SOUL_SOIL),
+                BlockStateProvider.simple(Blocks.SOUL_SAND),
+                BlockStateProvider.simple(Blocks.WARPED_WART_BLOCK),
+                BlockStateProvider.simple(Blocks.SOUL_SOIL),
+                BlockStateProvider.simple(Blocks.SOUL_SOIL)
+        ));
+        register(context, QUARTZ_BEAM, new ShaftVariation(
+                0.8F,
+                128,
+                0.5f,
+                0.9f,
+                new TilesSettings(TilesSettings.Size.LARGE, TilesSettings.Stagger.NONE, true, new SurfacePathSettings(true, 1f, true, false, 0.9f)),
+                PillarShape.I_BEAM,
+                BlockStateProvider.simple(Blocks.SMOOTH_QUARTZ),
+                BlockStateProvider.simple(Blocks.SMOOTH_QUARTZ),
+                BlockStateProvider.simple(Blocks.QUARTZ_BRICKS),
+                BlockStateProvider.simple(Blocks.QUARTZ_BLOCK),
+                BlockStateProvider.simple(Blocks.GLOWSTONE),
+                BlockStateProvider.simple(Blocks.SMOOTH_QUARTZ)
+        ));
     }
 
     private void endPillars(BootstrapContext<ShaftVariation> context) {
@@ -136,7 +192,7 @@ public final class AeroliteShaftEntries {
     }
 
     private VariationList netherList() {
-        return list(entry(NETHER, 16), entry(BLACKSTONE, 9), entry(SOUL, 5), entry(QUARTZ, 1));
+        return list(entry(NETHER_BRICKS, 16), entry(BLACKSTONE_RIBS, 9), entry(SOUL_CONDUIT, 5), entry(QUARTZ_BEAM, 1));
     }
 
     private VariationList endList() {
@@ -158,7 +214,7 @@ public final class AeroliteShaftEntries {
         final int chunk = 16;
 
         context.register(ShaftRegistries.placementOf(Level.OVERWORLD), ShaftPlacement.DEFAULT);
-        context.register(ShaftRegistries.placementOf(Level.NETHER), ShaftPlacement.DEFAULT);
+        context.register(ShaftRegistries.placementOf(Level.NETHER), new ShaftPlacement(6 * chunk, 12 * chunk, 0.7f));
         context.register(ShaftRegistries.placementOf(Level.END), new ShaftPlacement(4 * chunk, 16 * chunk, 0.9f));
     }
 

@@ -1,8 +1,8 @@
 {
   "bias": 0.25,
-  "decay_scale": 64,
+  "decay_scale": 32,
   "decay_threshold": 0.35,
-  "erosion_threshold": 0.5,
+  "erosion_threshold": 0.4,
   "interior": {
     "type": "minecraft:simple_state_provider",
     "state": {
@@ -18,15 +18,17 @@
   "path": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:red_nether_bricks"
+      "Name": "minecraft:nether_wart_block"
     }
   },
   "pattern": {
-    "type": "aerolite:mazes",
-    "maze": "uniform",
-    "seam": "random",
-    "spacing": 1,
-    "strength": 0.0
+    "type": "aerolite:bricks",
+    "allow_loops": false,
+    "cutting": false,
+    "loop_share": 0.0,
+    "path_chance": 1.0,
+    "size": "small",
+    "surface_paths": true
   },
   "shape": "pillar",
   "surface": {

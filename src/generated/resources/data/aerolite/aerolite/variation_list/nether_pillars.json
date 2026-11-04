@@ -1,6 +1,6 @@
 {
-  "aerolite:nether": 16,
-  "aerolite:blackstone": 9,
-  "aerolite:soul": 5,
+  "aerolite:nether_bricks": 16,
+  "aerolite:blackstone_ribs": 9,
+  "aerolite:soul_conduit": 5,
   "aerolite:quartz": 1
 }

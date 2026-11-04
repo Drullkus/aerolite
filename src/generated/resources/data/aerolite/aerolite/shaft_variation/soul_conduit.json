@@ -1,8 +1,8 @@
 {
-  "bias": 0.6,
-  "decay_scale": 64,
-  "decay_threshold": 0.35,
-  "erosion_threshold": 0.5,
+  "bias": 0.05,
+  "decay_scale": 256,
+  "decay_threshold": 0.5,
+  "erosion_threshold": 0.65,
   "interior": {
     "type": "minecraft:simple_state_provider",
     "state": {
@@ -22,17 +22,21 @@
     }
   },
   "pattern": {
-    "type": "aerolite:mazes",
-    "maze": "uniform",
-    "seam": "random",
-    "spacing": 1,
-    "strength": 0.0
+    "type": "aerolite:tiles",
+    "allow_loops": false,
+    "cutting": true,
+    "encased": false,
+    "loop_share": 0.0,
+    "path_chance": 0.25,
+    "size": "small",
+    "stagger": "x",
+    "surface_paths": true
   },
   "shape": "pillar",
   "surface": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:warped_wart_block"
+      "Name": "minecraft:soul_soil"
     }
   },
   "trusses": {

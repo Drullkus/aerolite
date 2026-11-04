@@ -1,8 +1,8 @@
 {
   "bias": 0.8,
-  "decay_scale": 64,
-  "decay_threshold": 0.35,
-  "erosion_threshold": 0.5,
+  "decay_scale": 128,
+  "decay_threshold": 0.5,
+  "erosion_threshold": 0.9,
   "interior": {
     "type": "minecraft:simple_state_provider",
     "state": {
@@ -22,17 +22,21 @@
     }
   },
   "pattern": {
-    "type": "aerolite:mazes",
-    "maze": "uniform",
-    "seam": "random",
-    "spacing": 1,
-    "strength": 0.0
+    "type": "aerolite:tiles",
+    "allow_loops": true,
+    "cutting": false,
+    "encased": true,
+    "loop_share": 1.0,
+    "path_chance": 0.9,
+    "size": "large",
+    "stagger": "none",
+    "surface_paths": true
   },
-  "shape": "pillar",
+  "shape": "i_beam",
   "surface": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:quartz_block"
+      "Name": "minecraft:glowstone"
     }
   },
   "trusses": {
