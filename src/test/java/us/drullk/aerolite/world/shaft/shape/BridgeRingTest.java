@@ -17,6 +17,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -140,6 +141,7 @@ class BridgeRingTest {
         assertFalse(ring.boxCutsRings(new ShaftMaze.Box(0, 1)));
         assertTrue(ring.holeThroughBox());
         Set<Integer> plates = new HashSet<>();
+        Set<CrossingCandidate.Side> sides = new HashSet<>();
         for (int sign : new int[]{-1, 1}) {
             for (long seed = 0; seed < 32; seed++) {
                 List<CrossingCandidate> candidates = ring.crossings(SectionAxis.SECOND, sign, new ShaftMaze.Box(0, sign), new XoroshiroRandomSource(seed));
@@ -153,9 +155,12 @@ class BridgeRingTest {
                 assertEquals(RingKind.CORNER_NODE, ring.kind(r, index));
                 assertEquals(r == 0 ? Ring.PATCH_INDEX : -Ring.PATCH_INDEX, candidate.across());
                 assertFalse(candidate.foreign());
+                assertNotEquals(CrossingCandidate.Side.BOTH, candidate.side(), "A horizontal Bridge crossing comes from both sides of the box");
+                sides.add(candidate.side());
             }
         }
         assertEquals(Set.of(0, 1), plates, "The random never picks one of the plates");
+        assertEquals(Set.of(CrossingCandidate.Side.BEFORE, CrossingCandidate.Side.AFTER), sides, "The random never picks one of the sides");
     }
 
     @Test
@@ -171,6 +176,7 @@ class BridgeRingTest {
                     int r = ring.ringOf(candidate.node());
                     assertEquals(6 * sign, ring.ringU(r, ring.indexOf(candidate.node())));
                     assertFalse(candidate.foreign());
+                    assertEquals(CrossingCandidate.Side.BOTH, candidate.side());
                 }
                 List<CrossingCandidate> mismatched = ring.crossings(ring.stack(), sign, column, new XoroshiroRandomSource(1));
                 assertEquals(6, mismatched.size());

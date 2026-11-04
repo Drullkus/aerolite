@@ -105,6 +105,7 @@ class ShapeMazeTest {
             assertEquals(2, TreeCheck.assertForest(edges), "The plates join or a patch floats");
             for (ShaftMaze.Box box : boxes) {
                 Set<Integer> plates = new HashSet<>();
+                int crossings = 0;
                 long patchNodes = edges.stream().flatMap(edge -> Stream.of(edge.a(), edge.b()))
                         .filter(node -> node instanceof MazeNode.Patch patch && patch.owner() == box.center()).distinct().count();
                 assertEquals(Ring.PATCH_NODES * Ring.PATCH_NODES, patchNodes, "The tree misses a patch node");
@@ -114,11 +115,13 @@ class ShapeMazeTest {
                         MazeNode.Ruling node = (MazeNode.Ruling) (edge.a() instanceof MazeNode.Ruling ? edge.a() : edge.b());
                         MazeNode.Patch onPatch = (MazeNode.Patch) (edge.a() instanceof MazeNode.Patch ? edge.a() : edge.b());
                         plates.add(ring.ringOf(node.node()));
+                        crossings++;
                         assertEquals(Ring.PATCH_INDEX, Math.abs(onPatch.i()));
                         assertEquals(Ring.PATCH_INDEX, Math.abs(onPatch.j()), "A Bridge crossing leaves a patch node off the corner");
                     }
                 }
                 assertEquals(1, plates.size(), "The patch of the box at " + box.center() + " hangs off " + plates.size() + " plates");
+                assertEquals(1, crossings, "The patch of the box at " + box.center() + " takes " + crossings + " crossings");
             }
         }
     }

@@ -14,24 +14,28 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Pending settings | The settings that the world creation flow hands to the integrated server of the new world. |
 | Own variation list | The variation list of a dimension. A vanilla dimension uses `aerolite:overworld_pillars`, `aerolite:nether_pillars` or `aerolite:end_pillars`. Any other dimension uses `aerolite:<dimension namespace>/<dimension path>_pillars`. |
 | Prefab | An entry of `aerolite:variation_list`. The add row copies its weights. |
-| Pillar | A straight tube of blocks, 13x13 across, that runs along one axis. |
+| Pillar | A straight beam of blocks, at most 13x13 across, that runs along one axis. Its shape sets its cross section. |
 | Horizontal pillar | A pillar that runs along X or Z. It is infinite. |
 | Column | A pillar that runs along Y. It spans the build height and is sheared at both ends. Columns bind horizontal pillars. |
 | Junction | The 15x15x15 box where a column crosses a horizontal pillar. |
-| Interior | The 11x11 solid core of a pillar. |
-| Outer layer | The one-block skin around the interior. It holds the maze. |
-| Maze grid | The outer layer blocks of a pillar, seen as a 2D grid that wraps around the four faces. |
+| Interior | The solid core of a pillar inside its outer layer. The Pillar shape has an 11x11 interior. |
+| Outer layer | The one-block skin around the interior. It holds the pattern. |
+| Maze grid | The outer layer blocks of a pillar, seen as a 2D grid that wraps around each ring. |
 | Ruling | One ring of nodes at an odd block along the pillar. A chunk holds 8 rulings. |
 | Node | A maze grid block on a ruling at an even position around the pillar. Each face has 7 nodes from corner to corner, 5 of them interior. |
 | Corner node | A node on a pillar corner. It has edges around the ring only. It carves only when a path crosses it from one face to the other. |
 | Edge | A maze grid block between two neighbor nodes. An edge in the tree is a maze path. An edge outside the tree is a maze wall. |
-| Maze wall | A maze grid block that keeps its outer layer block. |
-| Maze path | A maze grid block with no outer layer block. The block under it is the maze path block. |
+| Maze wall | A maze grid block that keeps its outer layer block. In a band, it is a wall block. |
+| Maze path | A maze grid block with no outer layer block. The block under it is the maze path block. In a band, it is a groove. On a flush face, the maze path block takes the place of the outer layer block. |
 | Wilson's algorithm | The spanning tree sampler. A loop-erased random walk steps by edge weight until it hits the tree. |
 | Axis edge | An edge along the pillar axis. On a column the axis is Y. |
 | Ring edge | An edge around the pillar. |
-| Variation | One set of maze bias, decay scale, decay threshold, erosion threshold, interior block, junction block, maze wall block and maze path block. Each pillar and column picks one. |
+| Variation | One set of maze bias, decay scale, decay threshold, erosion threshold, pattern, shape and six block state providers. Each pillar and column picks one. |
+| Block state provider | A vanilla `BlockStateProvider`. It gives the block at each position. Each block field of a variation holds one. |
+| Variation blocks | The six block state providers of a variation. They are the interior, junction, maze wall, maze path, surface path and trusses blocks. |
 | Junction block | The block of the bezel of a junction. It defaults to the interior block. |
+| Surface path block | The block of the Surface field. It sits flush at the wall layer. It defaults to the maze path block. |
+| Trusses block | The block of the trusses of the Bridge shape. It defaults to the interior block. |
 | Variation list | A map of variation id to weight. Its key sequence is the pick sequence. |
 | Pillar data | The placement and the weighted variations of one dimension. |
 | Data map | A NeoForge data map. It attaches a value to a registry entry by id. |
@@ -48,6 +52,35 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Decay | Fractal Brownian simplex noise that removes maze walls or maze paths from a region of a pillar. Each variation sets its own decay scale and thresholds. |
 | Erosion | Removal of pillar and junction box blocks where decay noise passes the erosion threshold. It works from the surface toward the core. |
 | Shear | Noise that removes blocks from a column near one of its ends. |
+| Pattern | The groove layout on the outer layer of a pillar. A variation holds one pattern type and its options. |
+| Pattern type | Mazes, Bricks, Tiles, Scales or Chaos. The key `type` of the pattern JSON holds its id. |
+| Maze type | Uniform, Serpentine, Ribs, Lines or Gilbert. It is an option of the pattern type Mazes. |
+| Pattern strength | The pull of a maze type toward its pattern edges, 0% to 100%. Any other edge takes the factor 1 minus the strength. |
+| Seam | The root rule of a Ribs maze: random per segment, seeded per segment, or one ring position per pillar. |
+| Line spacing | The node columns per groove of a Lines maze, 1 or 2. The menu label is "Spacing". |
+| Node spacing | The cell spacing of a Chaos pattern, in blocks. |
+| Groove | A band block that becomes a maze path. |
+| Region | One brick, tile or scale of a band pattern. A surface path of a band pattern stays inside one region. |
+| Surface path | A path from a groove over the face nodes of one region, with zero to two corners. It is surface path blocks, or grooves with Cutting on. |
+| Loop share | The share of the cycle edges of the groove graph that stays. Allow loops off gives a loop share of 0%. |
+| Cutting | The option that carves each surface path as grooves. |
+| Path chance | The chance that one region takes a surface path. A Chaos pattern rolls it once per wall face. |
+| Shape | The cross section of the pillars and columns of a variation: the Pillar shape, the I-beam or the Bridge shape. |
+| Pillar shape | The 13x13 square shape with an 11x11 interior. It is the shape of 0.3. |
+| I-beam | The shape of two flanges, 13 wide and 4 thick, joined by a web 5 thick and 5 tall. |
+| Bridge shape | The shape of two plates with trusses between them. A Bridge pillar or a Bridge column has this shape. The word bridge alone names an island bridge. |
+| Plate | One of the two slabs of the Bridge shape, 13 wide and 3 thick. Each plate is its own ring. |
+| Truss | One diagonal row of trusses blocks between the two plates of the Bridge shape. |
+| Anchor | A truss block that takes the place of a block of the inner plate layer. |
+| Web plane | The plane of the web of an I-beam column, X or Z. A Bridge column takes the plane of its trusses from it. |
+| Hole | The 11x11 passage of a horizontal Bridge pillar through a junction box. |
+| Ring | One closed loop of outer layer blocks around a cross section. The Pillar shape and the I-beam have one ring. The Bridge shape has one ring per plate. |
+| Ring description | The outer surface of one cross section of a shape: its rings, nodes, corner kinds, floors and crossing candidates. `RingShape` states the contract. |
+| Flush face | A ring face whose grooves write the maze path block at the outer block, with no carve. The inner face of a plate is a flush face. |
+| Band | The unwrapped outer layer of one ring over an axis range, ring position by axis position. Each band block is wall, groove, surface path or box. |
+| Segment surface | The surface of one segment: one band per ring and one patch surface per patch face. A pattern fills it, and the paint reads it. |
+| Patch surface | The 15x15 cells of one exposed face of a junction box. |
+| Pattern binding | The component that makes the surface pattern of one pattern settings class. `PatternBindings` collects the bindings. |
 | Slot | One 16-block band of the build height. Each slot belongs to X pillars or to Z pillars. |
 | Seed | The block at the tip of a walk. It grows the tree. |
 | Tree | A random walker tree. It roots on a pillar and walks into the air. |
@@ -121,6 +154,12 @@ Rules:
 - A JUnit test of pure logic creates real components with `new`.
 - GameTest methods are static. A GameTest class gets its components through static `@Autowired` fields.
 - Do not use `BeanContextJunitExtension` or `@MockBean`. JUnit runs in the game's module layer, and that extension is in a split package.
+- Every pattern binding is a component in its own subpackage of `us.drullk.aerolite.world.shaft.binding`. Each pattern has one subpackage.
+- The package tree `us.drullk.aerolite.world.shaft.binding` holds only the bindings, `PatternBinding`, `PatternContext` and the collector `PatternBindings`.
+- No test class lives in the package tree `us.drullk.aerolite.world.shaft.binding`.
+- `PatternBindings` gets the bindings through a `@Directory` list.
+- The directory scan of that list initializes every class of the package tree during mod construction.
+- Settings without a binding paint as the Uniform maze. `PatternBindings` logs one line per settings class.
 
 ### WorldEdit
 
@@ -235,8 +274,19 @@ Data generation writes:
 - `-Pmute` gives the client run its own game directory, `run-mute`.
 - `-Pmute` sets the master volume to zero, turns the early loading window off and keeps the window focus off.
 - The dev tools mod is a `javafml` mod. Only the client creates its mod class.
-- The devtools source set compiles against the output of the main source set. The production jar does not hold the devtools classes.
+- The devtools source set has a compile-only dependency on the output of the main source set. The production jar does not hold the devtools classes.
+- The dev tools mod requires the mod `aerolite` on the client. It loads after it.
+- The system property `aerolite.devtools.settingsProbe` turns on the settings probe, `SettingsProbe`.
 - The build passes no JVM option to the client run. Set the probe property through `JAVA_TOOL_OPTIONS`.
+- Start the probe with `JAVA_TOOL_OPTIONS=-Daerolite.devtools.settingsProbe=true ./gradlew runClient -Pmute`.
+- The probe drives the create world screen, the pillars screen, the dimension screen, the provider screens and the preview.
+- The probe captures each pattern type and each provider screen. It also captures each provider tab of the panel and the panel at its narrowest width.
+- The probe also captures an I-beam scene and a Bridge scene with columns.
+- The Javadoc of `SettingsProbe` lists each captured state in sequence.
+- The probe saves one PNG of the window front buffer per state under `screenshots/` of the game directory. Then it stops the game.
+- With `-Pmute`, the PNG files land in `run-mute/screenshots/`.
+- Every run loads the test source set as part of the mod `aerolite`.
+- A stale test class in the IDE output breaks the mod load. After a branch change, run Build > Rebuild Project in IntelliJ IDEA.
 
 ## Prototypes
 
@@ -247,6 +297,19 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 - `prototypes/tools/` holds the GLSL validator.
 - The maze is a standalone program in `prototypes/maze/`. Prototype a maze change there before you write any maze code in the mod. `prototypes/maze/README.md` lists the commands.
 - The chunk paint of `junction.py` paints the junction scene chunk by chunk, like the mod. `--chunk-stats` counts the exposed interior blocks of each paint rule.
+- `junction.py --merged-stats` is the merged junction segment test. `MergedJunctionTest` is its port.
+- `prototypes/patterns/` holds the shared surface path module `surfacepaths.py` and the Bricks prototype `bricks.py`.
+- `prototypes/tiles/` holds the Tiles prototype `tiles.py` and the Scales prototype `scales.py`.
+- `prototypes/chaos/` holds the Chaos prototype `chaos.py`.
+- `prototypes/shapes/` holds the three.js page of the shapes, their columns and the junction link. Open its `index.html` from the file system.
+- `prototypes/ui/` holds the HTML mocks of the ImGui panel. `provider-fields-d.html` is option D, the provider editor of the panel.
+- `tiles.py`, `scales.py` and `chaos.py` import `prototypes/patterns/surfacepaths.py` read-only. A pattern prototype does not change that module.
+- The README of each prototype folder holds the exact geometry of its patterns or shapes.
+- The Java package `us.drullk.aerolite.world.shaft.surface.path` is the port of `surfacepaths.py`.
+- The port fixes the three gaps that the pattern prototypes found in `surfacepaths.py`.
+- The segment sampler of the port handles several components per chunk.
+- The groove graph of the port splits each edge that spans more than one chunk.
+- The fit check of the port knows the orphan rule and the face width rule.
 - Before you design or change an island shape, point the user at Earth photographs. See the global rule.
 
 ## Dimension
@@ -291,7 +354,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The cloud height is one setting of the whole preset. It is not a pillar placement value.
 - Each dimension has its own pillar settings: one pillar placement and one variation list.
 - The pillar placement holds the minimum pillar spacing, the maximum pillar spacing and the column chance.
-- Each variation holds its own decay scale, decay threshold and erosion threshold.
+- Each variation holds its own decay scale, decay threshold, erosion threshold, pattern and shape.
 
 | Setting | Scope | Default |
 |---|---|---|
@@ -311,6 +374,28 @@ The player sets the pillar settings in the World tab of the create world screen.
 | Maze decay threshold | Variation | 0.35 |
 | Pillar erosion threshold | Variation | 0.5 |
 | Junction block | Variation | The interior block of the variation |
+| Pattern type | Variation | Mazes |
+| Maze type | Variation | Uniform |
+| Pattern strength | Variation | 0% |
+| Seam | Variation | Random per segment |
+| Line spacing | Variation | 1 |
+| Brick size | Variation | Large |
+| Tile size | Variation | Large |
+| Tile stagger | Variation | None |
+| Encased | Variation | Off |
+| Paths over tails | Variation | Off |
+| Chaos cells | Variation | Voronoi |
+| Node spacing | Variation | 6 blocks |
+| Jitter | Variation | 50% |
+| Corner radius | Variation | 1 block |
+| Allow loops | Variation | On |
+| Loop share | Variation | 50% |
+| Surface paths | Variation | Off |
+| Cutting | Variation | Off |
+| Path chance | Variation | 75% |
+| Shape | Variation | The Pillar shape |
+| Surface path block | Variation | The maze path block of the variation |
+| Trusses block | Variation | The interior block of the variation |
 
 - Each island picks its fill fraction at random between the two bounds.
 - The island height band is the Y range of the island centers in the generating layer.
@@ -319,8 +404,19 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The dimension settings are a map from dimension to pillar placement and variation list.
 - Every variation list holds at least one variation with a positive weight.
 - A dimension without an entry in the map gets no pillars.
-- A variation lists its blocks in the sequence interior block, junction block, maze wall block, maze path block.
+- The records in `src/main/java/us/drullk/aerolite/world/pattern/` hold the defaults and the bounds of the pattern options.
+- Bricks, Tiles, Scales and Chaos share the options Allow loops, Loop share, Surface paths, Cutting and Path chance. `SurfacePathSettings` holds them.
+- The maze type, the pattern strength, the seam and the line spacing are options of Mazes.
+- Paths over tails is an option of Scales.
+- The maze bias stays a field of the variation. A Lines maze does not use it.
+- Only the Bridge shape uses the trusses block.
+- A variation lists its blocks in this sequence: interior, junction, maze wall, maze path, surface path and trusses block.
 - A variation without a junction block takes its interior block as its junction block.
+- A variation without a surface path block takes its maze path block as its surface path block.
+- A variation without a trusses block takes its interior block as its trusses block.
+- A variation of a 0.3 save has no pattern, no shape, no surface path block and no trusses block. It loads with the defaults of the table.
+- So the pillars of a 0.3 save stay the pillars of 0.3.
+- A block field of a 0.3 save holds a bare block state. It loads as a simple provider.
 - A save writes the layout of 0.2.0: the cloud height and the dimension map.
 - A save with a dimension map loads that map. It ignores the top-level fields of 0.1.0.
 - A 0.1.0 save holds the placement and the decay values at the top level, next to a map of variation lists.
@@ -472,7 +568,34 @@ The player sets the pillar settings in the World tab of the create world screen.
 - Done writes the edited settings back to the pillars screen. Cancel and Escape drop them.
 - The tab Pillar Placement holds the column chance slider, then the two spacing sliders in one row.
 - The tab Pillar Variations holds the rows of each variation, then the Add Variation button.
-- The rows of a variation are, from top to bottom: the weight slider and the maze bias slider, the decay scale slider, the decay threshold slider and the erosion threshold slider, the label row, the four block fields, and the button row.
+- The rows of a variation are, from top to bottom: the slider rows, the pattern rows and the shape row. The heading "Blocks", one row per block field and the button row follow.
+- The slider rows are the weight and maze bias row, then the decay scale row. The decay threshold and erosion threshold row follows.
+- A Lines maze has no maze bias slider. Its weight slider takes the left half of the row.
+- The pattern rows and the shape row hold two widgets per row. A lone widget takes the left half of its row.
+- The first pattern row holds the Pattern combo and the first option of the pattern type.
+- A Mazes pattern puts the Type combo in the first row.
+- A Serpentine maze and a Gilbert maze add a row with the Strength slider.
+- A Ribs maze adds a row with the Strength slider and the Seam combo.
+- A Lines maze adds a row with the Spacing combo. A Uniform maze adds no row.
+- A Bricks pattern puts the Size combo in the first row.
+- A Tiles pattern puts the Size combo in the first row. A row with the Stagger combo and the Encased checkbox follows.
+- A Scales pattern has the Pattern combo alone in the first row.
+- A Chaos pattern puts the Cells combo in the first row. A row with the Node Spacing and Jitter sliders follows, then a row with the Corner Radius slider.
+- Bricks, Tiles, Scales and Chaos then add the path rows: Allow loops and Loop Share, then Surface paths and Cutting, then Path Chance.
+- Scales puts the Paths over tails checkbox right of Path Chance.
+- The shape row holds the Shape combo.
+- Loop Share is off while Allow loops is off.
+- Cutting, Path Chance and Paths over tails are off while Surface paths is off.
+- A checkbox that is off draws at 50% opacity. A slider that is off keeps the vanilla off look.
+- A change of the pattern type, the maze type, the tile size or the shape rebuilds the variation rows. The rebuild waits for the next tick and keeps the scroll position.
+- A new pattern type takes the defaults of that type.
+- The Strength, Jitter, Loop Share and Path Chance sliders run from 0% to 100% in steps of 5%.
+- The Node Spacing slider runs from 6 to 12 blocks in steps of 1. `ChaosSettings` holds the bounds.
+- The Corner Radius slider runs from 0 to 3 blocks in steps of 1. `ChaosSettings` holds the bounds.
+- The Stagger combo of small tiles lists None, X and Y. The Stagger combo of large tiles lists None and Y.
+- While Encased is on, the X entry is off. Its tooltip is "Encased tiles and large tiles do not stagger along X".
+- A check of Encased turns an X stagger into no stagger.
+- The Seam combo shows the short name of the seam. Its tooltip and the tooltip of each entry show the full name.
 - The button row holds the Copy button (export), the Paste button (import) and the Remove button, in that sequence.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
@@ -484,9 +607,16 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The decay threshold slider runs from 0% to 100% in steps of 5%. 100% is a threshold of 1.
 - The erosion threshold slider runs from 5% to 100% in steps of 5%.
 - The erosion threshold of a variation stays at least 5% above its decay threshold. A slider that passes the other pushes it along, so the decay threshold tops out at 95%.
-- The four block fields are, from left to right, the maze wall block, the maze path block, the interior block and the junction block.
-- A text row above the block fields shows the heading "Blocks" on its first line and the label of each field on its second line. A block field has no tooltip.
-- The block labels are "Wall", "Path", "Interior" and "Junction".
+- The block field rows hold the maze wall, maze path, interior, junction, surface path and trusses blocks, in that sequence.
+- Only a variation of the Bridge shape shows the trusses block row.
+- The block labels are "Wall", "Path", "Interior", "Junction", "Surface" and "Trusses".
+- A block field row holds the label, the value and the Edit button, from left to right.
+- A simple provider shows its block field as the value. A block field has no tooltip.
+- Any other provider shows its summary in gray as the value, for example "Weighted: 3 stone_bricks, 1 andesite".
+- A summary wider than the value shows the full text as its tooltip.
+- `ProviderText` makes the type name and the summary of each provider type.
+- The Edit button is 20 high and fits its text. Its narration is "Edit" and the field label.
+- Edit pushes the provider screen of the field. See [Provider screen](#provider-screen).
 - The rows of each variation draw inside one box: a white rectangle at 25% opacity that pads the rows by 4 on each side. An empty row separates two variations.
 - A block field reads a block id or a block state string, such as `oxidized_copper` or `oak_log[axis=x]`.
 - Bad text gives the block field a red border. The field keeps its last good block.
@@ -494,7 +624,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The dropdown shows the item icon and the name of each block. It lists no air block.
 - A dimension with one variation has its Remove button off.
 - Export writes one variation to the system clipboard as one line of JSON.
-- The JSON of one variation has the fields of a variation entry: bias, decay_scale, decay_threshold, erosion_threshold, interior, junction, wall and path.
+- The JSON of one variation has the fields of a variation entry. See [Registries](#registries).
 - The JSON of one variation holds no weight. Only the variation codec knows the fields.
 - The variation codec writes every field.
 - Import parses the clipboard at once as one variation.
@@ -508,6 +638,49 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The rebuild of the variation rows waits for the next tick of the dimension screen.
 - While the rebuild waits, the variation rows ignore input.
 - The dimension screen and the panel have no cloud height slider. The cloud height stays a field of the holder settings.
+
+### Provider screen
+
+- The provider screen edits the provider of one block field, like the vanilla single biome screen.
+- Its title is the field label, a colon and the title of the dimension screen, for example "Wall: Amazing Pillars: Overworld".
+- Its list holds the Type dropdown, then the editor rows of the chosen type.
+- The footer holds Done and Cancel.
+- The screen edits a draft of the provider. `ProviderDraft` holds the values of every type.
+- Done writes the built provider to the edited settings of the dimension screen. Done then rebuilds the variation rows.
+- Cancel and Escape drop the draft.
+- Done is off while the draft builds no provider. Its tooltip then shows the reason.
+- The return to the dimension screen keeps the selected tab and the scroll position.
+- The Type dropdown lists Simple state, Weighted, Noise threshold, Noise, Dual noise, Rotated block and Randomized int, in that sequence.
+- These are the provider types of Minecraft 1.21.1 that the editors know. `ProviderType` holds them.
+- The tooltip of the Type dropdown and of each entry is the type id, for example `minecraft:weighted_state_provider`.
+- A provider of any other type adds the entry Other. That entry is off.
+- The type Other shows "No editor for" and the type id. The draft keeps that provider as it is.
+- Simple state shows the State block field.
+- Weighted shows the heading Entries, one line per entry, then the button "+ Entry".
+- An entry line holds the block field, the weight field and a minus button. The list keeps at least one entry.
+- Noise shows the seed field, the noise fields and the States list.
+- Noise threshold shows the seed field, the noise fields, the Threshold field and the High Chance field. The Default block field, the Low States list and the High States list follow.
+- Dual noise shows the seed field, the noise fields and the Variety Min and Variety Max sliders. The slow noise fields and the States list follow.
+- The noise fields are the Octave field, the Amplitudes field and the Scale field.
+- A state list holds a title line, one line per state with a minus button, and the button "+ State". The list keeps at least one state.
+- The Variety Min slider and the Variety Max slider push each other along. `ProviderDraft` holds the variety bounds.
+- Rotated block shows the Block field. A block without the property `axis` shows red text.
+- Randomized int shows the Source block field, the Property dropdown, the Values dropdown and the value sliders.
+- The Values dropdown picks Constant or Uniform. Constant shows the Value slider. Uniform shows the Min and Max sliders.
+- The Min slider and the Max slider push each other along. The value sliders span the range of the chosen integer property.
+- A number field reads a whole number, a finite number or a comma list of numbers.
+- Bad text gives a number field a red border. The value keeps the last good parse.
+- A type change carries the distinct states of the old type over to the new type.
+- Simple state takes the first carried state.
+- Weighted takes each carried state as one entry with weight 1.
+- Noise and Dual noise take the carried states as their states. A change between Noise and Dual noise keeps the states.
+- Noise threshold takes the first carried state as its default state and the second as its low state. The other carried states become its high states.
+- Rotated block takes the first carried block with the property `axis`, else the first carried block.
+- Randomized int takes the first carried state with an integer property as its source, else the first carried state.
+- The noise values stay through a type change. So they carry over between the noise types.
+- A Randomized int source of another provider type shows its type id as read-only text. Its property and its values then show as text.
+- Values of another int provider type show their type id as text.
+- A change of the row set rebuilds the rows on the next tick. The rebuild keeps the scroll position.
 
 ### Preview
 
@@ -530,7 +703,12 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The group Pillar Placement holds the column chance slider and the two spacing sliders.
 - The group Pillar Variations holds the variation rows and the Add Variation button.
 - Each variation row of the panel shows the sliders in the menu sequence: weight, maze bias, decay scale, decay threshold, erosion threshold.
-- The block fields follow the sliders. The Export button, the Import button and the Remove button follow on one line.
+- A Lines maze shows no maze bias slider in the panel.
+- The combo Pattern follows the sliders. The widgets of the pattern follow it at a half indent, in the sequence of the dimension screen.
+- Allow loops has Loop Share one indent under it. Surface paths, Cutting, Path Chance and Paths over tails follow with no extra indent.
+- A pattern widget that is off draws in the ImGui disabled style. The rules of the dimension screen turn it off.
+- The combo Shape follows the pattern widgets. The tab bar of the block fields follows the combo Shape.
+- The Export button, the Import button and the Remove button follow on one line.
 - Export and Import in the panel act like Export and Import of the dimension screen, with the same tooltips.
 - The panel applies a variation removal after its row loop. So each row of the frame reads its own index.
 - Each ImGui end call of the panel runs in a `finally` block. So an exception leaves no ImGui window open.
@@ -542,9 +720,34 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The list combo lists "No prefab" and every prefab by its name. It follows the rules of the list dropdown of the pillars screen.
 - The list combo shows the tooltip of the list dropdown on hover, with the same dimension rule.
 - When no dimension is left to add, both combos and the Add button are off. The dimension combo reads "All dimensions configured".
-- The panel shows the heading "Blocks" above the block fields and the label of each block field left of the field. A block field has no tooltip.
+- The tab bar of a variation box holds the tab Blocks first. One tab per open field follows, in the sequence of opening.
+- The tab Blocks leads the tab bar. The scroll of the tab bar never hides it.
+- The tab Blocks holds one line per shown field: the label, the arrow button and the field.
+- A simple provider shows its text field and its dropdown. A block field has no tooltip.
+- Any other provider shows its one-line summary. The type name draws in the off text color, the summary in the text color.
+- The tooltip of a summary names the type id.
+- The arrow of a field opens the tab of the field, or selects that tab when it is open. The arrow never closes a tab.
+- A click on a summary also opens or selects the tab of the field.
+- The tooltip of the arrow is "Open the tab of" and the field label.
+- A new tab opens at the right end. An open tab keeps its place.
+- The cross on a field tab is the only close. A middle click closes no tab.
+- A closed selected tab gives the selection to the tab on its left.
+- A tab bar too narrow for its tabs scrolls. Each tab title stays whole.
+- A field tab holds the provider editor of the field: the type combo, then the widgets of the type.
+- The panel editor has the editor rows and the type change carry-over of the provider screen.
+- The panel editor has no Done button. A provider that builds and differs from the field replaces the field at once.
+- A value that builds no provider stays in the draft. The build error then shows in red under the editor.
+- A provider that changes outside the editor, for example through an import, replaces the draft.
+- `ProviderTabs` keys the tabs of a variation box by its dimension and its variation index.
+- A removal of a variation drops its tabs. The tabs of each later variation move down one index.
+- A removal of a dimension drops the tabs of its variations.
+- The tab of a field that the variation no longer shows closes. The Trusses tab closes after a change away from the Bridge shape.
+- A summary frame too narrow for the type name and the summary drops the type name. The frame clips the text.
+- The type combo of an editor too narrow for the text "Type: " shows the type name alone.
+- The label column of an editor takes at most half the line. A wider label takes its own line, and its field starts the next line.
+- The settings probe captures each provider tab and the tab Blocks at the narrowest panel width. See [Dev tools](#dev-tools).
 - Each variation of the panel draws inside one box: the default ImGui blue at 25% opacity, padded by the frame padding, behind the widgets.
-- The panel shows the block fields in the sequence of the menu, from top to bottom.
+- The tab Blocks shows the block fields in the sequence of the dimension screen, from top to bottom.
 - The dropdown of a panel block field is a popup over the panel. It moves no other widget.
 - The popup shows at most eight blocks with their item icons. It scrolls when the space below the field is too short.
 - A click on a block in the popup sets the field and the variation.
@@ -634,12 +837,27 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 
 - Three datapack registries hold the pillar data. They do not sync to the client.
 - `aerolite:shaft_variation` holds the variations. The shipped entries are `aerolite:stone`, `aerolite:tuff` and the others in `AeroliteShaftEntries.java`.
-- A variation entry holds `bias`, `decay_scale`, `decay_threshold`, `erosion_threshold`, `interior`, `junction`, `wall` and `path`. It holds no weight.
-- The codec writes `junction` right after `interior`. An entry without `junction` takes its interior block.
-- Each shipped variation takes its interior block as its junction block.
-- A save of 0.2 holds no junction block. So its variation still equals the shipped entry with the same other fields.
+- A variation entry holds `bias`, `decay_scale`, `decay_threshold`, `erosion_threshold`, `pattern`, `shape`, `interior`, `junction`, `wall`, `path`, `surface` and `trusses`. It holds no weight.
+- The variation codec writes the fields in that sequence. `ShaftVariation.KEYS` holds the sequence.
+- The variation codec writes every field.
+- An entry without `junction` takes its interior block. An entry without `trusses` takes its interior block.
+- An entry without `surface` takes its path block.
+- An entry without `pattern` takes the Uniform maze. An entry without `shape` takes the Pillar shape.
+- The `pattern` object holds the key `type` first. Its value is the pattern type id, for example `aerolite:mazes`.
+- The fields of the pattern type follow the key `type` in their codec sequence. A pattern field without a value takes its default.
+- The maze type of a Mazes pattern has the key `maze`, because the key `type` holds the pattern type.
+- The value of `shape` is `pillar`, `i_beam` or `bridge`.
+- Each block field reads a bare block state of 0.3 or a provider object. The codec writes the provider object.
+- `StateProviders.CODEC` is the codec of each block field.
+- Two variations are equal when their other fields are equal and each pair of providers is the same.
+- A simple provider compares by its state. Any other provider compares by its JSON from the provider codec.
+- A provider whose JSON does not encode compares by identity.
+- Each shipped variation takes its interior block as its junction block and its trusses block.
+- Each shipped variation takes its maze path block as its surface path block. It has the Uniform maze and the Pillar shape.
 - The variation codec clamps the bias to the slider range.
 - The variation codec raises an erosion threshold at or below the decay threshold to the decay threshold plus 5%.
+- The pattern codecs clamp each number option to its slider range.
+- A Tiles pattern with an X stagger and large tiles loads with no stagger. So does a Tiles pattern with an X stagger and Encased on.
 - `aerolite:shaft_placement` holds the placements. A dimension takes the entry under its own dimension id.
 - A dimension without its own placement entry takes `aerolite:default`.
 - The placements of the vanilla dimensions are in the namespace `minecraft`, for example `data/minecraft/aerolite/shaft_placement/overworld.json`.
@@ -689,6 +907,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - `data/aerolite/data_maps/dimension/shaft_variations.json` holds the variation list of each of those dimensions.
 - `data/<dimension namespace>/aerolite/shaft_placement/<dimension path>.json` holds the placement of each of those dimensions.
 - A variation equal to a shipped entry refers to that entry. Each dimension list refers to one entry at most once.
+- Equality uses the provider comparison. See [Registries](#registries).
 - Any other variation gets the entry `aerolite_world:<dimension namespace>/<dimension path>/<index>`. The index is its position in the list.
 - `data/aerolite/data_maps/dimension_type/cloud_height.json` holds the cloud height of the Overworld generator for `aerolite:overworld`.
 
@@ -735,12 +954,18 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 
 ### Cross section
 
-- The outside is 13x13. The interior is 11x11 and solid. The interior uses the pillar interior block.
-- The outer layer is one block thick. It holds the maze.
+- The Pillar shape is 13x13 outside. Its interior is 11x11 and solid.
+- The interior uses the interior block of the variation.
+- The outer layer is one block thick. It holds the pattern.
+- The ring description of the shape gives the cross section and the outer blocks of each pillar and column.
+- The paint samples each provider with a random of the world seed and the block position. So two chunks that paint one block give it the same block.
+- A simple provider takes no random.
+- The preview paints with the same providers and the same randoms.
 
 ### Maze
 
-- The maze is one spanning tree of the maze grid along the whole pillar. It has no loops.
+- The maze is one spanning tree per ring along the whole pillar. It has no loops.
+- The rules of this section describe the Uniform maze on the Pillar shape. [Maze types](#maze-types), [Shapes](#shapes) and [Junction link](#junction-link) add to them.
 - A ruling sits on every odd block along the pillar. On a ruling, nodes sit on even blocks around the pillar, so the four corners are nodes. Edges sit between neighbor nodes. Every other maze grid block is a maze wall.
 - A corner node has no edge along the axis, so no path runs along a corner.
 - After sampling, a corner node of degree one is dropped with its edge. So a two-block margin runs along every corner, with a notch where a path crosses the corner.
@@ -770,11 +995,12 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - When the junction segments of two boxes share a chunk, one junction segment spans both boxes. It holds one pillar patch per box.
 - The column patch is part of a column junction segment. Crossings run from its border nodes above and below, without the patch corner nodes, onto the nearest ruling.
 - In the graph, each of the 3 border nodes between the corners of one patch side has one crossing edge. The sampled tree holds a subset of those edges.
-- A patch corner node gets no crossing. It keeps its two patch edges. No patch corner node is dropped.
+- On the Pillar shape, a patch corner node gets no crossing. It keeps its two patch edges. No patch corner node is dropped.
 - A crossing runs along the pillar outer layer up to the box. Then it notches through the bezel at the face offsets 7, 6 and 5, onto a border node at offset 4.
 - A border node and its ring node sit at the same offset across the pillar axis. So the notch runs straight.
 - Each notch block is a maze path. The block one in is the maze path block.
-- Each pillar is one tree over its full length. No tree touches another pillar. The maze has no loops.
+- Each ring of a pillar is one tree over its full length. The maze has no loops.
+- No tree touches another pillar. The mismatched junction of a Bridge column is the one exception. See [Junction link](#junction-link).
 - A maze wall keeps its outer layer block. That block is the maze wall block, at the 13x13 extent.
 - A maze path has no outer layer block. The block under it, at the 11x11 extent, is the maze path block.
 - A maze path at a chunk edge can have its maze path block in the next chunk. Each chunk writes the blocks of a maze path that lie in it.
@@ -790,13 +1016,162 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - Erosion starts where the absolute decay noise passes the erosion threshold, at either end of the noise.
 - The reach is the absolute noise, normalized from the erosion threshold to 1.
 - Each block has an erosion resistance from 0 to 1. Erosion removes a block when the reach exceeds its resistance.
-- In a pillar, the resistance rises over 5 layers from the outer layer inward. The 3x3 core has a resistance of 1, so it never vanishes.
+- In the Pillar shape, the resistance rises over 5 layers from the outer layer inward. The 3x3 core has a resistance of 1, so it never vanishes.
 - In a junction box, the box resistance rises over 6 layers from the box face inward. The 3x3x3 core has a resistance of 1.
 - A box block takes the largest of the box resistance and the resistance of each pillar whose cross section holds it. So erosion never cuts a pillar at a junction.
 - Erosion samples the noise at each block, so one side of a pillar can erode deeper than the other.
 - Erosion runs after decay and before shear. An eroded block leaves no pillar block.
 - The prototype renders the segment layouts and one junction from both sides. The user picked the connector layout and the junction segment from its images.
 - The prototype keeps Origin Shift and its start trees for comparison. The mod uses only Wilson's algorithm.
+
+### Maze types
+
+- The maze types follow `prototypes/maze/README.md`. `MazeTypes` holds the pattern edges of each type.
+- A maze type draws its pattern edges from the pattern random of the segment. That random takes no value from the segment random.
+- Below 100% strength, Wilson's algorithm samples one weighted spanning tree per segment.
+- The weight of an edge is its class weight times its pattern factor.
+- The class weight of an axis edge is the maze bias. A ring edge has the class weight 1 minus the maze bias.
+- A pattern edge has the pattern factor 1. Any other edge has the pattern factor 1 minus the pattern strength.
+- At 100% strength, the pattern edges are the tree edges.
+- A Uniform maze, or a pattern strength of 0%, samples the maze of 0.3.
+- The maze types keep the tree segments, the connector segments and the junction patches of [Maze](#maze).
+- A node carves only when an edge holds it.
+- Serpentine: each ruling is one ring path with one gap. The gap position varies per ruling.
+- Serpentine: one axis edge next to the gap joins a ruling to the next ruling.
+- A Serpentine connector segment replays the gap of the facing ruling of the neighbor before it. The pattern random of that neighbor gives the gap. The connector turns next to it.
+- Ribs: the breadth-first tree of the segment graph from a root.
+- The seam picks the Ribs root. The root is random per segment, seeded per segment on the first ruling, or one ring position per pillar.
+- Lines: straight axis grooves on every node column at line spacing 1. At line spacing 2, the grooves sit on every second node column.
+- Lines has no maze bias and no pattern strength. Lines is a forest by design.
+- At line spacing 2, the four faces of the Pillar shape get 3, 2, 3 and 2 grooves.
+- In a Lines maze, a crossing onto a groove node makes its patch line across the axis a groove.
+- Gilbert: the generalized Hilbert curve around the ring, with its seam at ring position 0.
+- At 100% strength, a union-find pass joins the Gilbert pieces with the fewest extra edges, in a seeded sequence.
+- Then each virtual node joins by one edge, and each crossing group by one crossing. So the pillar is one tree.
+- `MergedJunctionTest` puts two boxes 31 to 35 blocks apart, so one junction segment holds both. Each maze type keeps each pillar one tree.
+
+### Patterns
+
+- A pattern fills the segment surface of each segment. `SurfaceCarver` turns the band blocks into world blocks.
+- A wall block keeps the maze wall block. A groove is a maze path.
+- A surface path block is the surface path block at the outer block.
+- A groove on a flush face writes the maze path block at the outer block, with no carve.
+- Bricks, Tiles and Scales share the band pattern code in `BandPattern`. Chaos has its own code in the package `world.shaft.pattern.chaos`.
+- Each pattern follows the README of its prototype. The Javadoc of each pattern class states its rules.
+- A rule on the face columns 0 to 12 applies to each face between two corners. A face of another width keeps the period from its first column.
+- A surface path has zero to two corners: an I, an L, an S or a U.
+- A U needs legs that do not touch. A surface path is never 2 wide.
+- A surface path adds no plus crossing beyond the plus crossings of the base pattern.
+- A surface path leaves no orphan wall block. An orphan wall block has grooves on all four sides.
+- A cut path that turns inside a small tile can leave an orphan wall block. Small tiles allow it. Large tiles keep the orphan rule.
+- A surface path never runs along a corner.
+- With Cutting off, a surface path is surface path blocks flush at the wall layer.
+- With Cutting on, a surface path is carved as grooves. It then joins the groove graph.
+- Each region of a band pattern rolls the path chance once.
+- A Chaos pattern rolls the path chance once per wall face. Each face takes one surface path at most.
+- A Chaos surface path keeps a wall strip of 2 or more blocks on each side. Each part of the face beside it keeps a 2x2 wall square.
+- A Chaos face without a candidate can take a straight path with a 1-block strip on each side. A cut path never takes that fallback.
+- The loop share rations the cycles of the groove graph segment by segment. The segments are tree segments and connector segments, like the maze.
+- Each segment samples a spanning forest with Wilson's algorithm. The other edges of the segment are its cycle edges.
+- A segment keeps the loop share of its cycle edges. Each other cycle edge loses one block.
+- At 0%, the grooves of each segment form a forest. At 100%, every groove stays.
+- A cut surface path counts as part of the groove graph, so its edges can be cycle edges.
+- The rationing never removes the end groove of a surface path or a Scales tail.
+- The rationing draws do not depend on the share. So the removal at one share holds the removal at each higher share.
+- Each pattern segment is a pure function of the world seed, the pillar and the chunk index.
+- A band pattern builds each scene with a margin of chunks on each side. So a chunk is the same in every scene that holds it.
+- The last regions of a chunk draw their surface paths first, from their own random. The other regions then fit around them.
+- Chaos computes blocks of chunks with a window margin and crops the segments from them.
+- A column or a short pillar builds one scene for all its chunks. `BandPattern` and `ChaosPattern` hold the length limit.
+- A junction box makes its rows box blocks on every ring, except the patch area.
+- The pattern continues onto the 9x9 patch area inside the bezel. The bezel and the box edges cut the grooves.
+- The patch crossings of the maze do not apply to the other pattern types.
+- The patch belongs to the segment that holds every chunk of its box.
+- On a Bridge ring, Chaos paints no patch area.
+- On a Bridge ring, Bricks paints only the outer columns of the patch area.
+- A surface path block is no carve, so it decays like a maze wall. A flush maze path block decays like a maze wall too.
+- `PatternCache` keeps the surface path draws and the finished chunk bands of the band patterns. A neighbor chunk reads them again.
+- `ChaosScenes` keeps the recent Chaos bands. The chunks of one computed block share one computation.
+- Each cache entry is a pure function of its key. The key holds the options, a fingerprint of the pillar random, the ring, the chunk and the boxes in reach.
+- Each cache drops its least recently used entry above its capacity. The capacity is a constant in the cache class.
+- A cache computes an absent value outside its lock. So two threads can compute the same value.
+- Bricks: bed joints run around the ring. Head joints run along the axis inside one course. A head joint never sits on a corner.
+- Small bricks are 5x3. Neighbor faces swap the course phase. The pillar random picks the face pair that starts on phase 0.
+- Jumbled bricks have three courses per chunk of 4, 4 and 5 rows in random sequence. Each face has two head joints at random even columns.
+- A jumbled head joint never shares a ring position with a head joint in the course above or below.
+- Large bricks are 11x7. One course has its head joints at face column 2, the next at face column 10, on every face.
+- Tiles: axis grooves run along the pillar. Ring grooves run around it. An axis groove never sits on a corner.
+- Small tiles are 3x3, with axis grooves at face columns 2, 6 and 10.
+- Large tiles are 7x7, with axis grooves at face columns 2 and 10 and a 3-wide corner strip.
+- Stagger X gives small tiles a running bond. Stagger Y alternates the ring groove phase from tile column to tile column.
+- The pillar random picks the tile columns of phase 0 of stagger Y.
+- Encased keeps the corner strip solid. No ring groove crosses it.
+- Scales: small tiles with stagger X and one tail block per tile.
+- A tail stays wall and caps the axis groove of the next course. The pillar random picks the tail direction.
+- With Paths over tails on, a cut path can carve a tail. That tail has path on all four sides, the one accepted exception to the plus rule.
+- Chaos: a 2D jittered grid of cells on the unwrapped band. The grid wraps around the ring.
+- The Chaos cells around the ring are the ring length over the node spacing, rounded half up. The cell width is the ring length over that count.
+- Each Chaos block takes the label of the nearest grid point. A block is a groove where its 2x2 window holds two labels.
+- The corner radius chamfers the Chaos stones at each T junction.
+- The Chaos paint caps the jitter per node spacing, so every stone stays at least 3 blocks across. `ChaosParams.jitterCap` holds the caps.
+- Voronoi cells repair each plus crossing into two T junctions.
+- Delaunay cells give the dual of the stones. Each stone gets a groove ring at its center. A straight groove joins the centers of two neighbor stones.
+- Chaos gives the corners no special role. A stone can span a corner, and a groove can run along one.
+
+### Shapes
+
+- The shapes follow `prototypes/shapes/README.md`. The ring descriptions are in the package `world.shaft.shape`.
+- `ShapeRings` gives the ring description of a shape and a web plane.
+- Columns take the shape of their variation, like horizontal pillars.
+- An I-beam has flanges 13 wide and 4 thick and a web 5 thick and 5 tall.
+- One I-beam ring of 64 blocks follows the H outline over every surface. It has 32 nodes.
+- The I-beam ring holds the hidden block of each concave corner.
+- The outer corners of an I-beam are corner nodes. The inner flange corners are ring edges.
+- A concave corner of an I-beam is an edge. Its groove removes the hidden block and leaves an L-shaped floor of two blocks.
+- A horizontal I-beam pillar has a vertical web.
+- Each column draws a web plane, X or Z, as its last seeded draw. So the draw changes no earlier draw of the column.
+- An I-beam column puts its web in its web plane.
+- The Bridge shape has two plates, 3 thick and 13 wide, with 7 truss rows between them.
+- Each plate is its own ring of 28 blocks and its own tree.
+- The outer face of a plate carries the pattern as grooves. The inner face is a flush face, 11 wide.
+- The trusses stand one block in from the plate sides, two blocks wide per row, with a period of 8. `BridgeRing` holds the truss layers.
+- The trusses carry no pattern. They are the trusses block.
+- Each anchor takes the place of an inner plate layer block. An anchor wins over the flush pattern.
+- The paint writes the trusses after the patterns. An anchor leaves the maze grid, so decay keeps it.
+- A Bridge column takes the plane of its trusses from its web plane.
+- Every shape pair gets the 15x15x15 junction box with its 3-block bezel.
+- A horizontal Bridge pillar passes through each junction box in an 11x11 hole along its axis.
+- The Bridge blocks stay in the hole. The box wins where they coincide. So the passage is 7 wide and 7 tall.
+- The box wins over a truss outside the hole.
+- The plates of a horizontal Bridge pillar run uncut through the box rows.
+- A Bridge column gets no hole. The solid box cuts it.
+- The ring description gives the erosion resistance of each block of its cross section.
+- Each plate keeps its middle layer at resistance 1. The web keeps its middle layer at resistance 1.
+- A flange is 4 thick, so it keeps both middle layers at resistance 1.
+- A truss block and an anchor have the resistance `ErosionResistance.TRUSS`.
+- In the hole, each box block takes the resistance of the Bridge shape.
+- Columns of every shape keep the shear bands. Shear also removes truss blocks.
+
+### Junction link
+
+- The Pillar shape keeps the junction rules of [Maze](#maze).
+- The solid box cuts an I-beam like the Pillar shape.
+- A flange face toward the patch gives 3 crossings, like a face of the Pillar shape.
+- Toward the flange edges, only the two flange edge nodes take crossings, onto the patch corner nodes. The web nodes take none.
+- A crossing onto a patch corner node is an allowed exception for the I-beam and the Bridge shape.
+- The two plates of a horizontal Bridge pillar are two trees. They run uncut through the hole.
+- The patch of a horizontal Bridge pillar takes exactly one crossing, from a side corner node of one plate. The other plate takes none.
+- The random of the box picks that plate once per junction. The tree takes the crossing from one side of the box.
+- Every column has one X junction and one Z junction.
+- At the matched junction of a Bridge column, the plate sides face the patches. Both plates join the column patch through their side corner nodes.
+- At the mismatched junction of a Bridge column, the plate outer faces face the patches.
+- There, the near plate joins the column patch through its 3 middle nodes, like a face of the Pillar shape.
+- There, the far plate joins the patch of the horizontal pillar the same way. Its crossings land on the top and bottom border sides of that patch.
+- Every plate piece of a Bridge column joins the patch it faces, from below and from above, at both junctions.
+- The crossings onto the patch of the other pillar join one virtual node per box. That node stands for the tree of the other pillar, so no such crossing closes a loop.
+- So the tree of a Bridge column touches the tree of the horizontal pillar at the mismatched junction. The owner accepts this one exception.
+- The Bridge column, its patches and the touched horizontal pillar form one tree. The untouched plate of a horizontal Bridge pillar stays its own tree.
+- `ShapeMazeTest` checks the junction link against the results of the shapes prototype.
 
 ## Walker Trees
 
@@ -916,9 +1291,21 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 
 - Write NeoForge GameTests for world generation results. Run them with `./gradlew runGameTestServer`.
 - Write JUnit tests for pure logic: the Voronoi, the signed distance functions, the maze segments and the walker.
+- The JUnit tests also cover the patterns and the ring descriptions.
 - Put all tests in `src/test`.
 - The GameTest server run loads the test source set as part of the mod.
 - GameTests use the template `aerolite:empty`, a 1x1x1 structure in the test resources.
+- The JUnit tests in `world/shaft/surface/path/` check the band, the band checks and the groove graph. They also check the spanning forest, the loop rationing and the surface paths.
+- `TestPatterns` holds the synthetic patterns of those tests.
+- The JUnit tests of Bricks, Tiles and Scales run the `--check` modes of their prototypes on the real patterns. `PatternChecks` holds the checks.
+- The Chaos JUnit tests run the checks of the Chaos prototype. They also check the Chaos segments through the surface model.
+- The maze JUnit tests check each maze type, the merged junction segment and the two-ring maze. They also check the junction link of each shape.
+- The shape JUnit tests compare the I-beam ring and the Bridge rings with the tables of the shapes prototype.
+- `PillarRingTest` compares the Pillar ring description with the tables of `Ring`.
+- The settings JUnit tests check the pattern settings JSON, the provider codec and comparison, and the variation JSON.
+- The client JUnit tests check the pattern edit rules, the provider drafts, the provider text and the panel tabs.
+- GameTests check the pattern bindings in the bean context and the blocks that the paint writes for each pattern.
+- The shape GameTests check the cross sections, the trusses, the hole and the column web plane. They also check erosion and the one crossing of a horizontal Bridge pillar.
 
 ## AI attribution procedure
 
@@ -943,4 +1330,7 @@ The repository owner cites AI-generated work, so every session Claude works in m
 
 ## Open questions
 
-None at this time. When a new question appears, add it here and ask the user before you implement it.
+When a new question appears, add it here and ask the user before you implement it.
+
+- The capacity of `PatternCache` and of `ChaosScenes`. The owner has not picked the cache sizes.
+- The patch area of the patterns on a Bridge ring. Chaos paints no patch area there. Bricks paints only the outer columns there. The owner has not picked the rule.

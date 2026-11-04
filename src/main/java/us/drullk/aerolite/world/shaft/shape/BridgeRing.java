@@ -129,7 +129,7 @@ public final class BridgeRing extends TracedRing {
         return candidates;
     }
 
-    /** A horizontal Bridge gives exactly one candidate per junction: one plate, picked by the random of the box. */
+    /** A horizontal Bridge gives exactly one candidate per junction: one plate and one side, picked by the random of the box. */
     @Override
     public List<CrossingCandidate> crossings(SectionAxis normal, int sign, ShaftMaze.Box box, RandomSource random) {
         List<CrossingCandidate> candidates = this.crossings(normal, sign);
@@ -137,7 +137,8 @@ public final class BridgeRing extends TracedRing {
             return candidates;
         }
         List<CrossingCandidate> own = candidates.stream().filter(candidate -> !candidate.foreign()).toList();
-        return List.of(own.get(random.nextInt(own.size())));
+        CrossingCandidate plate = own.get(random.nextInt(own.size()));
+        return List.of(plate.onSide(random.nextBoolean() ? CrossingCandidate.Side.BEFORE : CrossingCandidate.Side.AFTER));
     }
 
 }

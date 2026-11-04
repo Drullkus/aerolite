@@ -79,7 +79,7 @@ import java.util.function.BooleanSupplier;
  * On the tab Pillar Variations it also opens the provider screen of each block field with one provider type each.
  * The last preview state shows the panel at its narrowest width. The run keeps that width only until the next resize.
  * The last steps open the provider tabs of the preview panel, one per provider type.
- * Then the shape scenes show an I-beam and a Bridge with columns.
+ * Then the shape scenes show an I-beam and a Bridge with columns, and one scene with one variation per shape and a column at each crossing.
  * It saves one PNG per state from the window front buffer under {@code screenshots/} of the game directory. Then it stops the game.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
@@ -237,6 +237,7 @@ public final class SettingsProbe {
         this.grab("settings-16-preview-scales-narrow-lower.png");
         this.queueImGuiEditors();
         this.queueShapes();
+        this.queueShapePairs();
         this.step("stop", 60, () -> {
             LOGGER.info("Settings probe: done");
             minecraft.stop();
@@ -279,6 +280,51 @@ public final class SettingsProbe {
             this.grab("shapes-" + name + "-close.png");
             this.act("shapes " + name + " zoom out", () -> minecraft.screen.mouseScrolled(300, 400, 0, -8));
         }
+    }
+
+    /**
+     * The steps of the shape pair scene: three variations of equal weight, one per shape, with a column at each crossing.
+     * The seed is fixed, so each run shows the same pillars. The views are angled from two sides and along Z.
+     */
+    private void queueShapePairs() {
+        Minecraft minecraft = Minecraft.getInstance();
+        ShaftVariation pillar = ShaftVariation.standard(ShaftVariation.UNIFORM_BIAS, BlockStateProvider.simple(Blocks.GRANITE),
+                        BlockStateProvider.simple(Blocks.POLISHED_GRANITE), BlockStateProvider.simple(Blocks.TERRACOTTA))
+                .withDecayThreshold(0.8F).withErosionThreshold(0.9F);
+        ShaftVariation iBeam = ShaftVariation.standard(ShaftVariation.UNIFORM_BIAS, BlockStateProvider.simple(Blocks.DEEPSLATE),
+                        BlockStateProvider.simple(Blocks.DEEPSLATE_BRICKS), BlockStateProvider.simple(Blocks.POLISHED_DEEPSLATE))
+                .withShape(PillarShape.I_BEAM).withDecayThreshold(0.8F).withErosionThreshold(0.9F);
+        ShaftVariation bridge = ShaftVariation.standard(ShaftVariation.UNIFORM_BIAS, BlockStateProvider.simple(Blocks.STONE),
+                        BlockStateProvider.simple(Blocks.STONE_BRICKS), BlockStateProvider.simple(Blocks.MOSSY_STONE_BRICKS))
+                .withShape(PillarShape.BRIDGE).withTrusses(Blocks.OXIDIZED_COPPER.defaultBlockState()).withDecayThreshold(0.8F).withErosionThreshold(0.9F);
+        ShaftPlacement placement = new ShaftPlacement(32, 48, 1);
+        this.act("pairs", () -> {
+            PreviewScreen screen = (PreviewScreen) minecraft.screen;
+            screen.setSeedText("3446441043220923556");
+            screen.setSettings(screen.settings().withDimension(Level.OVERWORLD, new DimensionSettings(placement,
+                    List.of(new WeightedVariation(1, pillar), new WeightedVariation(1, iBeam), new WeightedVariation(1, bridge)))));
+            screen.resetCenter();
+            screen.setRadius(3);
+            screen.camera().setYaw(35);
+            screen.camera().setPitch(25);
+        });
+        this.step("pairs built", 20, () -> minecraft.screen instanceof PreviewScreen screen && screen.progress().phase() == PreviewBuilder.Phase.DONE);
+        this.grab("pairs-angled.png");
+        this.act("pairs other side", () -> ((PreviewScreen) minecraft.screen).camera().setYaw(215));
+        this.grab("pairs-angled-back.png");
+        this.act("pairs end", () -> {
+            PreviewScreen screen = (PreviewScreen) minecraft.screen;
+            screen.camera().setYaw(0);
+            screen.camera().setPitch(10);
+        });
+        this.grab("pairs-end.png");
+        this.act("pairs close", () -> {
+            PreviewScreen screen = (PreviewScreen) minecraft.screen;
+            screen.camera().setYaw(35);
+            screen.camera().setPitch(25);
+            screen.mouseScrolled(300, 400, 0, 6);
+        });
+        this.grab("pairs-close.png");
     }
 
     /**

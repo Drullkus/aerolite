@@ -158,7 +158,7 @@ public final class ShaftMaze {
     record Crossing(int along, int across, int ruling, int node) {
     }
 
-    /** The possible crossings of a box onto its own patch, from the crossing candidates of the ring. */
+    /** The possible crossings of a box onto its own patch, from the crossing candidates of the ring and their sides. */
     List<Crossing> crossings(Box box) {
         return this.crossings(box, false);
     }
@@ -172,8 +172,13 @@ public final class ShaftMaze {
         List<Crossing> crossings = new ArrayList<>();
         RandomSource random = this.random.at(CROSSING, box.center(), 0);
         for (CrossingCandidate candidate : this.ring.crossings(normal(box), box.sign(), box, random)) {
-            if (candidate.foreign() == foreign) {
+            if (candidate.foreign() != foreign) {
+                continue;
+            }
+            if (candidate.side().before()) {
                 crossings.add(new Crossing(-Ring.PATCH_INDEX, candidate.across(), this.lastRulingBefore(box), candidate.node()));
+            }
+            if (candidate.side().after()) {
                 crossings.add(new Crossing(Ring.PATCH_INDEX, candidate.across(), this.firstRulingAfter(box), candidate.node()));
             }
         }
