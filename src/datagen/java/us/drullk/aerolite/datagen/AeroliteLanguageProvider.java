@@ -77,6 +77,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.surface_block", "Surface");
         this.add("createWorld.customize.aerolite.trusses_block", "Trusses");
         this.add("createWorld.customize.aerolite.provider.edit", "Edit");
+        this.add("createWorld.customize.aerolite.provider.open_tab", "Open the tab of %s");
         this.add("createWorld.customize.aerolite.provider.title", "%s: %s");
         this.add("createWorld.customize.aerolite.provider.type", "Type: %s");
         this.add("createWorld.customize.aerolite.provider.type.simple_state_provider", "Simple state");

@@ -30,11 +30,14 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 final class ImGuiBlockField {
 
     private static final int TEXT_CAPACITY = 256;
     private static final float INVALID_RED = 0.55F;
+    /** The green and the blue of the red warning text. */
+    private static final float WARN_GREEN_BLUE = 0.4F;
     /** The list keeps the field focused, so it never takes the focus when it appears. */
     private static final int LIST_FLAGS = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove
             | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoFocusOnAppearing
@@ -49,9 +52,20 @@ final class ImGuiBlockField {
     private boolean listInUse;
     private List<Block> matches = new ArrayList<>();
 
-    /** Draws the field. Returns the new state, or null when the state stays. */
+    /** Draws the field to the right edge of the line. Returns the new state, or null when the state stays. */
     @Nullable
     BlockState draw(String id, String hintKey, BlockState state, BlockSearch search, ItemIconAtlas icons) {
+        return this.draw(id, hintKey, state, search, icons, -1, false);
+    }
+
+    /**
+     * Draws the field. Returns the new state, or null when the state stays.
+     *
+     * @param itemWidth the ImGui item width; a negative width ends that far left of the right edge
+     * @param warn  true draws the text red
+     */
+    @Nullable
+    BlockState draw(String id, String hintKey, BlockState state, BlockSearch search, ItemIconAtlas icons, float itemWidth, boolean warn) {
         if (state != this.shown && !this.open) {
             this.text.set(search.text(state));
             this.shown = state;
@@ -60,8 +74,14 @@ final class ImGuiBlockField {
         if (!this.valid) {
             ImGui.pushStyleColor(ImGuiCol.FrameBg, INVALID_RED, 0.1F, 0.1F, 1);
         }
-        ImGui.setNextItemWidth(-1);
+        if (warn) {
+            ImGui.pushStyleColor(ImGuiCol.Text, 1, WARN_GREEN_BLUE, WARN_GREEN_BLUE, 1);
+        }
+        ImGui.setNextItemWidth(itemWidth);
         boolean changed = ImGui.inputTextWithHint(id, I18n.get(hintKey), this.text);
+        if (warn) {
+            ImGui.popStyleColor();
+        }
         if (!this.valid) {
             ImGui.popStyleColor();
         }

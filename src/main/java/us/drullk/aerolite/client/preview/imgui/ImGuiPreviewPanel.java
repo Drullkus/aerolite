@@ -23,8 +23,6 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.AeroliteClientConfig;
 import us.drullk.aerolite.client.PresetEdits;
@@ -38,7 +36,6 @@ import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
-import us.drullk.aerolite.world.StateProviders;
 import us.drullk.aerolite.world.VariationList;
 import us.drullk.aerolite.world.WeightedVariation;
 import us.drullk.aerolite.world.pattern.BricksSettings;
@@ -52,9 +49,7 @@ import us.drullk.aerolite.world.pattern.TilesSettings;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -68,6 +63,7 @@ import java.util.function.UnaryOperator;
  * Each dimension header holds the groups Shaft Placement and Shaft Variations.
  * A radio left of each dimension name and the dimension combo of the Preview section select the previewed dimension.
  * The pattern widgets of a variation sit at a half indent under the combo Pattern.
+ * The block fields of a variation sit in a tab bar. The tab Blocks holds the fields. Each opened field has a tab with its provider editor.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -82,8 +78,6 @@ import java.util.function.UnaryOperator;
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
     private static final String KEY = "createWorld.customize.aerolite.";
-    private static final String TRUSSES_LABEL = "trusses_block";
-    private static final List<String> BLOCK_LABELS = List.of("wall_block", "path_block", "interior_block", "junction_block", "surface_block", TRUSSES_LABEL);
     /** The red, green and blue of the default ImGui blue. The variation box draws it at 25% opacity. */
     private static final float[] GROUP_BLUE = {0.26F, 0.59F, 0.98F};
     private static final float GROUP_ALPHA = 0.25F;
@@ -97,7 +91,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     /** The size of the panel text before the font scale, in ImGui units. */
     private static final float FONT_SIZE = 13F;
 
-    private final Map<String, ImGuiBlockField> blockFields = new HashMap<>();
+    private final ImGuiProviderFields providerFields = new ImGuiProviderFields();
     private final int[] windowWidth = new int[1];
     private final int[] windowHeight = new int[1];
     private final int[] framebufferWidth = new int[1];
@@ -134,6 +128,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
 
     private PresetTools tools() {
         return Objects.requireNonNull(this.tools, "The panel draws only for an open preview screen");
+    }
+
+    private PreviewScreen screen() {
+        return Objects.requireNonNull(this.drawn, "The panel draws only for an open preview screen");
     }
 
     /** Creates the panel and adds its font and draw hooks to the imgui-mc events. */
@@ -235,7 +233,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         this.tools = screen.tools();
         if (screen != this.drawn) {
             this.drawn = screen;
-            this.blockFields.clear();
+            this.providerFields.clear();
             this.addChoice = null;
             this.addListFor = null;
             this.width = screen.panelUnits();
@@ -361,6 +359,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         }
         if (removed != null) {
             edited = this.tools().edits().withoutDimension(edited, removed);
+            this.screen().providerTabs().removedDimension(removed);
         }
         return this.drawAddDimension(screen, edited);
     }
@@ -436,6 +435,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
                 }
                 if (removed >= 0) {
                     edited = this.tools().edits().withoutVariation(edited, dimension, removed);
+                    this.screen().providerTabs().removedVariation(dimension, removed);
                 }
                 if (ImGui.button(text("add_variation") + "##add_variation")) {
                     edited = this.tools().edits().withAddedVariation(edited, dimension);
@@ -553,7 +553,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return edited;
     }
 
-    /** The sliders in the sequence of the menu, then the block fields and the buttons Export and Import. */
+    /** The sliders in the sequence of the menu, then the tab bar of the block fields and the buttons Export and Import. */
     private AeroliteSettings drawVariation(AeroliteSettings settings, ResourceKey<Level> dimension, int index, String fieldKey) {
         PresetSliders sliders = this.tools().sliders();
         AeroliteSettings edited = settings;
@@ -594,22 +594,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             edited = this.editVariation(edited, dimension, index, current -> current.withShape(shape));
         }
 
-        ImGui.text(text("blocks"));
-        boolean trusses = PresetEdits.showsTrusses(variation);
-        float labelWidth = 0;
-        for (String key : BLOCK_LABELS) {
-            if (trusses || !key.equals(TRUSSES_LABEL)) {
-                labelWidth = Math.max(labelWidth, ImGui.calcTextSize(text(key)).x);
-            }
-        }
-        float fieldStart = labelWidth + ImGui.getStyle().getItemSpacingX();
-        edited = this.blockField(edited, dimension, index, fieldKey + "/wall", BLOCK_LABELS.get(0), fieldStart, variation.wall(), ShaftVariation::withWall);
-        edited = this.blockField(edited, dimension, index, fieldKey + "/path", BLOCK_LABELS.get(1), fieldStart, variation.path(), ShaftVariation::withPath);
-        edited = this.blockField(edited, dimension, index, fieldKey + "/interior", BLOCK_LABELS.get(2), fieldStart, variation.interior(), ShaftVariation::withInterior);
-        edited = this.blockField(edited, dimension, index, fieldKey + "/junction", BLOCK_LABELS.get(3), fieldStart, variation.junction(), ShaftVariation::withJunction);
-        edited = this.blockField(edited, dimension, index, fieldKey + "/surface", BLOCK_LABELS.get(4), fieldStart, variation.surface(), ShaftVariation::withSurface);
-        if (trusses) {
-            edited = this.blockField(edited, dimension, index, fieldKey + "/trusses", TRUSSES_LABEL, fieldStart, variation.trusses(), ShaftVariation::withTrusses);
+        ShaftVariation current = this.tools().edits().variations(edited, dimension).get(index);
+        ShaftVariation fields = this.providerFields.draw(current, this.screen().providerTabs().of(dimension, index), fieldKey, this.tools());
+        if (fields != current) {
+            edited = edited.withVariation(dimension, index, fields);
         }
         return this.drawVariationClipboard(edited, dimension, index);
     }
@@ -875,31 +863,6 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             ImGui.setTooltip(text("paste_variation_tooltip"));
         }
         return edited;
-    }
-
-    private interface BlockEdit {
-        ShaftVariation apply(ShaftVariation variation, BlockState state);
-    }
-
-    /**
-     * The label sits left of the field. The fields of one variation start at one column and take the rest of the line.
-     * A provider other than a simple provider shows its type id in a read-only field.
-     */
-    private AeroliteSettings blockField(AeroliteSettings settings, ResourceKey<Level> dimension, int index, String fieldKey, String labelKey,
-                                        float fieldStart, BlockStateProvider provider, BlockEdit edit) {
-        ImGuiBlockField field = this.blockFields.computeIfAbsent(fieldKey, key -> new ImGuiBlockField());
-        float lineStart = ImGui.getCursorPosX();
-        ImGui.alignTextToFramePadding();
-        ImGui.text(text(labelKey));
-        ImGui.sameLine();
-        ImGui.setCursorPosX(lineStart + fieldStart);
-        BlockState state = StateProviders.simpleState(provider);
-        if (state == null) {
-            field.drawReadOnly("##" + fieldKey, StateProviders.typeId(provider));
-            return settings;
-        }
-        BlockState picked = field.draw("##" + fieldKey, KEY + labelKey, state, this.tools().blocks(), this.tools().icons());
-        return picked == null ? settings : this.editVariation(settings, dimension, index, current -> edit.apply(current, picked));
     }
 
     private AeroliteSettings editVariation(AeroliteSettings settings, ResourceKey<Level> dimension, int index, Function<ShaftVariation, ShaftVariation> edit) {

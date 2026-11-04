@@ -107,6 +107,7 @@
   "createWorld.customize.aerolite.provider.min": "Min: %s",
   "createWorld.customize.aerolite.provider.no_editor": "No editor for %s",
   "createWorld.customize.aerolite.provider.octave": "Octave",
+  "createWorld.customize.aerolite.provider.open_tab": "Open the tab of %s",
   "createWorld.customize.aerolite.provider.property": "Property: %s",
   "createWorld.customize.aerolite.provider.property_entry": "%s (%s-%s)",
   "createWorld.customize.aerolite.provider.property_none": "Property: none",

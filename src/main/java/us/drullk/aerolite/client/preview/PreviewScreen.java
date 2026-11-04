@@ -44,6 +44,7 @@ import java.util.function.BiConsumer;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_19-53_bf29e15f-47bb-42fe-94f0-29ae22f43f5a.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -61,6 +62,7 @@ public class PreviewScreen extends Screen {
     private final HolderGetter<NormalNoise.NoiseParameters> noise;
     private final OrbitCamera camera = new OrbitCamera();
     private final RegionPan pan = new RegionPan();
+    private final ProviderTabs providerTabs = new ProviderTabs();
     /** The center chunk of the last request. */
     @Nullable
     private ChunkPos requestedCenter;
@@ -117,6 +119,11 @@ public class PreviewScreen extends Screen {
 
     public PresetTools tools() {
         return this.tools;
+    }
+
+    /** The open field tabs of the variation boxes of the panel. */
+    public ProviderTabs providerTabs() {
+        return this.providerTabs;
     }
 
     public AeroliteSettings settings() {

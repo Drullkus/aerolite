@@ -49,6 +49,7 @@ import us.drullk.aerolite.client.preview.PreviewBuilder;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.client.provider.ProviderScreen;
 import us.drullk.aerolite.client.provider.ProviderType;
+import us.drullk.aerolite.client.provider.VariationBlock;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftVariation;
@@ -74,6 +75,7 @@ import java.util.function.BooleanSupplier;
  * the dimension screen of the Overworld on the tab Pillar Variations with each pattern type picked in turn, and the preview with the panel.
  * On the tab Pillar Variations it also opens the provider screen of each block field with one provider type each.
  * The last preview state shows the panel at its narrowest width. The run keeps that width only until the next resize.
+ * The last steps open the provider tabs of the preview panel, one per provider type.
  * It saves one PNG per state from the window front buffer under {@code screenshots/} of the game directory. Then it stops the game.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
@@ -101,6 +103,10 @@ public final class SettingsProbe {
     private static final int ENTRY_HEIGHT = 14;
     /** The count of block fields of a Bridge variation. */
     private static final int BRIDGE_FIELDS = 6;
+    /** The panel width of the editor steps in ImGui units. */
+    private static final int EDITOR_PANEL = 360;
+    /** The wheel steps from the tab bar to the lower rows of a tall editor. */
+    private static final int EDITOR_SCROLL = 4;
 
     private final List<Step> steps = new ArrayList<>();
     private int ticks;
@@ -225,6 +231,7 @@ public final class SettingsProbe {
         this.grab("settings-16-preview-scales-narrow.png");
         this.scrollPanel(-PANEL_SCROLL);
         this.grab("settings-16-preview-scales-narrow-lower.png");
+        this.queueImGuiEditors();
         this.step("stop", 60, () -> {
             LOGGER.info("Settings probe: done");
             minecraft.stop();
@@ -279,6 +286,61 @@ public final class SettingsProbe {
         });
         this.grab("provider-13-dimension-after-done.png");
         this.act("cursor away", () -> moveCursor(0, 0));
+    }
+
+    /**
+     * The steps of the provider tabs of the preview panel. The first variation of the Overworld takes the sample providers with a plain maze.
+     * The tab of one field opens for each provider type, the simple state first. The last steps select the tab Blocks with every tab open,
+     * then show the dual noise tab and the tab Blocks at the narrowest panel width.
+     */
+    private void queueImGuiEditors() {
+        Minecraft minecraft = Minecraft.getInstance();
+        this.act("editors panel width", () -> ((PreviewScreen) minecraft.screen).applyPanelUnits(EDITOR_PANEL));
+        this.act("editors simple", () -> {
+            PreviewScreen screen = (PreviewScreen) minecraft.screen;
+            ShaftVariation variation = editorVariation().withWall(BlockStateProvider.simple(Blocks.STONE_BRICKS));
+            screen.setSettings(screen.settings().withVariation(Level.OVERWORLD, 0, variation));
+            screen.providerTabs().of(Level.OVERWORLD, 0).open(VariationBlock.WALL);
+        });
+        this.scrollPanel(PANEL_SCROLL * 4);
+        this.scrollPanel(-PANEL_SCROLL);
+        this.grab("editors-01-simple.png");
+        this.act("editors samples", () -> {
+            PreviewScreen screen = (PreviewScreen) minecraft.screen;
+            screen.setSettings(screen.settings().withVariation(Level.OVERWORLD, 0, editorVariation()));
+        });
+        String[] names = {"weighted", "noise-threshold", "noise", "dual-noise", "rotated", "randomized-int"};
+        List<VariationBlock> fields = List.of(VariationBlock.WALL, VariationBlock.PATH, VariationBlock.INTERIOR,
+                VariationBlock.JUNCTION, VariationBlock.SURFACE, VariationBlock.TRUSSES);
+        for (int field = 0; field < names.length; field++) {
+            VariationBlock block = fields.get(field);
+            String name = String.format(Locale.ROOT, "editors-%02d-%s", 2 + field, names[field]);
+            this.act("editors open " + names[field], () -> ((PreviewScreen) minecraft.screen).providerTabs().of(Level.OVERWORLD, 0).open(block));
+            this.grab(name + ".png");
+            if (block == VariationBlock.JUNCTION) {
+                this.scrollPanel(-EDITOR_SCROLL);
+                this.grab(name + "-lower.png");
+                this.scrollPanel(EDITOR_SCROLL);
+            }
+        }
+        this.act("editors blocks", () -> ((PreviewScreen) minecraft.screen).providerTabs().of(Level.OVERWORLD, 0).selectBlocks());
+        this.grab("editors-08-blocks-all-open.png");
+        this.act("editors narrow", () -> ((PreviewScreen) minecraft.screen).applyPanelUnits(NARROW_PANEL));
+        this.grab("editors-09-blocks-narrow.png");
+        this.act("editors narrow dual noise", () -> ((PreviewScreen) minecraft.screen).providerTabs().of(Level.OVERWORLD, 0).open(VariationBlock.JUNCTION));
+        this.grab("editors-10-dual-noise-narrow.png");
+        this.scrollPanel(-EDITOR_SCROLL);
+        this.grab("editors-10-dual-noise-narrow-lower.png");
+        this.scrollPanel(EDITOR_SCROLL);
+        this.act("editors narrow weighted", () -> ((PreviewScreen) minecraft.screen).providerTabs().of(Level.OVERWORLD, 0).open(VariationBlock.WALL));
+        this.grab("editors-11-weighted-narrow.png");
+        this.act("editors narrow noise threshold", () -> ((PreviewScreen) minecraft.screen).providerTabs().of(Level.OVERWORLD, 0).open(VariationBlock.PATH));
+        this.grab("editors-12-noise-threshold-narrow.png");
+    }
+
+    /** The sample providers of {@link #sampleVariation()} with a plain maze, so the tab bar sits high in the panel. */
+    private static ShaftVariation editorVariation() {
+        return sampleVariation().withPattern(MazeSettings.DEFAULT);
     }
 
     /** Six providers of the six provider types other than simple, with the values of {@code prototypes/ui/providers.js}. */
