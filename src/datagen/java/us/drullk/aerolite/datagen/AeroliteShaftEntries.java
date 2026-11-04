@@ -8,10 +8,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.*;
-import us.drullk.aerolite.world.pattern.BricksSettings;
-import us.drullk.aerolite.world.pattern.MazeSettings;
-import us.drullk.aerolite.world.pattern.SurfacePathSettings;
-import us.drullk.aerolite.world.pattern.TilesSettings;
+import us.drullk.aerolite.world.pattern.*;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,6 +32,7 @@ public final class AeroliteShaftEntries {
     public static final ResourceKey<ShaftVariation> ANDESITE = variation("andesite");
     public static final ResourceKey<ShaftVariation> DIORITE = variation("diorite");
     public static final ResourceKey<ShaftVariation> GRANITE = variation("granite");
+    public static final ResourceKey<ShaftVariation> PRISMARINE_SCALES = variation("prismarine_scales");
     public static final ResourceKey<ShaftVariation> NETHER_BRICKS = variation("nether_bricks");
     public static final ResourceKey<ShaftVariation> BLACKSTONE_RIBS = variation("blackstone_ribs");
     public static final ResourceKey<ShaftVariation> SOUL_CONDUIT = variation("soul_conduit");
@@ -118,6 +116,20 @@ public final class AeroliteShaftEntries {
         register(context, ANDESITE, ShaftVariation.UNIFORM_BIAS, Blocks.ANDESITE, Blocks.POLISHED_ANDESITE, Blocks.POLISHED_DIORITE);
         register(context, DIORITE, ShaftVariation.UNIFORM_BIAS, Blocks.DIORITE, Blocks.POLISHED_DIORITE, Blocks.POLISHED_GRANITE);
         register(context, GRANITE, ShaftVariation.UNIFORM_BIAS, Blocks.GRANITE, Blocks.POLISHED_GRANITE, Blocks.POLISHED_ANDESITE);
+        register(context, PRISMARINE_SCALES, new ShaftVariation(
+                ShaftVariation.UNIFORM_BIAS,
+                64,
+                0.35f,
+                0.5f,
+                new ScalesSettings(new SurfacePathSettings(true, 1f, true, false, 0.35f), true),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.PRISMARINE),
+                BlockStateProvider.simple(Blocks.PRISMARINE),
+                BlockStateProvider.simple(Blocks.PRISMARINE_BRICKS),
+                BlockStateProvider.simple(Blocks.DARK_PRISMARINE),
+                BlockStateProvider.simple(Blocks.PRISMARINE),
+                BlockStateProvider.simple(Blocks.PRISMARINE)
+        ));
     }
 
     private void netherPillars(BootstrapContext<ShaftVariation> context) {
@@ -242,8 +254,18 @@ public final class AeroliteShaftEntries {
     }
 
     private VariationList overworldList() {
-        return list(entry(STONE, 16), entry(MOSSY_MAZE, 4), entry(TUFF_BRICKS, 4), entry(DEEPSLATE, 2), entry(COPPER_BRIDGE, 1),
-                entry(MUD_TILES, 1), entry(ANDESITE, 1), entry(DIORITE, 1), entry(GRANITE, 1));
+        return list(
+                entry(STONE, 16),
+                entry(MOSSY_MAZE, 4),
+                entry(TUFF_BRICKS, 4),
+                entry(DEEPSLATE, 2),
+                entry(COPPER_BRIDGE, 1),
+                entry(MUD_TILES, 1),
+                entry(ANDESITE, 1),
+                entry(DIORITE, 1),
+                entry(GRANITE, 1),
+                entry(PRISMARINE_SCALES, 1)
+        );
     }
 
     private VariationList netherList() {

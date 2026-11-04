@@ -1,0 +1,52 @@
+{
+  "bias": 0.5,
+  "decay_scale": 64,
+  "decay_threshold": 0.35,
+  "erosion_threshold": 0.5,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:prismarine"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:prismarine"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:dark_prismarine"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:scales",
+    "allow_loops": true,
+    "cutting": false,
+    "loop_share": 1.0,
+    "path_chance": 0.35,
+    "paths_over_tails": true,
+    "surface_paths": true
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:prismarine"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:prismarine"
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:prismarine_bricks"
+    }
+  }
+}
