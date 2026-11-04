@@ -51,8 +51,11 @@ import us.drullk.aerolite.client.provider.ProviderScreen;
 import us.drullk.aerolite.client.provider.ProviderType;
 import us.drullk.aerolite.client.provider.VariationBlock;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.DimensionSettings;
 import us.drullk.aerolite.world.PillarShape;
+import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.WeightedVariation;
 import us.drullk.aerolite.world.pattern.ChaosSettings;
 import us.drullk.aerolite.world.pattern.MazeSettings;
 import us.drullk.aerolite.world.pattern.PatternType;
@@ -76,6 +79,7 @@ import java.util.function.BooleanSupplier;
  * On the tab Pillar Variations it also opens the provider screen of each block field with one provider type each.
  * The last preview state shows the panel at its narrowest width. The run keeps that width only until the next resize.
  * The last steps open the provider tabs of the preview panel, one per provider type.
+ * Then the shape scenes show an I-beam and a Bridge with columns.
  * It saves one PNG per state from the window front buffer under {@code screenshots/} of the game directory. Then it stops the game.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
@@ -232,11 +236,49 @@ public final class SettingsProbe {
         this.scrollPanel(-PANEL_SCROLL);
         this.grab("settings-16-preview-scales-narrow-lower.png");
         this.queueImGuiEditors();
+        this.queueShapes();
         this.step("stop", 60, () -> {
             LOGGER.info("Settings probe: done");
             minecraft.stop();
             return true;
         });
+    }
+
+    /**
+     * The steps of the shape scenes: one I-beam scene and one Bridge scene, each with columns, from afar, along Z and close up.
+     * Each scene waits for its full build.
+     */
+    private void queueShapes() {
+        Minecraft minecraft = Minecraft.getInstance();
+        ShaftVariation iBeam = ShaftVariation.standard(ShaftVariation.UNIFORM_BIAS, BlockStateProvider.simple(Blocks.STONE),
+                        BlockStateProvider.simple(Blocks.POLISHED_ANDESITE), BlockStateProvider.simple(Blocks.MOSSY_COBBLESTONE))
+                .withShape(PillarShape.I_BEAM).withDecayThreshold(0.8F).withErosionThreshold(0.9F);
+        ShaftVariation bridge = iBeam.withShape(PillarShape.BRIDGE).withWall(Blocks.STONE_BRICKS.defaultBlockState())
+                .withPath(Blocks.MOSSY_STONE_BRICKS.defaultBlockState()).withTrusses(Blocks.OXIDIZED_COPPER.defaultBlockState());
+        ShaftPlacement placement = new ShaftPlacement(48, 64, 0.6F);
+        for (ShaftVariation variation : List.of(iBeam, bridge)) {
+            String name = variation.shape() == PillarShape.BRIDGE ? "bridge" : "ibeam";
+            this.act("shapes " + name, () -> {
+                PreviewScreen screen = (PreviewScreen) minecraft.screen;
+                screen.setSettings(screen.settings().withDimension(Level.OVERWORLD, new DimensionSettings(placement, List.of(new WeightedVariation(1, variation)))));
+                screen.setRadius(3);
+                screen.camera().setYaw(35);
+                screen.camera().setPitch(25);
+            });
+            this.step("shapes " + name + " built", 20, () -> minecraft.screen instanceof PreviewScreen screen && screen.progress().phase() == PreviewBuilder.Phase.DONE);
+            this.grab("shapes-" + name + ".png");
+            // The region border cuts the Z pillars and shows their sections.
+            this.act("shapes " + name + " end", () -> {
+                PreviewScreen screen = (PreviewScreen) minecraft.screen;
+                screen.camera().setYaw(0);
+                screen.camera().setPitch(10);
+                screen.mouseScrolled(300, 400, 0, 4);
+            });
+            this.grab("shapes-" + name + "-end.png");
+            this.act("shapes " + name + " zoom", () -> minecraft.screen.mouseScrolled(300, 400, 0, 4));
+            this.grab("shapes-" + name + "-close.png");
+            this.act("shapes " + name + " zoom out", () -> minecraft.screen.mouseScrolled(300, 400, 0, -8));
+        }
     }
 
     /**

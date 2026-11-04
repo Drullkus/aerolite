@@ -12,6 +12,7 @@ import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
+import us.drullk.aerolite.world.shaft.shape.WebPlane;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
 import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
 
@@ -73,9 +74,10 @@ public final class ShaftLayout {
      * @param topEnd     the Y above the highest block of the column
      * @param bottomShear the height of the shear band above the bottom end
      * @param topShear   the height of the shear band below the top end
+     * @param webPlane   the plane of the web of an I-beam column, and of the trusses of a Bridge column
      */
     public record Column(Shaft xShaft, Shaft zShaft, int xShaftSign, int zShaftSign, List<ColumnJunction> junctions,
-                         int bottomEnd, int topEnd, int bottomShear, int topShear) {
+                         int bottomEnd, int topEnd, int bottomShear, int topShear, WebPlane webPlane) {
 
         public boolean spans(int y) {
             return y >= this.bottomEnd && y < this.topEnd;
@@ -267,7 +269,10 @@ public final class ShaftLayout {
         int topEnd = this.between(random, Math.min(this.maxY, highestBox + 1 + SHEAR_MARGIN + MIN_SHEAR), this.maxY);
         int bottomShear = Math.min(this.between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, lowestBox - SHEAR_MARGIN - bottomEnd));
         int topShear = Math.min(this.between(random, MIN_SHEAR, MAX_SHEAR), Math.max(0, topEnd - (highestBox + 1) - SHEAR_MARGIN));
-        return Optional.of(new Column(xShaft.get(), zShaft.get(), xShaftSign, zShaftSign, List.copyOf(junctions), bottomEnd, topEnd, bottomShear, topShear));
+        // The web plane draws last, so every earlier draw keeps its value.
+        WebPlane webPlane = random.nextBoolean() ? WebPlane.X : WebPlane.Z;
+        return Optional.of(new Column(xShaft.get(), zShaft.get(), xShaftSign, zShaftSign, List.copyOf(junctions), bottomEnd, topEnd, bottomShear, topShear,
+                webPlane));
     }
 
     private int between(RandomSource random, int min, int max) {
@@ -306,9 +311,9 @@ public final class ShaftLayout {
         return this.mazes.ring(this.variation(shaft).shape());
     }
 
-    /** The ring description of the shape of one column. */
+    /** The ring description of the shape of one column, in its web plane. */
     public RingShape ring(Column column) {
-        return this.mazes.ring(this.variation(column).shape());
+        return this.mazes.ring(this.variation(column).shape(), column.webPlane());
     }
 
     /** The surface pattern of one horizontal shaft, from the pattern and the shape of its variation. */
@@ -323,6 +328,7 @@ public final class ShaftLayout {
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();
         return this.mazes.pattern(
                 this.variation(column),
+                this.ring(column),
                 lookup,
                 this.columnMazeRandom.fork(column.zShaft().cell(), column.xShaft().cell(), 0),
                 Math.floorDiv(this.minY, ShaftMaze.CHUNK),

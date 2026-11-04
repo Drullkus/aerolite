@@ -19,6 +19,7 @@ import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
 import us.drullk.aerolite.world.shaft.surface.SectionBlock;
+import us.drullk.aerolite.world.shaft.surface.SectionOffset;
 import us.drullk.aerolite.world.shaft.surface.SegmentSurface;
 import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
 
@@ -36,6 +37,8 @@ import java.util.List;
  * Decay and erosion read the thresholds and the decay noise of the variation of each block.
  * The maze grid of the chunk holds the grid blocks up to two blocks outside the chunk. Their maze path blocks and decay writes can lie in the chunk.
  * Each provider samples with a random seeded by the world seed and the block position.
+ * A Bridge paints its trusses with the trusses block after the surface patterns. A truss anchor replaces the plate block.
+ * A horizontal Bridge passes through each junction box in an 11x11 hole. The Bridge blocks stay in the hole, and the box wins elsewhere.
  * Every step writes to a buffer of the finished shaft blocks. The chunk gets only the solid blocks of the buffer.
  * So a block of the chunk stays where the finished shaft is air.
  *
@@ -55,6 +58,8 @@ final class ChunkPaint {
     private static final int GRID_MARGIN = 2;
     /** The blocks of one 16x16x16 buffer section. */
     private static final int SECTION_BLOCKS = 16 * 16 * 16;
+    /** The largest offset from the box center of the hole of a horizontal Bridge, across its axis and along Y. */
+    private static final int HOLE = Ring.OUTER - 1;
 
     /** A patch block: its outward face direction and the variation of its junction box. */
     private record PatchBlock(Direction normal, ShaftVariation variation) {
@@ -126,6 +131,12 @@ final class ChunkPaint {
         }
         for (ShaftLayout.Column column : columns) {
             this.carveColumn(column);
+        }
+        for (ShaftLayout.Shaft shaft : shafts) {
+            this.trussShaft(shaft);
+        }
+        for (ShaftLayout.Column column : columns) {
+            this.trussColumn(column);
         }
 
         this.decay();
@@ -213,8 +224,11 @@ final class ChunkPaint {
         ShaftFrame frame = this.frames.of(column);
         ShaftVariation variation = this.layout.variation(column);
         RingShape ring = this.layout.ring(column);
+        // The box fill covers the column inside each box.
         for (int y = column.bottomEnd(); y < column.topEnd(); y++) {
-            this.fillSection(frame, ring, y, !this.inBox(column, y), variation);
+            if (!this.inBox(column, y)) {
+                this.fillSection(frame, ring, y, true, variation);
+            }
         }
     }
 
@@ -252,10 +266,13 @@ final class ChunkPaint {
     private void fillBoxes(ShaftLayout.Column column) {
         for (ColumnJunction junction : column.junctions()) {
             ShaftVariation variation = this.boxVariation(column, junction);
+            boolean hole = this.hasHole(column, junction);
             for (int dx = -Ring.BOX; dx <= Ring.BOX; dx++) {
                 for (int dy = -Ring.BOX; dy <= Ring.BOX; dy++) {
                     for (int dz = -Ring.BOX; dz <= Ring.BOX; dz++) {
-                        this.set(this.cursor.set(column.x() + dx, junction.center() + dy, column.z() + dz), variation.interior());
+                        if (!hole || !inHole(junction, dx, dy, dz)) {
+                            this.set(this.cursor.set(column.x() + dx, junction.center() + dy, column.z() + dz), variation.interior());
+                        }
                     }
                 }
             }
@@ -263,6 +280,29 @@ final class ChunkPaint {
             this.fillPatchFace(columnFace, variation);
             this.fillPatchFace(columnFace.opposite(), variation);
         }
+    }
+
+    /** True when the horizontal shaft of the junction passes through its box in a hole. */
+    private boolean hasHole(ShaftLayout.Column column, ColumnJunction junction) {
+        return this.layout.ring(junction.alongX() ? column.xShaft() : column.zShaft()).holeThroughBox();
+    }
+
+    /** True when the box offset lies in the hole along the horizontal shaft of the junction. */
+    private static boolean inHole(ColumnJunction junction, int dx, int dy, int dz) {
+        return Math.abs(dy) <= HOLE && Math.abs(junction.alongX() ? dz : dx) <= HOLE;
+    }
+
+    /**
+     * True when a junction box block covers the shaft offsets at the axis position.
+     * A shaft with a hole keeps the offsets of the hole.
+     */
+    private static boolean boxCovers(List<ShaftMaze.Box> boxes, RingShape ring, int along, int first, int second) {
+        for (ShaftMaze.Box box : boxes) {
+            if (box.covers(along)) {
+                return !ring.holeThroughBox() || Math.abs(first) > HOLE || Math.abs(second) > HOLE;
+            }
+        }
+        return false;
     }
 
     /** Paints one patch face and adds all of it to the maze grid. The bezel joins the grid as maze wall. */
@@ -285,12 +325,56 @@ final class ChunkPaint {
         SurfacePattern pattern = this.layout.shaftMaze(shaft);
         ShaftVariation variation = this.layout.variation(shaft);
         SurfaceCarver.Sink sink = this.sink(variation, variation);
+        if (pattern.ring().holeThroughBox()) {
+            sink = this.outsideBoxes(shaft, pattern.ring(), sink);
+        }
         int chunkAlong = Math.floorDiv(this.alongMin(shaft.axis()), ShaftMaze.CHUNK);
         SegmentSurface segment = pattern.segmentAt(chunkAlong);
         this.carver.shaftSegment(frame, pattern.ring(), segment, sink);
         if (segment.firstChunk() == chunkAlong) {
             this.carver.shaftSegment(frame, pattern.ring(), pattern.segmentAt(chunkAlong - 1), sink);
         }
+    }
+
+    /**
+     * A sink that drops the ring blocks that a junction box covers. A ring that the box does not cut runs through the box rows.
+     * Patch blocks pass.
+     */
+    private SurfaceCarver.Sink outsideBoxes(ShaftLayout.Shaft shaft, RingShape ring, SurfaceCarver.Sink sink) {
+        int alongMin = this.alongMin(shaft.axis());
+        List<ShaftMaze.Box> boxes = this.layout.boxesNear(shaft, alongMin - GRID_MARGIN, alongMin + 15 + GRID_MARGIN);
+        if (boxes.isEmpty()) {
+            return sink;
+        }
+        return new SurfaceCarver.Sink() {
+            private boolean covered(BlockPos pos) {
+                boolean alongX = shaft.axis() == ShaftLayout.Axis.X;
+                int along = alongX ? pos.getX() : pos.getZ();
+                int second = (alongX ? pos.getZ() : pos.getX()) - shaft.position();
+                return boxCovers(boxes, ring, along, pos.getY() - shaft.centerY(), second);
+            }
+
+            @Override
+            public void groove(SurfaceCarver.Carve carve) {
+                if (carve.normal() != null || !this.covered(carve.surface())) {
+                    sink.groove(carve);
+                }
+            }
+
+            @Override
+            public void surface(BlockPos pos, @Nullable Direction normal) {
+                if (normal != null || !this.covered(pos)) {
+                    sink.surface(pos, normal);
+                }
+            }
+
+            @Override
+            public void flush(BlockPos pos) {
+                if (!this.covered(pos)) {
+                    sink.flush(pos);
+                }
+            }
+        };
     }
 
     /** Paints every segment surface of the column, since the column spans the build height of the chunk. */
@@ -310,6 +394,13 @@ final class ChunkPaint {
             public void surface(BlockPos pos, @Nullable Direction normal) {
                 if (column.spans(pos.getY())) {
                     ChunkPaint.this.set(pos, ChunkPaint.this.variationAt(column, pos.getY(), normal, variation).surface());
+                }
+            }
+
+            @Override
+            public void flush(BlockPos pos) {
+                if (column.spans(pos.getY())) {
+                    ChunkPaint.this.set(pos, variation.path());
                 }
             }
         };
@@ -339,7 +430,50 @@ final class ChunkPaint {
             public void surface(BlockPos pos, @Nullable Direction normal) {
                 ChunkPaint.this.set(pos, (normal == null ? ring : patch).surface());
             }
+
+            @Override
+            public void flush(BlockPos pos) {
+                ChunkPaint.this.set(pos, ring.path());
+            }
         };
+    }
+
+    /** Paints the trusses of a horizontal shaft. The box wins over a truss outside the hole. */
+    private void trussShaft(ShaftLayout.Shaft shaft) {
+        RingShape ring = this.layout.ring(shaft);
+        int alongMin = this.alongMin(shaft.axis());
+        ShaftFrame frame = this.frames.of(shaft);
+        ShaftVariation variation = this.layout.variation(shaft);
+        List<ShaftMaze.Box> boxes = this.layout.boxesNear(shaft, alongMin, alongMin + 15);
+        for (int along = alongMin; along < alongMin + 16; along++) {
+            for (SectionOffset offset : ring.trusses(along)) {
+                if (!boxCovers(boxes, ring, along, offset.first(), offset.second())) {
+                    this.truss(frame.at(along, offset.first(), offset.second()), variation);
+                }
+            }
+        }
+    }
+
+    /** Paints the trusses of a column outside its boxes. */
+    private void trussColumn(ShaftLayout.Column column) {
+        RingShape ring = this.layout.ring(column);
+        ShaftFrame frame = this.frames.of(column);
+        ShaftVariation variation = this.layout.variation(column);
+        for (int y = column.bottomEnd(); y < column.topEnd(); y++) {
+            if (!this.inBox(column, y)) {
+                for (SectionOffset offset : ring.trusses(y)) {
+                    this.truss(frame.at(y, offset.first(), offset.second()), variation);
+                }
+            }
+        }
+    }
+
+    /** Writes one truss block. An anchor on the outer layer leaves the maze grid, so decay keeps it. */
+    private void truss(BlockPos pos, ShaftVariation variation) {
+        this.set(pos, variation.trusses());
+        long key = pos.asLong();
+        this.shaftGrid.remove(key);
+        this.carves.remove(key);
     }
 
     /** Writes the blocks of one maze path that lie in the chunk. Its maze grid block can lie in the next chunk. */
@@ -432,20 +566,38 @@ final class ChunkPaint {
         FractalNoise noise = this.layout.decayNoise(variation);
         for (SectionBlock block : ring.section()) {
             BlockPos pos = frame.at(along, block.first(), block.second());
-            if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > this.resistance.section(block.first(), block.second())) {
+            if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > this.resistance.section(ring, along, block.first(), block.second())) {
+                this.set(pos, AIR);
+            }
+        }
+        for (SectionOffset truss : ring.trusses(along)) {
+            BlockPos pos = frame.at(along, truss.first(), truss.second());
+            if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > ErosionResistance.TRUSS) {
                 this.set(pos, AIR);
             }
         }
     }
 
+    /**
+     * Erodes the box of a junction. In the hole of a horizontal Bridge, each block takes the resistance of the Bridge.
+     */
     private void erodeBox(ShaftLayout.Column column, ColumnJunction junction) {
         ShaftVariation variation = this.boxVariation(column, junction);
         FractalNoise noise = this.layout.decayNoise(variation);
+        RingShape columnRing = this.layout.ring(column);
+        RingShape horizontal = this.layout.ring(junction.alongX() ? column.xShaft() : column.zShaft());
+        boolean hole = horizontal.holeThroughBox();
         for (int dx = -Ring.BOX; dx <= Ring.BOX; dx++) {
             for (int dy = -Ring.BOX; dy <= Ring.BOX; dy++) {
                 for (int dz = -Ring.BOX; dz <= Ring.BOX; dz++) {
                     BlockPos pos = new BlockPos(column.x() + dx, junction.center() + dy, column.z() + dz);
-                    if (this.inChunk(pos) && this.erosionReach(pos, noise, variation.erosionThreshold()) > this.resistance.box(junction, dx, dy, dz)) {
+                    if (!this.inChunk(pos)) {
+                        continue;
+                    }
+                    double resistance = hole && inHole(junction, dx, dy, dz)
+                            ? this.resistance.section(horizontal, junction.alongX() ? pos.getX() : pos.getZ(), dy, junction.alongX() ? dz : dx)
+                            : this.resistance.box(junction, dx, dy, dz, columnRing, horizontal);
+                    if (this.erosionReach(pos, noise, variation.erosionThreshold()) > resistance) {
                         this.set(pos, AIR);
                     }
                 }
@@ -473,6 +625,12 @@ final class ChunkPaint {
         double threshold = 1 - 2.0 * depth / band;
         for (SectionBlock block : ring.section()) {
             BlockPos pos = frame.at(y, block.first(), block.second());
+            if (this.inChunk(pos) && noise.sample(pos.getX(), pos.getY(), pos.getZ()) < threshold) {
+                this.set(pos, AIR);
+            }
+        }
+        for (SectionOffset truss : ring.trusses(y)) {
+            BlockPos pos = frame.at(y, truss.first(), truss.second());
             if (this.inChunk(pos) && noise.sample(pos.getX(), pos.getY(), pos.getZ()) < threshold) {
                 this.set(pos, AIR);
             }

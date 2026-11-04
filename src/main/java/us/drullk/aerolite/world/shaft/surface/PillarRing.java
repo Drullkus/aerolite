@@ -25,6 +25,8 @@ public final class PillarRing implements RingShape {
     private final RingKind[] kinds = new RingKind[LENGTH];
     private final List<List<SectionOffset>> floors = new ArrayList<>(LENGTH);
     private final List<SectionBlock> section;
+    /** The patch columns by normal ordinal and face sign, the sign 1 first. */
+    private final List<List<PatchColumn>> patchColumns = new ArrayList<>(4);
 
     private PillarRing() {
         for (int index = 0; index < LENGTH; index++) {
@@ -45,6 +47,11 @@ public final class PillarRing implements RingShape {
             }
         }
         this.section = List.copyOf(blocks);
+        for (SectionAxis normal : SectionAxis.values()) {
+            for (int sign : new int[]{1, -1}) {
+                this.patchColumns.add(RingShape.super.patchColumns(normal, sign));
+            }
+        }
     }
 
     private void set(int index, int first, int second) {
@@ -110,6 +117,11 @@ public final class PillarRing implements RingShape {
             candidates.add(new CrossingCandidate(index / 2, k, false));
         }
         return candidates;
+    }
+
+    @Override
+    public List<PatchColumn> patchColumns(SectionAxis normal, int sign) {
+        return this.patchColumns.get(2 * normal.ordinal() + (sign > 0 ? 0 : 1));
     }
 
     @Override

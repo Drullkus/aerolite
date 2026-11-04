@@ -9,6 +9,7 @@ import us.drullk.aerolite.world.shaft.binding.PatternBindings;
 import us.drullk.aerolite.world.shaft.binding.PatternContext;
 import us.drullk.aerolite.world.shaft.binding.maze.MazePatternBinding;
 import us.drullk.aerolite.world.shaft.shape.ShapeRings;
+import us.drullk.aerolite.world.shaft.shape.WebPlane;
 import us.drullk.aerolite.world.shaft.surface.PillarRing;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
 import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
@@ -59,9 +60,14 @@ public final class ShaftMazes {
         return new ShaftMaze(PillarRing.INSTANCE, this.mazeEdges, boxes, random, minChunk, maxChunk, bias);
     }
 
-    /** The ring description of a shape. */
+    /** The ring description of a horizontal pillar of the shape. */
     public RingShape ring(PillarShape shape) {
         return this.shapes.ring(shape);
+    }
+
+    /** The ring description of a column of the shape with its web plane. */
+    public RingShape ring(PillarShape shape, WebPlane plane) {
+        return this.shapes.ring(shape, plane);
     }
 
     /**
@@ -69,8 +75,12 @@ public final class ShaftMazes {
      * The shape of the variation gives the ring description. The bias of the variation clamps to the slider range.
      */
     public SurfacePattern pattern(ShaftVariation variation, ShaftMaze.BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk) {
-        PatternContext context = new PatternContext(variation.pattern(), this.ring(variation.shape()), boxes, random,
-                ShaftVariation.clampBias(variation.bias()), minChunk, maxChunk);
+        return this.pattern(variation, this.ring(variation.shape()), boxes, random, minChunk, maxChunk);
+    }
+
+    /** The surface pattern of a variation on a given ring description, such as the ring of a column with its web plane. */
+    public SurfacePattern pattern(ShaftVariation variation, RingShape ring, ShaftMaze.BoxLookup boxes, PositionalRandomFactory random, int minChunk, int maxChunk) {
+        PatternContext context = new PatternContext(variation.pattern(), ring, boxes, random, ShaftVariation.clampBias(variation.bias()), minChunk, maxChunk);
         return this.bindings.create(context);
     }
 

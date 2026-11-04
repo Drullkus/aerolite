@@ -24,6 +24,8 @@ import java.util.function.Function;
  * Turns the cells of a segment surface into world blocks.
  * A groove cell is a maze path: air at the outer block and the maze path block at each floor block.
  * A surface cell is the surface path block at the outer block. A wall cell and a box cell write nothing.
+ * A groove cell on a flush ring index, such as the inner face of a Bridge plate, is the maze path block at the outer block.
+ * A concave corner of the I-beam has two floor blocks, so its groove floor is an L.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_07-05_5f965fb4-ad37-4b6a-8b5d-da8c3a179dc6.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
@@ -50,6 +52,9 @@ public final class SurfaceCarver {
 
         /** A surface path block at the outer block. */
         void surface(BlockPos pos, @Nullable Direction normal);
+
+        /** A flush maze path block at the outer block of a ring. */
+        void flush(BlockPos pos);
     }
 
     /** A patch face: the frame of its horizontal shaft, the face sign and the junction center along that shaft. */
@@ -112,6 +117,10 @@ public final class SurfaceCarver {
         BlockPos surface = frame.at(along, ring.first(r, index), ring.second(r, index));
         if (kind == BandKind.SURFACE) {
             sink.surface(surface, null);
+            return;
+        }
+        if (ring.flush(r, index)) {
+            sink.flush(surface);
             return;
         }
         List<SectionOffset> offsets = ring.floors(r, index);

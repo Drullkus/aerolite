@@ -1,9 +1,11 @@
 package us.drullk.aerolite.world.shaft.surface;
 
 import net.minecraft.util.RandomSource;
+import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 import us.drullk.aerolite.world.shaft.surface.path.Band;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -66,6 +68,47 @@ public interface RingShape {
     /** True when the junction segment drops the rulings that the box covers. */
     default boolean boxCutsRings(ShaftMaze.Box box) {
         return true;
+    }
+
+    /**
+     * The ring block that faces a junction patch, per cross offset from {@code -PATCH_EDGE} to {@code PATCH_EDGE}.
+     * The patch is on the face of the box where the offset {@code normal} has the sign {@code sign}.
+     * Entry {@code k} holds the cross offset {@code k - PATCH_EDGE}. The default is the outer face of the 13x13 square.
+     */
+    default List<PatchColumn> patchColumns(SectionAxis normal, int sign) {
+        List<PatchColumn> columns = new ArrayList<>(2 * Ring.PATCH_EDGE + 1);
+        for (int cross = -Ring.PATCH_EDGE; cross <= Ring.PATCH_EDGE; cross++) {
+            int index = normal == SectionAxis.SECOND ? this.index(0, cross, Ring.OUTER * sign) : this.index(0, Ring.OUTER * sign, cross);
+            columns.add(index < 0 ? PatchColumn.NONE : new PatchColumn(0, index));
+        }
+        return List.copyOf(columns);
+    }
+
+    /** True when a groove at the ring index paints a flush maze path block instead of a carve. */
+    default boolean flush(int ring, int index) {
+        return false;
+    }
+
+    /** The truss blocks of the cross section at an axis position. Each one replaces the block of the section there. */
+    default List<SectionOffset> trusses(int along) {
+        return List.of();
+    }
+
+    /** True when the offsets hold a truss block at the axis position. */
+    default boolean isTruss(int along, int first, int second) {
+        List<SectionOffset> trusses = this.trusses(along);
+        return !trusses.isEmpty() && trusses.contains(new SectionOffset(first, second));
+    }
+
+    /** The erosion resistance of a solid block of the section, from 0 at a surface to 1 at a core. The default is the Pillar. */
+    default double resistance(int first, int second) {
+        int offset = Math.max(Math.abs(first), Math.abs(second));
+        return offset > Ring.OUTER ? 0 : Math.min(1, (double) (Ring.OUTER - offset) / (Ring.OUTER - 1));
+    }
+
+    /** True when a horizontal pillar of the shape passes through its junction boxes in an 11x11 hole. */
+    default boolean holeThroughBox() {
+        return false;
     }
 
     /** The ring indices where an axis step never links. */

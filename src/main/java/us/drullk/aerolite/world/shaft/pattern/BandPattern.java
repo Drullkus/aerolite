@@ -10,8 +10,8 @@ import us.drullk.aerolite.world.pattern.SurfacePathSettings;
 import us.drullk.aerolite.world.shaft.binding.PatternContext;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
+import us.drullk.aerolite.world.shaft.surface.PatchColumn;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
-import us.drullk.aerolite.world.shaft.surface.SectionAxis;
 import us.drullk.aerolite.world.shaft.surface.SegmentSurface;
 import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
 import us.drullk.aerolite.world.shaft.surface.path.Band;
@@ -206,11 +206,14 @@ public abstract class BandPattern implements SurfacePattern {
 
     /** The offset across the patch face of a ring position on the patch area, else {@link #NO_CROSS}. */
     private int patchCross(int ring, int index, ShaftMaze.Box box) {
-        RingShape shape = this.context.ring();
-        boolean second = ShaftMaze.normal(box) == SectionAxis.SECOND;
-        int normal = second ? shape.second(ring, index) : shape.first(ring, index);
-        int cross = second ? shape.first(ring, index) : shape.second(ring, index);
-        return normal == box.sign() * Ring.OUTER && Math.abs(cross) <= Ring.PATCH_EDGE ? cross : NO_CROSS;
+        List<PatchColumn> columns = this.context.ring().patchColumns(ShaftMaze.normal(box), box.sign());
+        for (int k = 0; k < columns.size(); k++) {
+            PatchColumn column = columns.get(k);
+            if (column.ring() == ring && column.index() == Math.floorMod(index, this.context.ring().length(ring))) {
+                return k - Ring.PATCH_EDGE;
+            }
+        }
+        return NO_CROSS;
     }
 
     /** The band of the ring over the chunks {@code [firstChunk, lastChunk]} after the surface paths and the rationing. */

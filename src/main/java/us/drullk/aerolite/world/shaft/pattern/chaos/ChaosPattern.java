@@ -4,9 +4,9 @@ import us.drullk.aerolite.world.pattern.ChaosSettings;
 import us.drullk.aerolite.world.shaft.binding.PatternContext;
 import us.drullk.aerolite.world.shaft.maze.Ring;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
+import us.drullk.aerolite.world.shaft.surface.PatchColumn;
 import us.drullk.aerolite.world.shaft.surface.PatchSurface;
 import us.drullk.aerolite.world.shaft.surface.RingShape;
-import us.drullk.aerolite.world.shaft.surface.SectionAxis;
 import us.drullk.aerolite.world.shaft.surface.SegmentSurface;
 import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
 import us.drullk.aerolite.world.shaft.surface.path.Band;
@@ -134,16 +134,14 @@ public final class ChaosPattern implements SurfacePattern {
 
     /** The ring indices of the first ring under the patch area of a box, by the offset across the pillar, or none when the ring does not hold them. */
     private int[] patchIndices(ShaftMaze.Box box) {
-        RingShape ring = this.ring();
+        List<PatchColumn> columns = this.ring().patchColumns(ShaftMaze.normal(box), box.sign());
         int[] out = new int[2 * PATCH + 1];
         for (int across = -PATCH; across <= PATCH; across++) {
-            int index = ShaftMaze.normal(box) == SectionAxis.SECOND
-                    ? ring.index(0, across, Ring.OUTER * box.sign())
-                    : ring.index(0, Ring.OUTER * box.sign(), across);
-            if (index < 0) {
+            PatchColumn column = columns.get(across + PATCH);
+            if (column.ring() != 0) {
                 return new int[0];
             }
-            out[across + PATCH] = index;
+            out[across + PATCH] = column.index();
         }
         return out;
     }

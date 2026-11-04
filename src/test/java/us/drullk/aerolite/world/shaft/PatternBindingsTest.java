@@ -9,6 +9,9 @@ import us.drullk.aerolite.world.shaft.maze.MazeEdges;
 import us.drullk.aerolite.world.shaft.maze.MazePattern;
 import us.drullk.aerolite.world.shaft.maze.ShaftMaze;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
+import us.drullk.aerolite.world.shaft.shape.BridgeRing;
+import us.drullk.aerolite.world.shaft.shape.IBeamRing;
+import us.drullk.aerolite.world.shaft.shape.WebPlane;
 import us.drullk.aerolite.world.shaft.surface.PillarRing;
 import us.drullk.aerolite.world.shaft.surface.SegmentSurface;
 import us.drullk.aerolite.world.shaft.surface.SurfacePattern;
@@ -71,10 +74,12 @@ class PatternBindingsTest {
     }
 
     @Test
-    void shapesWithoutRingFallBackToThePillar() {
-        for (PillarShape shape : PillarShape.values()) {
-            assertSame(PillarRing.INSTANCE, this.mazes.ring(shape));
-        }
+    void eachShapeHasItsRing() {
+        assertSame(PillarRing.INSTANCE, this.mazes.ring(PillarShape.PILLAR));
+        assertSame(IBeamRing.STACK_FIRST, this.mazes.ring(PillarShape.I_BEAM));
+        assertSame(BridgeRing.STACK_FIRST, this.mazes.ring(PillarShape.BRIDGE));
+        assertSame(IBeamRing.STACK_SECOND, this.mazes.ring(PillarShape.I_BEAM, WebPlane.Z));
+        assertSame(BridgeRing.STACK_SECOND, this.mazes.ring(PillarShape.BRIDGE, WebPlane.Z));
     }
 
     /** The box rows are box cells. Every ruling node is a groove cell. */
