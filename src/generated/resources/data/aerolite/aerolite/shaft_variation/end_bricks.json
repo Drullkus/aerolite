@@ -1,0 +1,52 @@
+{
+  "bias": 0.05,
+  "decay_scale": 128,
+  "decay_threshold": 0.35,
+  "erosion_threshold": 0.5,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:bricks",
+    "allow_loops": false,
+    "cutting": true,
+    "loop_share": 0.0,
+    "path_chance": 0.75,
+    "size": "large",
+    "surface_paths": true
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone"
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:end_stone_bricks"
+    }
+  }
+}

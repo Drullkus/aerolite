@@ -1,50 +1,54 @@
 {
-  "bias": 0.95,
-  "decay_scale": 64,
-  "decay_threshold": 0.35,
-  "erosion_threshold": 0.5,
+  "bias": 0.05,
+  "decay_scale": 256,
+  "decay_threshold": 0.7,
+  "erosion_threshold": 0.85,
   "interior": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:end_stone"
+      "Name": "minecraft:obsidian"
     }
   },
   "junction": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:end_stone"
+      "Name": "minecraft:obsidian"
     }
   },
   "path": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:purpur_block"
+      "Name": "minecraft:crying_obsidian"
     }
   },
   "pattern": {
-    "type": "aerolite:mazes",
-    "maze": "uniform",
-    "seam": "random",
-    "spacing": 1,
-    "strength": 0.0
+    "type": "aerolite:tiles",
+    "allow_loops": true,
+    "cutting": false,
+    "encased": true,
+    "loop_share": 1.0,
+    "path_chance": 0.25,
+    "size": "small",
+    "stagger": "none",
+    "surface_paths": true
   },
   "shape": "pillar",
   "surface": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:purpur_block"
+      "Name": "minecraft:purple_stained_glass"
     }
   },
   "trusses": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:end_stone"
+      "Name": "minecraft:obsidian"
     }
   },
   "wall": {
     "type": "minecraft:simple_state_provider",
     "state": {
-      "Name": "minecraft:end_stone_bricks"
+      "Name": "minecraft:purpur_block"
     }
   }
 }

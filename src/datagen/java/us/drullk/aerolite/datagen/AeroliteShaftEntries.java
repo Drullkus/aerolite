@@ -7,10 +7,11 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import tamaized.beanification.Component;
-import us.drullk.aerolite.world.ShaftPlacement;
-import us.drullk.aerolite.world.ShaftRegistries;
-import us.drullk.aerolite.world.ShaftVariation;
-import us.drullk.aerolite.world.VariationList;
+import us.drullk.aerolite.world.*;
+import us.drullk.aerolite.world.pattern.BricksSettings;
+import us.drullk.aerolite.world.pattern.MazeSettings;
+import us.drullk.aerolite.world.pattern.SurfacePathSettings;
+import us.drullk.aerolite.world.pattern.TilesSettings;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,8 +39,9 @@ public final class AeroliteShaftEntries {
     public static final ResourceKey<ShaftVariation> BLACKSTONE = variation("blackstone");
     public static final ResourceKey<ShaftVariation> SOUL = variation("soul");
     public static final ResourceKey<ShaftVariation> QUARTZ = variation("quartz");
-    public static final ResourceKey<ShaftVariation> END = variation("end");
-    public static final ResourceKey<ShaftVariation> PURPUR = variation("purpur");
+    public static final ResourceKey<ShaftVariation> END_BRICKS = variation("end_bricks");
+    public static final ResourceKey<ShaftVariation> END_MAZE = variation("end_maze");
+    public static final ResourceKey<ShaftVariation> PURPUR_PILLAR = variation("purpur_pillar");
 
     public AeroliteShaftEntries() {
     }
@@ -62,12 +64,61 @@ public final class AeroliteShaftEntries {
         register(context, BLACKSTONE, ShaftVariation.UNIFORM_BIAS, Blocks.BLACKSTONE, Blocks.POLISHED_BLACKSTONE_BRICKS, Blocks.POLISHED_BLACKSTONE);
         register(context, SOUL, 0.6F, Blocks.SOUL_SOIL, Blocks.SOUL_SAND, Blocks.WARPED_WART_BLOCK);
         register(context, QUARTZ, 0.8F, Blocks.SMOOTH_QUARTZ, Blocks.QUARTZ_BRICKS, Blocks.QUARTZ_BLOCK);
-        register(context, END, ShaftVariation.MAX_BIAS, Blocks.END_STONE, Blocks.END_STONE_BRICKS, Blocks.PURPUR_BLOCK);
-        register(context, PURPUR, ShaftVariation.MIN_BIAS, Blocks.OBSIDIAN, Blocks.PURPUR_BLOCK, Blocks.CRYING_OBSIDIAN);
+
+        this.endPillars(context);
+    }
+
+    private void endPillars(BootstrapContext<ShaftVariation> context) {
+        register(context, END_BRICKS, new ShaftVariation(
+                ShaftVariation.MIN_BIAS,
+                128,
+                0.35f,
+                0.5f,
+                new BricksSettings(BricksSettings.Size.LARGE, new SurfacePathSettings(false, 0f, true, true, 0.75f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE_BRICKS),
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE)
+        ));
+        register(context, END_MAZE, new ShaftVariation(
+                ShaftVariation.MAX_BIAS,
+                128,
+                0.35f,
+                0.5f,
+                new MazeSettings(MazeSettings.Type.GILBERT, 0.95f, MazeSettings.Seam.RANDOM, MazeSettings.MIN_SPACING),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE_BRICKS),
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE),
+                BlockStateProvider.simple(Blocks.END_STONE)
+        ));
+        register(context, PURPUR_PILLAR, new ShaftVariation(
+                ShaftVariation.MIN_BIAS,
+                256,
+                0.7f,
+                0.85f,
+                new TilesSettings(TilesSettings.Size.SMALL, TilesSettings.Stagger.NONE, true, new SurfacePathSettings(true, 1f, true, false, 0.25f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(Blocks.OBSIDIAN),
+                BlockStateProvider.simple(Blocks.OBSIDIAN),
+                BlockStateProvider.simple(Blocks.PURPUR_BLOCK),
+                BlockStateProvider.simple(Blocks.CRYING_OBSIDIAN),
+                BlockStateProvider.simple(Blocks.PURPLE_STAINED_GLASS),
+                BlockStateProvider.simple(Blocks.OBSIDIAN)
+        ));
     }
 
     private static void register(BootstrapContext<ShaftVariation> context, ResourceKey<ShaftVariation> key, float bias, Block interior, Block wall, Block path) {
-        context.register(key, ShaftVariation.standard(bias, BlockStateProvider.simple(interior), BlockStateProvider.simple(wall), BlockStateProvider.simple(path)));
+        register(context, key, ShaftVariation.standard(bias, BlockStateProvider.simple(interior), BlockStateProvider.simple(wall), BlockStateProvider.simple(path)));
+    }
+
+    private static void register(BootstrapContext<ShaftVariation> context, ResourceKey<ShaftVariation> key, ShaftVariation standard) {
+        context.register(key, standard);
     }
 
     /** The default variation list of each vanilla dimension. The sequence is the pick sequence. */
@@ -89,7 +140,7 @@ public final class AeroliteShaftEntries {
     }
 
     private VariationList endList() {
-        return list(entry(END, 9), entry(PURPUR, 1));
+        return list(entry(END_BRICKS, 16), entry(END_MAZE, 3), entry(PURPUR_PILLAR, 1));
     }
 
     private static VariationList.Entry entry(ResourceKey<ShaftVariation> variation, int weight) {
@@ -103,9 +154,12 @@ public final class AeroliteShaftEntries {
     /** The default placement, and one placement under the id of each vanilla dimension. */
     public void placements(BootstrapContext<ShaftPlacement> context) {
         context.register(ShaftRegistries.DEFAULT_PLACEMENT, ShaftPlacement.DEFAULT);
-        for (ResourceKey<Level> dimension : List.of(Level.OVERWORLD, Level.NETHER, Level.END)) {
-            context.register(ShaftRegistries.placementOf(dimension), ShaftPlacement.DEFAULT);
-        }
+
+        final int chunk = 16;
+
+        context.register(ShaftRegistries.placementOf(Level.OVERWORLD), ShaftPlacement.DEFAULT);
+        context.register(ShaftRegistries.placementOf(Level.NETHER), ShaftPlacement.DEFAULT);
+        context.register(ShaftRegistries.placementOf(Level.END), new ShaftPlacement(4 * chunk, 16 * chunk, 0.9f));
     }
 
 }
