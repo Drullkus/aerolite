@@ -1,0 +1,10 @@
+{
+  "neoforge:conditions": [
+    {
+      "modid": "voidscape",
+      "type": "neoforge:mod_loaded"
+    }
+  ],
+  "aerolite:void_black_null": 16,
+  "aerolite:void_white_null": 16
+}

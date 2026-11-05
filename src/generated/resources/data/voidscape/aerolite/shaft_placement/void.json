@@ -1,0 +1,5 @@
+{
+  "column_chance": 0.1,
+  "max_shaft_spacing": 256,
+  "min_shaft_spacing": 64
+}
