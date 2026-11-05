@@ -43,6 +43,12 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.addListName(ShaftRegistries.OVERWORLD_LIST, "Overworld Pillars");
         this.addListName(ShaftRegistries.NETHER_LIST, "Nether Pillars");
         this.addListName(ShaftRegistries.END_LIST, "End Pillars");
+        this.addListName(ShaftRegistries.AETHER_LIST, "Aether Pillars");
+        this.addListName(ShaftRegistries.BUMBLEZONE_LIST, "Bumblezone Pillars");
+        this.addListName(ShaftRegistries.GAIA_LIST, "Gaia Pillars");
+        this.addListName(ShaftRegistries.TWILIGHT_LIST, "Twilight Pillars");
+        this.addListName(ShaftRegistries.UNDERGARDEN_LIST, "Undergarden Pillars");
+        this.addListName(ShaftRegistries.VOID_LIST, "Void Pillars");
         this.add("createWorld.customize.aerolite.shaft_placement", "Pillar Placement");
         this.add("createWorld.customize.aerolite.shaft_surface", "Pillar Surface");
         this.add("createWorld.customize.aerolite.column_chance", "Column Chance: %s");

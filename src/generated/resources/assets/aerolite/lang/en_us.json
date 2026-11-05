@@ -184,7 +184,13 @@
   "createWorld.customize.aerolite.wall_block": "Wall",
   "createWorld.customize.aerolite.weight": "Weight: %s",
   "generator.aerolite.void": "Aerolite Void",
+  "pillar_variations.aerolite.aether_pillars": "Aether Pillars",
+  "pillar_variations.aerolite.bumblezone_pillars": "Bumblezone Pillars",
   "pillar_variations.aerolite.end_pillars": "End Pillars",
+  "pillar_variations.aerolite.gaia_pillars": "Gaia Pillars",
   "pillar_variations.aerolite.nether_pillars": "Nether Pillars",
-  "pillar_variations.aerolite.overworld_pillars": "Overworld Pillars"
+  "pillar_variations.aerolite.overworld_pillars": "Overworld Pillars",
+  "pillar_variations.aerolite.twilight_pillars": "Twilight Pillars",
+  "pillar_variations.aerolite.undergarden_pillars": "Undergarden Pillars",
+  "pillar_variations.aerolite.void_pillars": "Void Pillars"
 }
