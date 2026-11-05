@@ -36,7 +36,8 @@ public final class AeroliteShaftEntries {
     public static final ResourceKey<ShaftVariation> NETHER_BRICKS = variation("nether_bricks");
     public static final ResourceKey<ShaftVariation> BLACKSTONE_RIBS = variation("blackstone_ribs");
     public static final ResourceKey<ShaftVariation> SOUL_CONDUIT = variation("soul_conduit");
-    public static final ResourceKey<ShaftVariation> QUARTZ_BEAM = variation("quartz");
+    public static final ResourceKey<ShaftVariation> QUARTZ_BEAM = variation("quartz_beam");
+
     public static final ResourceKey<ShaftVariation> END_BRICKS = variation("end_bricks");
     public static final ResourceKey<ShaftVariation> END_MAZE = variation("end_maze");
     public static final ResourceKey<ShaftVariation> PURPUR_PILLAR = variation("purpur_pillar");
