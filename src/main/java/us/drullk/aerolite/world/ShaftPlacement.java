@@ -20,7 +20,7 @@ public record ShaftPlacement(int minShaftSpacing, int maxShaftSpacing, float col
     public static final int MIN_SHAFT_SPACING = 32;
     public static final int MAX_SHAFT_SPACING = 1024;
 
-    public static final ShaftPlacement DEFAULT = new ShaftPlacement(48, 80, 0.3F);
+    public static final ShaftPlacement DEFAULT = new ShaftPlacement(64, 128, 0.3F);
 
     private static final Codec<Integer> SPACING_CODEC = Codec.intRange(MIN_SHAFT_SPACING, MAX_SHAFT_SPACING);
 

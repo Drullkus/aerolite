@@ -48,7 +48,7 @@ public final class OverworldShaftEntries implements DimensionShaftEntries {
 
     @Override
     public ShaftPlacement placement() {
-        return ShaftPlacement.DEFAULT;
+        return new ShaftPlacement(64, 256, 0.3F);
     }
 
     @Override
