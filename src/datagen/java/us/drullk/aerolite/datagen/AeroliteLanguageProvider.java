@@ -77,7 +77,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.surface_block", "Surface");
         this.add("createWorld.customize.aerolite.trusses_block", "Trusses");
         this.add("createWorld.customize.aerolite.provider.edit", "Edit");
-        this.add("createWorld.customize.aerolite.provider.open_tab", "Open the tab of %s");
+        this.add("createWorld.customize.aerolite.provider.open_tab", "Configure %s's Block Provider in a tab");
         this.add("createWorld.customize.aerolite.provider.title", "%s: %s");
         this.add("createWorld.customize.aerolite.provider.type", "Type: %s");
         this.add("createWorld.customize.aerolite.provider.type.simple_state_provider", "Simple state");
@@ -172,9 +172,9 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.corner_radius", "Corner Radius: %s");
         this.add("createWorld.customize.aerolite.corner_radius_tooltip", "The chamfer at each T junction, in blocks");
         this.add("createWorld.customize.aerolite.allow_loops", "Allow loops");
-        this.add("createWorld.customize.aerolite.allow_loops_tooltip", "Keep a share of the pattern cycles");
-        this.add("createWorld.customize.aerolite.loop_share", "Loop Share: %s");
-        this.add("createWorld.customize.aerolite.loop_share_tooltip", "The share of the cycle grooves that stays");
+        this.add("createWorld.customize.aerolite.allow_loops_tooltip", "Keep cycles in pattern pathing");
+        this.add("createWorld.customize.aerolite.loop_share", "Loop Cycles: %s");
+        this.add("createWorld.customize.aerolite.loop_share_tooltip", "Amount of cycles kept in the pattern");
         this.add("createWorld.customize.aerolite.surface_paths", "Surface paths");
         this.add("createWorld.customize.aerolite.surface_paths_tooltip", "Put surface paths on the pattern");
         this.add("createWorld.customize.aerolite.cutting", "Cutting");
