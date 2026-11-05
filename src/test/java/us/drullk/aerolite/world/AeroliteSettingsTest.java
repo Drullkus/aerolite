@@ -120,7 +120,7 @@ class AeroliteSettingsTest {
 
     @Test
     void defaultsGiveEachVanillaDimensionItsOwnPlacement() {
-        assertEquals(new ShaftPlacement(48, 80, 0.3F), defaults().placement(Level.OVERWORLD));
+        assertEquals(new ShaftPlacement(64, 256, 0.3F), defaults().placement(Level.OVERWORLD));
         assertEquals(new ShaftPlacement(96, 192, 0.7F), defaults().placement(Level.NETHER));
         assertEquals(new ShaftPlacement(64, 256, 0.9F), defaults().placement(Level.END));
         assertEquals(-32, defaults().cloudHeight());

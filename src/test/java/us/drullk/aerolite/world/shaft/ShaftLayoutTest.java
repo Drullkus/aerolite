@@ -254,7 +254,7 @@ class ShaftLayoutTest {
 
     /** A fingerprint of the shafts, the columns and their variations, from the shipped defaults with seed 3446441043220923556. */
     private static final Map<ResourceKey<Level>, String> DEFAULT_FINGERPRINTS = Map.of(
-            Level.OVERWORLD, "743dc529fdb71123f6e414de4bc068b2fa7ec6ebe5379476f53ff3034c46d465",
+            Level.OVERWORLD, "99372b51bcacbf30d9a104cccd9753448144bcf3a70c72615465864defb928a4",
             Level.NETHER, "79c880bb00e9da608e171ac15c314cc25a64acd32fafd67ce8c548c2df3176c4",
             Level.END, "cce6afb5774f6165e0f2e8799aa7f78e4d8bd7c700a05acf9aeec58e59e59b2f"
     );
