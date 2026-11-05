@@ -861,6 +861,8 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - `aerolite:shaft_placement` holds the placements. A dimension takes the entry under its own dimension id.
 - A dimension without its own placement entry takes `aerolite:default`.
 - The placements of the vanilla dimensions are in the namespace `minecraft`, for example `data/minecraft/aerolite/shaft_placement/overworld.json`.
+- The placement of a modded dimension is in the namespace of that dimension, for example `data/aether/aerolite/shaft_placement/the_aether.json`.
+- Data generation writes only the namespaces `aerolite`, `minecraft` and the namespace of each key of `ShaftRegistries.DIMENSION_LISTS`.
 - `aerolite:variation_list` holds `aerolite:overworld_pillars`, `aerolite:nether_pillars` and `aerolite:end_pillars`. Each entry is a variation list.
 - The menu copies from the variation lists. Worldgen reads them only for a generator without the field `aerolite`.
 - A change to a shipped variation list changes the pillars of each world whose generator has no field `aerolite`.

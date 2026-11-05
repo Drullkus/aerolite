@@ -27,6 +27,7 @@ import java.util.List;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  */
 public final class ShippedShaftData {
 
@@ -34,7 +35,8 @@ public final class ShippedShaftData {
             "nether", "blackstone", "soul", "quartz", "end", "purpur");
     public static final List<String> LISTS = List.of("overworld_pillars", "nether_pillars", "end_pillars");
     public static final List<ResourceLocation> PLACEMENTS = List.of(ShaftRegistries.DEFAULT_PLACEMENT.location(),
-            ResourceLocation.withDefaultNamespace("overworld"), ResourceLocation.withDefaultNamespace("the_nether"), ResourceLocation.withDefaultNamespace("the_end"));
+            ResourceLocation.withDefaultNamespace("overworld"), ResourceLocation.withDefaultNamespace("the_nether"), ResourceLocation.withDefaultNamespace("the_end"),
+            ModdedDimensions.AETHER.location());
 
     private static final HolderLookup.Provider REGISTRIES = new RegistrySetBuilder()
             .add(ShaftRegistries.SHAFT_VARIATION, context -> VARIATIONS.forEach(name -> register(context, ShaftRegistries.SHAFT_VARIATION, ShaftRegistries.id(name), ShaftVariation.CODEC)))
