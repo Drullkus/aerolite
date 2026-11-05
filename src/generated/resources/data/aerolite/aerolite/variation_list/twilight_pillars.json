@@ -1,0 +1,11 @@
+{
+  "neoforge:conditions": [
+    {
+      "modid": "twilightforest",
+      "type": "neoforge:mod_loaded"
+    }
+  ],
+  "aerolite:deadrock_pillar": 1,
+  "aerolite:mossy_maze": 16,
+  "aerolite:underbrick_pillar": 11
+}

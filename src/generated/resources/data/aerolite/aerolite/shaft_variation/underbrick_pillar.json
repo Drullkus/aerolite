@@ -1,0 +1,74 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "twilightforest"
+    }
+  ],
+  "bias": 0.95,
+  "decay_scale": 32,
+  "decay_threshold": 0.5,
+  "erosion_threshold": 0.85,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:cobblestone"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:cobblestone"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:cyan_terracotta"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:bricks",
+    "allow_loops": false,
+    "cutting": true,
+    "loop_share": 0.0,
+    "path_chance": 0.3,
+    "size": "jumbled",
+    "surface_paths": true
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:cobblestone"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:cobblestone"
+    }
+  },
+  "wall": {
+    "type": "minecraft:noise_provider",
+    "noise": {
+      "amplitudes": [
+        3.0
+      ],
+      "firstOctave": 3
+    },
+    "scale": 0.0625,
+    "seed": -1268786147,
+    "states": [
+      {
+        "Name": "twilightforest:mossy_underbrick"
+      },
+      {
+        "Name": "twilightforest:underbrick"
+      },
+      {
+        "Name": "twilightforest:cracked_underbrick"
+      }
+    ]
+  }
+}
