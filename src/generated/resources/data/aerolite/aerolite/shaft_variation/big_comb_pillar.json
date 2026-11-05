@@ -1,0 +1,60 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "the_bumblezone"
+    }
+  ],
+  "bias": 0.5,
+  "decay_scale": 64,
+  "decay_threshold": 0.5,
+  "erosion_threshold": 0.65,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:honeycomb_block"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:honeycomb_block"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:honeycomb_block"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:tiles",
+    "allow_loops": true,
+    "cutting": false,
+    "encased": false,
+    "loop_share": 1.0,
+    "path_chance": 1.0,
+    "size": "large",
+    "stagger": "y",
+    "surface_paths": true
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "the_bumblezone:filled_porous_honeycomb_block"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "minecraft:honeycomb_block"
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "the_bumblezone:porous_honeycomb_block"
+    }
+  }
+}

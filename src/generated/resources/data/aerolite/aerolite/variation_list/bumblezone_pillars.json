@@ -1,0 +1,10 @@
+{
+  "neoforge:conditions": [
+    {
+      "modid": "the_bumblezone",
+      "type": "neoforge:mod_loaded"
+    }
+  ],
+  "aerolite:big_comb_pillar": 1,
+  "aerolite:small_comb_pillar": 5
+}
