@@ -394,6 +394,9 @@ dependencies {
     localRuntime("curse.maven:voidscape-251730:${voidscape_file_id}") {
         transitive = false
     }
+    localRuntime("curse.maven:the-undergarden-379849:7862546") {
+        transitive = false
+    }
 
     datagenImplementation sourceSets.main.output
     // The dev tools reuse the widgets of the mod. The runs load the mod itself.

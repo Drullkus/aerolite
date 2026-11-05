@@ -36,6 +36,7 @@ public final class ShaftRegistries {
     public static final ResourceKey<VariationList> BUMBLEZONE_LIST = ResourceKey.create(VARIATION_LIST, id("bumblezone_pillars"));
     public static final ResourceKey<VariationList> GAIA_LIST = ResourceKey.create(VARIATION_LIST, id("gaia_pillars"));
     public static final ResourceKey<VariationList> TWILIGHT_LIST = ResourceKey.create(VARIATION_LIST, id("twilight_pillars"));
+    public static final ResourceKey<VariationList> UNDERGARDEN_LIST = ResourceKey.create(VARIATION_LIST, id("undergarden_pillars"));
     public static final ResourceKey<VariationList> VOID_LIST = ResourceKey.create(VARIATION_LIST, id("void_pillars"));
 
     /** The variation list of each known dimension. */
@@ -47,6 +48,7 @@ public final class ShaftRegistries {
             ModdedDimensions.BUMBLEZONE, BUMBLEZONE_LIST,
             ModdedDimensions.GAIA, GAIA_LIST,
             ModdedDimensions.TWILIGHT_FOREST, TWILIGHT_LIST,
+            ModdedDimensions.UNDERGARDEN, UNDERGARDEN_LIST,
             ModdedDimensions.VOID, VOID_LIST
     );
 

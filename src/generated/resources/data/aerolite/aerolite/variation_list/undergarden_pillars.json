@@ -1,0 +1,10 @@
+{
+  "neoforge:conditions": [
+    {
+      "modid": "undergarden",
+      "type": "neoforge:mod_loaded"
+    }
+  ],
+  "aerolite:depthrock_pillar": 4,
+  "aerolite:shiverstone_pillar": 1
+}
