@@ -1,0 +1,65 @@
+{
+  "bias": 0.5,
+  "decay_scale": 128,
+  "decay_threshold": 0.3,
+  "erosion_threshold": 0.4,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:holystone",
+      "Properties": {
+        "double_drops": "false"
+      }
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:holystone",
+      "Properties": {
+        "double_drops": "false"
+      }
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:mossy_holystone",
+      "Properties": {
+        "double_drops": "false"
+      }
+    }
+  },
+  "pattern": {
+    "type": "aerolite:mazes",
+    "maze": "gilbert",
+    "seam": "random",
+    "spacing": 1,
+    "strength": 0.95
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:holystone",
+      "Properties": {
+        "double_drops": "false"
+      }
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:holystone",
+      "Properties": {
+        "double_drops": "false"
+      }
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:holystone_bricks"
+    }
+  }
+}

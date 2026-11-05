@@ -1,0 +1,54 @@
+{
+  "bias": 0.5,
+  "decay_scale": 128,
+  "decay_threshold": 0.3,
+  "erosion_threshold": 0.4,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:angelic_stone"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:angelic_stone"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:light_angelic_stone"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:tiles",
+    "allow_loops": false,
+    "cutting": false,
+    "encased": false,
+    "loop_share": 0.0,
+    "path_chance": 0.75,
+    "size": "small",
+    "stagger": "none",
+    "surface_paths": true
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:light_angelic_stone"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:angelic_stone"
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "aether:angelic_stone"
+    }
+  }
+}

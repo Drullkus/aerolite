@@ -1,10 +1,14 @@
 package us.drullk.aerolite.datagen;
 
+import net.minecraft.core.HolderGetter;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.data.worldgen.BootstrapContext;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.*;
@@ -33,6 +37,7 @@ public final class AeroliteShaftEntries {
     public static final ResourceKey<ShaftVariation> DIORITE = variation("diorite");
     public static final ResourceKey<ShaftVariation> GRANITE = variation("granite");
     public static final ResourceKey<ShaftVariation> PRISMARINE_SCALES = variation("prismarine_scales");
+
     public static final ResourceKey<ShaftVariation> NETHER_BRICKS = variation("nether_bricks");
     public static final ResourceKey<ShaftVariation> BLACKSTONE_RIBS = variation("blackstone_ribs");
     public static final ResourceKey<ShaftVariation> SOUL_CONDUIT = variation("soul_conduit");
@@ -41,6 +46,11 @@ public final class AeroliteShaftEntries {
     public static final ResourceKey<ShaftVariation> END_BRICKS = variation("end_bricks");
     public static final ResourceKey<ShaftVariation> END_MAZE = variation("end_maze");
     public static final ResourceKey<ShaftVariation> PURPUR_PILLAR = variation("purpur_pillar");
+
+    public static final ResourceKey<ShaftVariation> AETHER_HOLYSTONE_PILLAR = variation("holystone_pillar");
+    public static final ResourceKey<ShaftVariation> AETHER_BRONZE_PILLAR = variation("aether_bronze_pillar");
+    public static final ResourceKey<ShaftVariation> AETHER_SILVER_PILLAR = variation("aether_silver_pillar");
+    public static final ResourceKey<ShaftVariation> AETHER_GOLD_PILLAR = variation("aether_gold_pillar");
 
     public AeroliteShaftEntries() {
     }
@@ -53,6 +63,8 @@ public final class AeroliteShaftEntries {
         this.overworldPillars(context);
         this.netherPillars(context);
         this.endPillars(context);
+
+        this.aetherPillars(context);
     }
 
     private void overworldPillars(BootstrapContext<ShaftVariation> context) {
@@ -237,6 +249,67 @@ public final class AeroliteShaftEntries {
         ));
     }
 
+    private void aetherPillars(BootstrapContext<ShaftVariation> context) {
+        HolderGetter<Block> blocks = context.lookup(Registries.BLOCK);
+
+        register(context, AETHER_HOLYSTONE_PILLAR, new ShaftVariation(
+                ShaftVariation.UNIFORM_BIAS,
+                128,
+                0.3f,
+                0.4f,
+                new MazeSettings(MazeSettings.Type.GILBERT, 0.95f, MazeSettings.Seam.RANDOM, 1),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "holystone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "holystone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "holystone_bricks")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "mossy_holystone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "holystone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "holystone"))
+        ));
+        register(context, AETHER_BRONZE_PILLAR, new ShaftVariation(
+                ShaftVariation.UNIFORM_BIAS,
+                128,
+                0.3f,
+                0.4f,
+                new TilesSettings(TilesSettings.Size.LARGE, TilesSettings.Stagger.NONE, false, new SurfacePathSettings(false, 0f, true, false, 0.75f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "carved_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "carved_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "carved_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "sentry_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "sentry_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "carved_stone"))
+        ));
+        register(context, AETHER_SILVER_PILLAR, new ShaftVariation(
+                ShaftVariation.UNIFORM_BIAS,
+                128,
+                0.3f,
+                0.4f,
+                new TilesSettings(TilesSettings.Size.SMALL, TilesSettings.Stagger.NONE, false, new SurfacePathSettings(false, 0f, true, false, 0.75f)),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "angelic_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "angelic_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "angelic_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "light_angelic_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "light_angelic_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "angelic_stone"))
+        ));
+        register(context, AETHER_GOLD_PILLAR, new ShaftVariation(
+                ShaftVariation.UNIFORM_BIAS,
+                128,
+                0.3f,
+                0.4f,
+                new MazeSettings(MazeSettings.Type.LINES, 1f, MazeSettings.Seam.RANDOM, 2),
+                PillarShape.PILLAR,
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "hellfire_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "hellfire_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "hellfire_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "light_hellfire_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "light_hellfire_stone")),
+                BlockStateProvider.simple(this.getBlockState(blocks, "aether", "hellfire_stone"))
+        ));
+    }
+
     private static void register(BootstrapContext<ShaftVariation> context, ResourceKey<ShaftVariation> key, float bias, Block interior, Block wall, Block path) {
         register(context, key, ShaftVariation.standard(bias, BlockStateProvider.simple(interior), BlockStateProvider.simple(wall), BlockStateProvider.simple(path)));
     }
@@ -251,6 +324,7 @@ public final class AeroliteShaftEntries {
         lists.put(ShaftRegistries.OVERWORLD_LIST, this.overworldList());
         lists.put(ShaftRegistries.NETHER_LIST, this.netherList());
         lists.put(ShaftRegistries.END_LIST, this.endList());
+        lists.put(ShaftRegistries.AETHER_LIST, this.aetherList());
         return lists;
     }
 
@@ -277,6 +351,15 @@ public final class AeroliteShaftEntries {
         return list(entry(END_BRICKS, 16), entry(END_MAZE, 3), entry(PURPUR_PILLAR, 1));
     }
 
+    private VariationList aetherList() {
+        return list(
+                entry(AETHER_HOLYSTONE_PILLAR, 16),
+                entry(AETHER_BRONZE_PILLAR, 7),
+                entry(AETHER_SILVER_PILLAR, 3),
+                entry(AETHER_GOLD_PILLAR, 1)
+        );
+    }
+
     private static VariationList.Entry entry(ResourceKey<ShaftVariation> variation, int weight) {
         return new VariationList.Entry(variation, weight);
     }
@@ -294,6 +377,11 @@ public final class AeroliteShaftEntries {
         context.register(ShaftRegistries.placementOf(Level.OVERWORLD), ShaftPlacement.DEFAULT);
         context.register(ShaftRegistries.placementOf(Level.NETHER), new ShaftPlacement(6 * chunk, 12 * chunk, 0.7f));
         context.register(ShaftRegistries.placementOf(Level.END), new ShaftPlacement(4 * chunk, 16 * chunk, 0.9f));
+        context.register(ShaftRegistries.placementOf(ModdedDimensions.AETHER), new ShaftPlacement(8 * chunk, 16 * chunk, 0.7f));
+    }
+
+    private BlockState getBlockState(HolderGetter<Block> blocks, String namespace, String path) {
+        return blocks.getOrThrow(ResourceKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(namespace, path))).value().defaultBlockState();
     }
 
 }
