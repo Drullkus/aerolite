@@ -76,7 +76,7 @@ public record ShaftLookup(HolderGetter<ShaftVariation> variations, HolderGetter<
         return new DimensionSettings(this.placement(dimension), this.resolve(list));
     }
 
-    /** The default settings of a dimension. A dimension other than the three vanilla ones gets stone with weight 1. */
+    /** The default settings of a dimension. A dimension other than the recognized ones gets stone with weight 1. */
     public DimensionSettings defaults(ResourceKey<Level> dimension) {
         ResourceKey<VariationList> listKey = ShaftRegistries.DIMENSION_LISTS.get(dimension);
         if (listKey != null) {
@@ -92,7 +92,7 @@ public record ShaftLookup(HolderGetter<ShaftVariation> variations, HolderGetter<
     /** The default settings of the preset: the three vanilla dimensions and the default cloud height. */
     public AeroliteSettings defaultSettings() {
         Map<ResourceKey<Level>, DimensionSettings> dimensions = new LinkedHashMap<>();
-        for (ResourceKey<Level> dimension : List.of(Level.OVERWORLD, Level.NETHER, Level.END)) {
+        for (ResourceKey<Level> dimension : ShaftRegistries.DIMENSION_LISTS.keySet()) {
             dimensions.put(dimension, this.defaults(dimension));
         }
         return new AeroliteSettings(AeroliteSettings.DEFAULT_CLOUD_HEIGHT, ImmutableMap.copyOf(dimensions));

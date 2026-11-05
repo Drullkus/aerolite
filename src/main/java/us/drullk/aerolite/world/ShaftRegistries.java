@@ -32,11 +32,22 @@ public final class ShaftRegistries {
     public static final ResourceKey<VariationList> NETHER_LIST = ResourceKey.create(VARIATION_LIST, id("nether_pillars"));
     public static final ResourceKey<VariationList> END_LIST = ResourceKey.create(VARIATION_LIST, id("end_pillars"));
 
-    /** The variation list of each vanilla dimension. */
+    public static final ResourceKey<VariationList> AETHER_LIST = ResourceKey.create(VARIATION_LIST, id("aether_pillars"));
+    public static final ResourceKey<VariationList> BUMBLEZONE_LIST = ResourceKey.create(VARIATION_LIST, id("bumblezone_pillars"));
+    public static final ResourceKey<VariationList> GAIA_LIST = ResourceKey.create(VARIATION_LIST, id("gaia_pillars"));
+    public static final ResourceKey<VariationList> TWILIGHT_LIST = ResourceKey.create(VARIATION_LIST, id("twilight_pillars"));
+    public static final ResourceKey<VariationList> VOID_LIST = ResourceKey.create(VARIATION_LIST, id("void_pillars"));
+
+    /** The variation list of each known dimension. */
     public static final Map<ResourceKey<Level>, ResourceKey<VariationList>> DIMENSION_LISTS = Map.of(
             Level.OVERWORLD, OVERWORLD_LIST,
             Level.NETHER, NETHER_LIST,
-            Level.END, END_LIST
+            Level.END, END_LIST,
+            ModdedDimensions.AETHER, AETHER_LIST,
+            ModdedDimensions.BUMBLEZONE, BUMBLEZONE_LIST,
+            ModdedDimensions.GAIA, GAIA_LIST,
+            ModdedDimensions.TWILIGHT_FOREST, TWILIGHT_LIST,
+            ModdedDimensions.VOID, VOID_LIST
     );
 
     private ShaftRegistries() {
