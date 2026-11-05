@@ -141,7 +141,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.maze_type.lines", "Lines");
         this.add("createWorld.customize.aerolite.maze_type.gilbert", "Gilbert");
         this.add("createWorld.customize.aerolite.pattern_strength", "Strength: %s");
-        this.add("createWorld.customize.aerolite.pattern_strength_tooltip", "Pattern Strength. At 100%, the maze follows the pattern exactly.");
+        this.add("createWorld.customize.aerolite.pattern_strength_tooltip", "Pattern Strength. At 100%%, the maze follows the pattern exactly.");
         this.add("createWorld.customize.aerolite.seam", "Seam: %s");
         this.add("createWorld.customize.aerolite.seam.random", "Random");
         this.add("createWorld.customize.aerolite.seam.seeded", "Seeded");

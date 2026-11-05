@@ -73,7 +73,7 @@
   "createWorld.customize.aerolite.pattern.scales": "Scales",
   "createWorld.customize.aerolite.pattern.tiles": "Tiles",
   "createWorld.customize.aerolite.pattern_strength": "Strength: %s",
-  "createWorld.customize.aerolite.pattern_strength_tooltip": "Pattern Strength. At 100%, the maze follows the pattern exactly.",
+  "createWorld.customize.aerolite.pattern_strength_tooltip": "Pattern Strength. At 100%%, the maze follows the pattern exactly.",
   "createWorld.customize.aerolite.pillars": "Amazing Pillars",
   "createWorld.customize.aerolite.prefab_dimension": "Dimension",
   "createWorld.customize.aerolite.prefab_tooltip": "Prefab Pillars to add in %s",
