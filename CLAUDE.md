@@ -369,7 +369,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 | Minimum pillar spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Maximum pillar spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Column chance | Dimension | The placement entry of the dimension, else `aerolite:default` |
-| Variation list | Dimension | The own variation list of the dimension, for example `aerolite:overworld_pillars`. `AeroliteShaftEntries.java` writes the shipped lists. |
+| Variation list | Dimension | The own variation list of the dimension, for example `aerolite:overworld_pillars`. The classes in `datagen/shaft/` hold the shipped lists. |
 | Maze decay scale | Variation | 64 blocks |
 | Maze decay threshold | Variation | 0.35 |
 | Pillar erosion threshold | Variation | 0.5 |
@@ -837,7 +837,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 ### Registries
 
 - Three datapack registries hold the pillar data. They do not sync to the client.
-- `aerolite:shaft_variation` holds the variations. The shipped entries are `aerolite:stone`, `aerolite:tuff` and the others in `AeroliteShaftEntries.java`.
+- `aerolite:shaft_variation` holds the variations. The shipped entries are `aerolite:stone`, `aerolite:tuff_bricks` and the others in the classes in `datagen/shaft/`.
 - A variation entry holds `bias`, `decay_scale`, `decay_threshold`, `erosion_threshold`, `pattern`, `shape`, `interior`, `junction`, `wall`, `path`, `surface` and `trusses`. It holds no weight.
 - The variation codec writes the fields in that sequence. `ShaftVariation.KEYS` holds the sequence.
 - The variation codec writes every field.
@@ -866,7 +866,11 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - Data generation writes only the namespaces `aerolite`, `minecraft` and the namespace of each key of `ShaftRegistries.DIMENSION_LISTS`.
 - `aerolite:variation_list` holds `aerolite:overworld_pillars`, `aerolite:nether_pillars` and `aerolite:end_pillars`. Each entry is a variation list.
 - A variation or a variation list that names a block or a variation of another mod needs a `neoforge:mod_loaded` condition.
-- `AeroliteShaftEntries#conditions` lists those entries.
+- `requiredMod` and `modVariations` of the class of a dimension in `datagen/shaft/` name those entries.
+- Each class in `datagen/shaft/` that implements `DimensionShaftEntries` holds the placement, the list and the owned variations of one dimension.
+- `AeroliteShaftEntries` collects those classes through a `@Directory` list. A new class needs no other registration.
+- A list can name a variation of another dimension by its key, for example `OverworldShaftEntries.MOSSY_MAZE`. Only the owner registers that variation.
+- The required mod of a list does not reach a variation of another dimension.
 - A game without that mod skips those entries. The world still loads.
 - The GameTest server does not load the dimension mods. So an entry without its condition stops that server at the registry load.
 - The menu copies from the variation lists. Worldgen reads them only for a generator without the field `aerolite`.
