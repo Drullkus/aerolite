@@ -12,7 +12,7 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Settings | The values that the player sets in the world creation menu. The settings holder keeps them until the server of the new world claims them. |
 | Settings holder | The client component that holds the settings of the open world creation flow. |
 | Pending settings | The settings that the world creation flow hands to the integrated server of the new world. |
-| Own variation list | The variation list of a dimension. A vanilla dimension uses `aerolite:overworld_pillars`, `aerolite:nether_pillars` or `aerolite:end_pillars`. Any other dimension uses `aerolite:<dimension namespace>/<dimension path>_pillars`. |
+| Own variation list | The variation list of a dimension. A key of `ShaftRegistries.DIMENSION_LISTS` uses its value there, for example `aerolite:aether_pillars`. Any other dimension uses `aerolite:<dimension namespace>/<dimension path>_pillars`. |
 | Prefab | An entry of `aerolite:variation_list`. The add row copies its weights. |
 | Pillar | A straight beam of blocks, at most 13x13 across, that runs along one axis. Its shape sets its cross section. |
 | Horizontal pillar | A pillar that runs along X or Z. It is infinite. |
@@ -468,7 +468,8 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The own variation list of the Overworld is `aerolite:overworld_pillars`.
 - The own variation list of the Nether is `aerolite:nether_pillars`.
 - The own variation list of the End is `aerolite:end_pillars`.
-- The own variation list of any other dimension is `aerolite:<dimension namespace>/<dimension path>_pillars`, for example `aerolite:twilightforest/twilight_forest_pillars`.
+- The own variation list of each modded dimension of `ShaftRegistries.DIMENSION_LISTS` is its value there, for example `aerolite:aether_pillars`.
+- The own variation list of any other dimension is `aerolite:<dimension namespace>/<dimension path>_pillars`, for example `aerolite:mypack/ruins_pillars`.
 - A dimension that the Defaults button or the Add button adds takes the placement entry under its id, else `aerolite:default`.
 
 ### Aerolite Void
@@ -864,6 +865,10 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The placement of a modded dimension is in the namespace of that dimension, for example `data/aether/aerolite/shaft_placement/the_aether.json`.
 - Data generation writes only the namespaces `aerolite`, `minecraft` and the namespace of each key of `ShaftRegistries.DIMENSION_LISTS`.
 - `aerolite:variation_list` holds `aerolite:overworld_pillars`, `aerolite:nether_pillars` and `aerolite:end_pillars`. Each entry is a variation list.
+- A variation or a variation list that names a block or a variation of another mod needs a `neoforge:mod_loaded` condition.
+- `AeroliteShaftEntries#conditions` lists those entries.
+- A game without that mod skips those entries. The world still loads.
+- The GameTest server does not load the dimension mods. So an entry without its condition stops that server at the registry load.
 - The menu copies from the variation lists. Worldgen reads them only for a generator without the field `aerolite`.
 - A change to a shipped variation list changes the pillars of each world whose generator has no field `aerolite`.
 - The JSON key sequence of a variation list is the pick sequence. A tool that sorts the keys changes the pillars.

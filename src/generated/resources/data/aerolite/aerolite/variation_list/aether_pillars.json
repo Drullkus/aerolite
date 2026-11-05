@@ -1,4 +1,10 @@
 {
+  "neoforge:conditions": [
+    {
+      "modid": "aether",
+      "type": "neoforge:mod_loaded"
+    }
+  ],
   "aerolite:holystone_pillar": 16,
   "aerolite:aether_bronze_pillar": 7,
   "aerolite:aether_silver_pillar": 3,

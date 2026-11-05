@@ -20,6 +20,7 @@ import java.util.Optional;
  * Reads the shaft data registries. It resolves variation lists and placements, and builds the default settings from the shipped entries.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  *
  * @param variations the registry {@code aerolite:shaft_variation}
  * @param lists      the registry {@code aerolite:variation_list}
@@ -92,7 +93,7 @@ public record ShaftLookup(HolderGetter<ShaftVariation> variations, HolderGetter<
     /** The default settings of the preset: the three vanilla dimensions and the default cloud height. */
     public AeroliteSettings defaultSettings() {
         Map<ResourceKey<Level>, DimensionSettings> dimensions = new LinkedHashMap<>();
-        for (ResourceKey<Level> dimension : ShaftRegistries.DIMENSION_LISTS.keySet()) {
+        for (ResourceKey<Level> dimension : List.of(Level.OVERWORLD, Level.NETHER, Level.END)) {
             dimensions.put(dimension, this.defaults(dimension));
         }
         return new AeroliteSettings(AeroliteSettings.DEFAULT_CLOUD_HEIGHT, ImmutableMap.copyOf(dimensions));

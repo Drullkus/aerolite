@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  */
 class PresetEditsTest {
 
@@ -52,8 +53,9 @@ class PresetEditsTest {
 
     @Test
     void listOfOtherDimensionHoldsItsNamespaceAndPath() {
-        assertEquals(ResourceKey.create(ShaftRegistries.VARIATION_LIST, ShaftRegistries.id("twilightforest/twilight_forest_pillars")),
-                ShaftRegistries.listOf(TWILIGHT));
+        ResourceKey<Level> ruins = ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath("mypack", "ruins"));
+        assertEquals(ShaftRegistries.id("mypack/ruins_pillars"), ShaftRegistries.listOf(ruins).location());
+        assertEquals(ShaftRegistries.TWILIGHT_LIST, ShaftRegistries.listOf(TWILIGHT));
         assertEquals(ShaftRegistries.id("overworld_pillars"), ShaftRegistries.listOf(Level.OVERWORLD).location());
         assertEquals(ShaftRegistries.id("nether_pillars"), ShaftRegistries.listOf(Level.NETHER).location());
         assertEquals(ShaftRegistries.id("end_pillars"), ShaftRegistries.listOf(Level.END).location());

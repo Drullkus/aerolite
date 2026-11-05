@@ -3,12 +3,16 @@ package us.drullk.aerolite.datagen;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.RegistrySetBuilder;
 import net.minecraft.data.PackOutput;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.common.conditions.ICondition;
 import net.neoforged.neoforge.common.data.DatapackBuiltinEntriesProvider;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.ShaftRegistries;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -23,8 +27,8 @@ import java.util.concurrent.CompletableFuture;
  */
 public class AeroliteWorldgenProvider extends DatapackBuiltinEntriesProvider {
 
-    public AeroliteWorldgenProvider(PackOutput output, CompletableFuture<HolderLookup.Provider> registries, RegistrySetBuilder entries) {
-        super(output, registries, entries, namespaces());
+    public AeroliteWorldgenProvider(PackOutput output, CompletableFuture<HolderLookup.Provider> registries, RegistrySetBuilder entries, Map<ResourceKey<?>, List<ICondition>> conditions) {
+        super(output, registries, entries, conditions, namespaces());
     }
 
     /** The provider writes only entries in these namespaces. */

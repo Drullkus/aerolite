@@ -15,7 +15,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -57,6 +59,16 @@ class AeroliteSettingsTest {
         return ShippedShaftData.lookup().defaultSettings();
     }
 
+    /** The default variations with the top-level values of a 0.1.0 save without those values. */
+    private static AeroliteSettings legacyDefaults() {
+        Map<ResourceKey<Level>, DimensionSettings> dimensions = new LinkedHashMap<>();
+        defaults().dimensions().forEach((dimension, settings) -> dimensions.put(dimension, new DimensionSettings(ShaftPlacement.DEFAULT, settings.mapVariations(variation -> variation
+                .withDecayScale(64)
+                .withDecayThreshold(0.35F)
+                .withErosionThreshold(0.5F)).variations())));
+        return new AeroliteSettings(defaults().cloudHeight(), dimensions);
+    }
+
     private static JsonObject write(AeroliteSettings settings) {
         return AeroliteSettings.CODEC.encodeStart(JsonOps.INSTANCE, settings).getOrThrow().getAsJsonObject();
     }
@@ -89,7 +101,7 @@ class AeroliteSettingsTest {
 
     @Test
     void missingFieldsTakeTheDefaults() {
-        assertEquals(defaults(), readWithRegistries("{}").getOrThrow());
+        assertEquals(legacyDefaults(), readWithRegistries("{}").getOrThrow());
     }
 
     @Test
@@ -107,15 +119,10 @@ class AeroliteSettingsTest {
     }
 
     @Test
-    void defaultsGiveEveryDimensionTheDefaultPlacementAndDecay() {
-        for (ResourceKey<Level> dimension : List.of(Level.OVERWORLD, Level.NETHER, Level.END)) {
-            assertEquals(new ShaftPlacement(48, 80, 0.3F), defaults().placement(dimension));
-            for (WeightedVariation variation : defaults().variations(dimension)) {
-                assertEquals(64, variation.variation().decayScale());
-                assertEquals(0.35F, variation.variation().decayThreshold());
-                assertEquals(0.5F, variation.variation().erosionThreshold());
-            }
-        }
+    void defaultsGiveEachVanillaDimensionItsOwnPlacement() {
+        assertEquals(new ShaftPlacement(48, 80, 0.3F), defaults().placement(Level.OVERWORLD));
+        assertEquals(new ShaftPlacement(96, 192, 0.7F), defaults().placement(Level.NETHER));
+        assertEquals(new ShaftPlacement(64, 256, 0.9F), defaults().placement(Level.END));
         assertEquals(-32, defaults().cloudHeight());
     }
 
@@ -127,13 +134,13 @@ class AeroliteSettingsTest {
     /** The shipped lists keep the weights and the sequence that existing worlds generated with. */
     @Test
     void defaultListsKeepTheirWeightsAndSequence() {
-        assertEquals(List.of(16, 4, 4, 2, 1, 1, 1, 1, 1), defaults().variations(Level.OVERWORLD).stream().map(WeightedVariation::weight).toList());
+        assertEquals(List.of(16, 4, 4, 2, 1, 1, 1, 1, 1, 1), defaults().variations(Level.OVERWORLD).stream().map(WeightedVariation::weight).toList());
         assertEquals(List.of(16, 9, 5, 1), defaults().variations(Level.NETHER).stream().map(WeightedVariation::weight).toList());
-        assertEquals(List.of(9, 1), defaults().variations(Level.END).stream().map(WeightedVariation::weight).toList());
+        assertEquals(List.of(16, 3, 1), defaults().variations(Level.END).stream().map(WeightedVariation::weight).toList());
         assertEquals(ShippedShaftData.variation("stone"), defaults().variations(Level.OVERWORLD).getFirst().variation());
-        assertEquals(ShippedShaftData.variation("purpur"), defaults().variations(Level.END).getLast().variation());
-        assertEquals(Blocks.OXIDIZED_COPPER_BULB.defaultBlockState(), TestSettings.state(ShippedShaftData.variation("copper").path()));
-        assertEquals(0.8F, ShippedShaftData.variation("copper").bias());
+        assertEquals(ShippedShaftData.variation("purpur_pillar"), defaults().variations(Level.END).getLast().variation());
+        assertEquals(Blocks.OXIDIZED_COPPER_BULB.defaultBlockState(), TestSettings.state(ShippedShaftData.variation("copper_bridge").path()));
+        assertEquals(0.95F, ShippedShaftData.variation("copper_bridge").bias());
     }
 
     @Test
@@ -307,7 +314,7 @@ class AeroliteSettingsTest {
     void oldUnlistedDimensionsFieldIsIgnored() {
         AeroliteSettings settings = read("{\"shafts_in_unlisted_dimensions\": true, \"variations\": {\"minecraft:the_end\": [{" + STONE_BLOCKS + "}]}}").getOrThrow();
         assertEquals(List.of(ELSEWHERE, Level.OVERWORLD, Level.NETHER).stream().map(settings::variations).toList(), List.of(List.of(), List.of(), List.of()));
-        assertEquals(defaults(), readWithRegistries("{\"shafts_in_unlisted_dimensions\": false}").getOrThrow());
+        assertEquals(legacyDefaults(), readWithRegistries("{\"shafts_in_unlisted_dimensions\": false}").getOrThrow());
         assertFalse(write(settings).has("shafts_in_unlisted_dimensions"));
     }
 
@@ -363,7 +370,7 @@ class AeroliteSettingsTest {
 
     @Test
     void oldBlockFieldsAreIgnored() {
-        assertEquals(defaults(), readWithRegistries("{\"interior_block\": {\"Name\": \"minecraft:dirt\"}}").getOrThrow());
+        assertEquals(legacyDefaults(), readWithRegistries("{\"interior_block\": {\"Name\": \"minecraft:dirt\"}}").getOrThrow());
     }
 
     @Test

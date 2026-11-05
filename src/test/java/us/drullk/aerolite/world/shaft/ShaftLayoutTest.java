@@ -47,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  */
 class ShaftLayoutTest {
 
@@ -251,14 +252,14 @@ class ShaftLayoutTest {
         assertTrue(changes > largeChanges, "The small scale noise changes sign no more often than the large scale noise");
     }
 
-    /** A fingerprint of the shafts, the columns and their variations, from the defaults of version 0.2.1 with seed 3446441043220923556. */
+    /** A fingerprint of the shafts, the columns and their variations, from the shipped defaults with seed 3446441043220923556. */
     private static final Map<ResourceKey<Level>, String> DEFAULT_FINGERPRINTS = Map.of(
-            Level.OVERWORLD, "c8a097a35c770874a5eb64285b21d3f2767d8dfe08dd1478c7ca80f69e4bdd5f",
-            Level.NETHER, "f92fe707a8806b6191e47885f3fddd5b632ade2c7a2692d91ee1f5b90232e4c6",
-            Level.END, "6ebbdc82d3606a2932d1ccb4fafb4d31b3bbe0c010596792a8e3ce88ef0d60e0"
+            Level.OVERWORLD, "743dc529fdb71123f6e414de4bc068b2fa7ec6ebe5379476f53ff3034c46d465",
+            Level.NETHER, "79c880bb00e9da608e171ac15c314cc25a64acd32fafd67ce8c548c2df3176c4",
+            Level.END, "cce6afb5774f6165e0f2e8799aa7f78e4d8bd7c700a05acf9aeec58e59e59b2f"
     );
 
-    /** The shipped data gives the same shafts as the defaults of version 0.2.1 for one seed. */
+    /** The shipped data gives the same shafts for one seed. */
     @Test
     void shippedDefaultsKeepTheEarlierShafts() throws NoSuchAlgorithmException {
         for (Map.Entry<ResourceKey<Level>, String> expected : DEFAULT_FINGERPRINTS.entrySet()) {

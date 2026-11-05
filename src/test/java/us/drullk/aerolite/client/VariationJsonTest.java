@@ -4,6 +4,7 @@ import us.drullk.aerolite.world.TestSettings;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftVariation;
@@ -25,15 +26,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  */
 class VariationJsonTest {
 
     private static final List<ShaftVariation> VARIATIONS = List.of(
             ShippedShaftData.variation("stone"),
-            ShippedShaftData.variation("tuff"),
-            ShippedShaftData.variation("purpur"),
-            ShippedShaftData.variation("copper").withDecayScale(256).withDecayThreshold(0.6F).withErosionThreshold(0.9F),
-            ShippedShaftData.variation("mossy").withPattern(MazeSettings.DEFAULT.withType(MazeSettings.Type.RIBS).withStrength(0.6F).withSeam(MazeSettings.Seam.PILLAR))
+            ShippedShaftData.variation("tuff_bricks"),
+            ShippedShaftData.variation("purpur_pillar"),
+            ShippedShaftData.variation("copper_bridge").withDecayScale(256).withDecayThreshold(0.6F).withErosionThreshold(0.9F),
+            ShippedShaftData.variation("mossy_maze").withPattern(MazeSettings.DEFAULT.withType(MazeSettings.Type.RIBS).withStrength(0.6F).withSeam(MazeSettings.Seam.PILLAR))
                     .withShape(PillarShape.BRIDGE).withSurface(Blocks.DIRT_PATH.defaultBlockState()).withTrusses(Blocks.CHAIN.defaultBlockState())
     );
 
@@ -94,7 +96,7 @@ class VariationJsonTest {
         assertEquals(PillarShape.PILLAR, parsed.shape());
         assertEquals(Blocks.POLISHED_TUFF.defaultBlockState(), TestSettings.state(parsed.surface()));
         assertEquals(Blocks.TUFF.defaultBlockState(), TestSettings.state(parsed.trusses()));
-        assertEquals(ShippedShaftData.variation("tuff"), parsed);
+        assertEquals(ShaftVariation.standard(0.7F, BlockStateProvider.simple(Blocks.TUFF), BlockStateProvider.simple(Blocks.TUFF_BRICKS), BlockStateProvider.simple(Blocks.POLISHED_TUFF)), parsed);
     }
 
     @Test
@@ -106,7 +108,7 @@ class VariationJsonTest {
 
     @Test
     void importWithoutASurfaceBlockTakesThePathBlock() {
-        ShaftVariation copper = ShippedShaftData.variation("copper").withSurface(Blocks.DIRT_PATH.defaultBlockState());
+        ShaftVariation copper = ShippedShaftData.variation("copper_bridge").withSurface(Blocks.DIRT_PATH.defaultBlockState());
         JsonObject object = JsonParser.parseString(this.json.exportVariation(copper)).getAsJsonObject();
         assertTrue(object.toString().contains("minecraft:dirt_path"));
         object.remove("surface");
@@ -169,7 +171,7 @@ class VariationJsonTest {
 
     @Test
     void importWithoutAJunctionBlockTakesTheInteriorBlock() {
-        ShaftVariation copper = ShippedShaftData.variation("copper").withJunction(Blocks.CHISELED_COPPER.defaultBlockState());
+        ShaftVariation copper = ShippedShaftData.variation("copper_bridge").withJunction(Blocks.CHISELED_COPPER.defaultBlockState());
         JsonObject object = JsonParser.parseString(this.json.exportVariation(copper)).getAsJsonObject();
         object.remove("junction");
         ShaftVariation parsed = this.json.parseVariation(object.toString()).getOrThrow();

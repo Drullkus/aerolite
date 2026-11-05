@@ -31,8 +31,8 @@ import java.util.List;
  */
 public final class ShippedShaftData {
 
-    public static final List<String> VARIATIONS = List.of("stone", "mossy", "tuff", "deepslate", "copper", "mud", "andesite", "diorite", "granite",
-            "nether", "blackstone", "soul", "quartz", "end", "purpur");
+    public static final List<String> VARIATIONS = List.of("stone", "mossy_maze", "tuff_bricks", "deepslate", "copper_bridge", "mud_tiles", "andesite", "diorite", "granite",
+            "prismarine_scales", "nether_bricks", "blackstone_ribs", "soul_conduit", "quartz_beam", "end_bricks", "end_maze", "purpur_pillar");
     public static final List<String> LISTS = List.of("overworld_pillars", "nether_pillars", "end_pillars");
     public static final List<ResourceLocation> PLACEMENTS = List.of(ShaftRegistries.DEFAULT_PLACEMENT.location(),
             ResourceLocation.withDefaultNamespace("overworld"), ResourceLocation.withDefaultNamespace("the_nether"), ResourceLocation.withDefaultNamespace("the_end"),

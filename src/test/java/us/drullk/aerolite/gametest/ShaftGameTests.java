@@ -36,6 +36,7 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import tamaized.beanification.Autowired;
@@ -88,6 +89,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -116,6 +118,15 @@ public final class ShaftGameTests {
     private static VoidPresetBiomes presetBiomes;
 
     private ShaftGameTests() {
+    }
+
+    @GameTest(template = "empty")
+    public static void aetherPrefabFollowsTheMod(GameTestHelper helper) {
+        boolean loaded = ModList.get().isLoaded("aether");
+        ShaftLookup lookup = ShaftLookup.of(helper.getLevel().registryAccess());
+        helper.assertTrue(lookup.lists().get(ShaftRegistries.AETHER_LIST).isPresent() == loaded, "The Aether list does not follow the mod");
+        helper.assertTrue(lookup.variations().get(ResourceKey.create(ShaftRegistries.SHAFT_VARIATION, ShaftRegistries.id("holystone_pillar"))).isPresent() == loaded, "The Aether variation does not follow the mod");
+        helper.succeed();
     }
 
     @GameTest(template = "empty")
@@ -515,7 +526,7 @@ public final class ShaftGameTests {
     public static void dataMapValueWinsOverTheGenerator(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         AeroliteChunkGenerator generator = shim(level, Optional.empty());
-        ResourceKey<ShaftVariation> end = ResourceKey.create(ShaftRegistries.SHAFT_VARIATION, ShaftRegistries.id("end"));
+        ResourceKey<ShaftVariation> end = ResourceKey.create(ShaftRegistries.SHAFT_VARIATION, ShaftRegistries.id("end_bricks"));
         VariationList value = new VariationList(List.of(new VariationList.Entry(end, 1)));
         LevelShafts shafts = resolver.resolve(level, Level.OVERWORLD, generator, Optional.of(value), Optional.of(TestSettings.SETTINGS));
         helper.assertTrue(shafts.source() == LevelShafts.Source.DATA_MAP, "The data map value did not win");

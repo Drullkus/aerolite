@@ -10,10 +10,13 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
+import net.neoforged.neoforge.common.conditions.ICondition;
+import net.neoforged.neoforge.common.conditions.ModLoadedCondition;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.*;
 import us.drullk.aerolite.world.pattern.*;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +26,7 @@ import java.util.Map;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  */
 @Component
 public final class AeroliteShaftEntries {
@@ -326,6 +330,19 @@ public final class AeroliteShaftEntries {
         lists.put(ShaftRegistries.END_LIST, this.endList());
         lists.put(ShaftRegistries.AETHER_LIST, this.aetherList());
         return lists;
+    }
+
+    /** The mods that each modded entry needs. A game without such a mod skips the entry. */
+    public Map<ResourceKey<?>, List<ICondition>> conditions() {
+        Map<ResourceKey<?>, List<ICondition>> conditions = new HashMap<>();
+        needsMod(conditions, "aether", ShaftRegistries.AETHER_LIST, AETHER_HOLYSTONE_PILLAR, AETHER_BRONZE_PILLAR, AETHER_SILVER_PILLAR, AETHER_GOLD_PILLAR);
+        return conditions;
+    }
+
+    private static void needsMod(Map<ResourceKey<?>, List<ICondition>> conditions, String mod, ResourceKey<?>... entries) {
+        for (ResourceKey<?> entry : entries) {
+            conditions.put(entry, List.of(new ModLoadedCondition(mod)));
+        }
     }
 
     private VariationList overworldList() {

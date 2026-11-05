@@ -1,4 +1,10 @@
 {
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "aether"
+    }
+  ],
   "bias": 0.5,
   "decay_scale": 128,
   "decay_threshold": 0.3,
