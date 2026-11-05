@@ -1,0 +1,58 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "gaiadimension"
+    }
+  ],
+  "bias": 0.05,
+  "decay_scale": 32,
+  "decay_threshold": 0.6,
+  "erosion_threshold": 0.7,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:raw_jet"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:raw_jet"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:burnt_agate_tiles"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:bricks",
+    "allow_loops": false,
+    "cutting": false,
+    "loop_share": 0.0,
+    "path_chance": 0.5,
+    "size": "small",
+    "surface_paths": true
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:crusted_jet_bricks"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:raw_jet"
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:jet_bricks"
+    }
+  }
+}

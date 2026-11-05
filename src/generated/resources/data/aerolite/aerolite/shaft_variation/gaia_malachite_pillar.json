@@ -1,0 +1,56 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "gaiadimension"
+    }
+  ],
+  "bias": 0.05,
+  "decay_scale": 32,
+  "decay_threshold": 0.6,
+  "erosion_threshold": 0.7,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:malachite_tiles"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:malachite_tiles"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:malachite_pulsing_bricks"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:mazes",
+    "maze": "ribs",
+    "seam": "random",
+    "spacing": 1,
+    "strength": 0.95
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:malachite_pulsing_chisel"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:malachite_tiles"
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:malachite_bricks"
+    }
+  }
+}

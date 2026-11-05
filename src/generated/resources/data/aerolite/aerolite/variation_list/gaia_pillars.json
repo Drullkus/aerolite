@@ -1,0 +1,13 @@
+{
+  "neoforge:conditions": [
+    {
+      "modid": "gaiadimension",
+      "type": "neoforge:mod_loaded"
+    }
+  ],
+  "aerolite:gaia_amethyst_pillar": 4,
+  "aerolite:gaia_copal_pillar": 4,
+  "aerolite:gaia_jade_pillar": 4,
+  "aerolite:gaia_jet_pillar": 4,
+  "aerolite:gaia_malachite_pillar": 1
+}

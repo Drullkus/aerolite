@@ -1,0 +1,60 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "gaiadimension"
+    }
+  ],
+  "bias": 0.05,
+  "decay_scale": 32,
+  "decay_threshold": 0.6,
+  "erosion_threshold": 0.7,
+  "interior": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:raw_jade"
+    }
+  },
+  "junction": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:raw_jade"
+    }
+  },
+  "path": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:green_agate_tiles"
+    }
+  },
+  "pattern": {
+    "type": "aerolite:tiles",
+    "allow_loops": false,
+    "cutting": false,
+    "encased": false,
+    "loop_share": 0.0,
+    "path_chance": 0.5,
+    "size": "small",
+    "stagger": "none",
+    "surface_paths": true
+  },
+  "shape": "pillar",
+  "surface": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:crusted_jade_bricks"
+    }
+  },
+  "trusses": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:raw_jade"
+    }
+  },
+  "wall": {
+    "type": "minecraft:simple_state_provider",
+    "state": {
+      "Name": "gaiadimension:jade_bricks"
+    }
+  }
+}
