@@ -90,6 +90,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -427,7 +428,9 @@ public final class ShaftGameTests {
         long seed = 3446441043220923556L;
         BlockPos around = new BlockPos(421, 220, 166);
         int reach = 32;
-        DimensionSettings settings = TestSettings.withDecay(ShaftLookup.of(level.registryAccess()).defaults(Level.OVERWORLD), ShaftVariation.DEFAULT_DECAY_SCALE, 1, 1);
+        // The placement of the report, apart from the shipped data.
+        ShaftPlacement placement = new ShaftPlacement(48, 80, 0.3F);
+        DimensionSettings settings = TestSettings.withDecay(new DimensionSettings(placement, List.of(TestSettings.one(TestSettings.STONE))), ShaftVariation.DEFAULT_DECAY_SCALE, 1, 1);
         ShaftLayout layout = new ShaftLayout(mazes, seed, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
         Map<Long, ProtoChunk> chunks = new HashMap<>();
         int crossings = 0;
