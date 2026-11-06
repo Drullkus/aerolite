@@ -13,6 +13,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.world.level.levelgen.feature.stateproviders.BlockStateProvider;
 import net.minecraft.world.level.levelgen.feature.stateproviders.SimpleStateProvider;
+import us.drullk.aerolite.world.ShaftRegistries;
 import us.drullk.aerolite.world.ShaftVariation;
 import us.drullk.aerolite.world.shaft.maze.ColumnJunction;
 import us.drullk.aerolite.world.shaft.maze.Ring;
@@ -50,6 +51,7 @@ import java.util.List;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 final class ChunkPaint {
 
@@ -147,7 +149,7 @@ final class ChunkPaint {
         this.flush();
     }
 
-    /** Writes each painted block that is not air to the chunk. */
+    /** Writes each painted block that is not air to the chunk. A block of the tag {@link ShaftRegistries#PILLARS_CANNOT_REPLACE} stays. */
     private void flush() {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         for (int band = 0; band < this.buffer.length; band++) {
@@ -155,14 +157,22 @@ final class ChunkPaint {
             if (section == null) {
                 continue;
             }
+            int bottom = this.layout.minY() + band * 16;
+            boolean mayKeep = this.chunk.getSection(this.chunk.getSectionIndex(bottom)).maybeHas(ChunkPaint::kept);
             for (int index = 0; index < SECTION_BLOCKS; index++) {
                 BlockState state = section[index];
                 if (state != null && !state.isAir()) {
-                    pos.set(this.minX + (index & 15), this.layout.minY() + band * 16 + (index >> 8), this.minZ + (index >> 4 & 15));
-                    this.chunk.setBlockState(pos, state, false);
+                    pos.set(this.minX + (index & 15), bottom + (index >> 8), this.minZ + (index >> 4 & 15));
+                    if (!mayKeep || !kept(this.chunk.getBlockState(pos))) {
+                        this.chunk.setBlockState(pos, state, false);
+                    }
                 }
             }
         }
+    }
+
+    private static boolean kept(BlockState state) {
+        return state.is(ShaftRegistries.PILLARS_CANNOT_REPLACE);
     }
 
     private boolean inChunk(BlockPos pos) {

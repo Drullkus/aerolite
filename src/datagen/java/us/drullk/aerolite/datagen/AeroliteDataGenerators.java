@@ -16,6 +16,7 @@ import tamaized.beanification.PostConstruct;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-29_20-21_80fbac8f-2f3a-4fd7-813a-624e3db43bca.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 @Component
 public final class AeroliteDataGenerators {
@@ -41,6 +42,7 @@ public final class AeroliteDataGenerators {
 
         AeroliteWorldgenProvider worldgen = generator.addProvider(event.includeServer(), new AeroliteWorldgenProvider(output, event.getLookupProvider(), this.worldgenEntries.builder(), this.shaftEntries.conditions()));
         generator.addProvider(event.includeServer(), new AeroliteWorldPresetTagsProvider(output, worldgen.getRegistryProvider(), event.getExistingFileHelper()));
+        generator.addProvider(event.includeServer(), new AeroliteBlockTagsProvider(output, event.getLookupProvider(), event.getExistingFileHelper()));
         generator.addProvider(event.includeServer(), new AeroliteDataMapProvider(output, worldgen.getRegistryProvider()));
         generator.addProvider(event.includeServer(), new AeroliteVariationListProvider(output, this.shaftEntries.variationLists(), this.shaftEntries.conditions()));
     }

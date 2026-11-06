@@ -1,6 +1,8 @@
 package us.drullk.aerolite.gametest;
 
 import java.util.HashSet;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.feature.stateproviders.WeightedStateProvider;
 import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
 import net.minecraft.util.random.SimpleWeightedRandomList;
@@ -312,6 +314,56 @@ public final class ShaftGameTests {
             }
         }
         helper.assertTrue(boxAir > 0, "Erosion removed no box edge block");
+        helper.succeed();
+    }
+
+    /** Bedrock under a pillar stays. Any other block under a pillar takes the pillar block. */
+    @GameTest(template = "empty")
+    public static void paintKeepsTheBlocksOfTheTag(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), twoVariations());
+        ShaftLayout.Shaft shaft = layout.shaft(ShaftLayout.Axis.Z, 0).orElseThrow();
+        ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(shaft.position()), 0);
+        ProtoChunk bare = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+        ProtoChunk terrain = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+        painter.paint(layout, bare);
+        Iterable<BlockPos> blocks = BlockPos.betweenClosed(pos.getMinBlockX(), level.getMinBuildHeight(), pos.getMinBlockZ(), pos.getMaxBlockX(), level.getMaxBuildHeight() - 1, pos.getMaxBlockZ());
+        for (BlockPos at : blocks) {
+            if (!bare.getBlockState(at).isAir()) {
+                terrain.setBlockState(at, (at.getX() + at.getY() + at.getZ() & 1) == 0 ? Blocks.BEDROCK.defaultBlockState() : Blocks.DIRT.defaultBlockState(), false);
+            }
+        }
+        painter.paint(layout, terrain);
+        int kept = 0;
+        int replaced = 0;
+        for (BlockPos at : blocks) {
+            if (bare.getBlockState(at).isAir()) {
+                continue;
+            }
+            if ((at.getX() + at.getY() + at.getZ() & 1) == 0) {
+                helper.assertTrue(terrain.getBlockState(at).is(Blocks.BEDROCK), "The paint replaced a block of the tag");
+                kept++;
+            } else {
+                helper.assertTrue(terrain.getBlockState(at) == bare.getBlockState(at), "The paint kept a block outside the tag");
+                replaced++;
+            }
+        }
+        helper.assertTrue(kept > 0 && replaced > 0, "The chunk holds no pillar block");
+        helper.succeed();
+    }
+
+    /** Each vanilla block with a negative destroy time is unbreakable. */
+    @GameTest(template = "empty")
+    public static void tagHoldsEveryUnbreakableVanillaBlock(GameTestHelper helper) {
+        int unbreakable = 0;
+        for (Block block : BuiltInRegistries.BLOCK) {
+            if (BuiltInRegistries.BLOCK.getKey(block).getNamespace().equals(ResourceLocation.DEFAULT_NAMESPACE) && block.defaultDestroyTime() < 0) {
+                unbreakable++;
+                helper.assertTrue(block.defaultBlockState().is(ShaftRegistries.PILLARS_CANNOT_REPLACE), "The tag does not hold " + BuiltInRegistries.BLOCK.getKey(block));
+            }
+        }
+        helper.assertTrue(unbreakable > 0, "The registry holds no unbreakable vanilla block");
+        helper.assertFalse(Blocks.STONE.defaultBlockState().is(ShaftRegistries.PILLARS_CANNOT_REPLACE), "The tag holds stone");
         helper.succeed();
     }
 

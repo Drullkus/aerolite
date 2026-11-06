@@ -989,7 +989,11 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - `ShaftLayoutTest` holds a fingerprint of the default pillars of one seed. A change that moves a pillar fails it.
 - Pillars pierce islands. Each solid block of the finished pillar replaces the terrain block at its position.
 - The pillar paint writes only solid blocks. A block of the chunk stays where the finished pillar is air.
-- The pillar paint computes the finished pillar in a buffer. It does not read the chunk.
+- The pillar paint computes the finished pillar in a buffer. Only the flush reads the chunk.
+- The block tag `aerolite:pillars_cannot_replace` holds the blocks that the pillar paint keeps.
+- That tag holds `#minecraft:wither_immune` and the Nether portal.
+- So it holds each vanilla block with a negative destroy time, and reinforced deepslate.
+- The flush reads a block of the chunk only when the palette of its section can hold a block of the tag.
 
 ### Cross section
 
@@ -1372,6 +1376,5 @@ The repository owner cites AI-generated work, so every session Claude works in m
 
 When a new question appears, add it here and ask the user before you implement it.
 
-- The bedrock of the vanilla Nether. A column end can replace bedrock blocks at Y 0 to 4 and at Y 123 to 127. The owner has not picked the rule.
 - The capacity of `PatternCache` and of `ChaosScenes`. The owner has not picked the cache sizes.
 - The patch area of the patterns on a Bridge ring. Chaos paints no patch area there. Bricks paints only the outer columns there. The owner has not picked the rule.

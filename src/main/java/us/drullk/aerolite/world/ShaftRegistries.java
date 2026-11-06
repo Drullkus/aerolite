@@ -1,9 +1,12 @@
 package us.drullk.aerolite.world;
 
 import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import us.drullk.aerolite.Aerolite;
 
 import java.util.Map;
@@ -13,6 +16,7 @@ import java.util.Map;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public final class ShaftRegistries {
 
@@ -22,6 +26,9 @@ public final class ShaftRegistries {
     public static final ResourceKey<Registry<ShaftPlacement>> SHAFT_PLACEMENT = ResourceKey.createRegistryKey(id("shaft_placement"));
     /** The variation lists that the menu copies from. */
     public static final ResourceKey<Registry<VariationList>> VARIATION_LIST = ResourceKey.createRegistryKey(id("variation_list"));
+
+    /** The blocks that the pillar paint keeps. */
+    public static final TagKey<Block> PILLARS_CANNOT_REPLACE = TagKey.create(Registries.BLOCK, id("pillars_cannot_replace"));
 
     /** The placement of a dimension without its own placement entry. */
     public static final ResourceKey<ShaftPlacement> DEFAULT_PLACEMENT = ResourceKey.create(SHAFT_PLACEMENT, id("default"));
