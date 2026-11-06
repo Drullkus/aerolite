@@ -1,4 +1,5 @@
 {
+  "aerolite.configuration.applyDefaultPillars": "Apply Default Pillars",
   "aerolite.configuration.panelWidth": "Preview Panel Width",
   "createWorld.customize.aerolite.add_dimension": "Add Dimension",
   "createWorld.customize.aerolite.add_variation": "Add Variation",

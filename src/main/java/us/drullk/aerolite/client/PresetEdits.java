@@ -52,6 +52,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetEdits {
@@ -166,14 +167,7 @@ public final class PresetEdits {
      * A configured dimension and the cloud height stay.
      */
     public AeroliteSettings withDefaults(AeroliteSettings settings, Collection<ResourceKey<Level>> dimensions) {
-        AeroliteSettings edited = settings;
-        for (ResourceKey<Level> dimension : this.sorted(dimensions)) {
-            Optional<ResourceKey<VariationList>> list = this.ownList(dimension);
-            if (list.isPresent()) {
-                edited = this.withAddedDimension(edited, dimension, list);
-            }
-        }
-        return edited;
+        return this.lookup().withDefaults(settings, this.sorted(dimensions));
     }
 
     /** A minimum spacing above the maximum spacing pushes the maximum along. */
@@ -248,16 +242,8 @@ public final class PresetEdits {
         }
         VariationList chosen = list.flatMap(key -> this.lookup().lists().get(key))
                 .map(Holder::value)
-                .orElseGet(PresetEdits::blankList);
-        DimensionSettings added = this.lookup().dimension(dimension, chosen);
-        if (added.variations().isEmpty()) {
-            added = this.lookup().dimension(dimension, blankList());
-        }
-        return settings.withDimension(dimension, added);
-    }
-
-    private static VariationList blankList() {
-        return new VariationList(List.of(new VariationList.Entry(ShaftRegistries.STONE, 1)));
+                .orElse(ShaftLookup.STONE_LIST);
+        return settings.withDimension(dimension, this.lookup().dimensionOrStone(dimension, chosen));
     }
 
     /** Removes a dimension and its settings. The dimension then gets no shafts. */
@@ -312,7 +298,7 @@ public final class PresetEdits {
     }
 
     private WeightedVariation stoneVariation() {
-        return this.lookup().resolve(blankList()).getFirst();
+        return this.lookup().resolve(ShaftLookup.STONE_LIST).getFirst();
     }
 
 

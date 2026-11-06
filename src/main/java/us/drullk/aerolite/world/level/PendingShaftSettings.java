@@ -16,9 +16,11 @@ import java.util.Optional;
  * Carries the settings of the world creation menu to the integrated server of the new world.
  * The client offers the settings before the server starts. The server claims them at its start, and only for a new world.
  * A world is new while its Overworld data is not initialized, so the world has no spawn yet.
- * An old world drops the offered settings. The server stop clears both values. A dedicated server never gets an offer.
+ * An old world drops the offered settings. The server stop clears both values.
+ * On a dedicated server, {@link DedicatedDefaultPillars} makes the offer.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
  */
 @Component
 public final class PendingShaftSettings {
@@ -79,9 +81,9 @@ public final class PendingShaftSettings {
         boolean newWorld = !server.getWorldData().overworldData().isInitialized();
         boolean offeredAny = this.offered != null;
         if (this.claim(newWorld).isPresent()) {
-            Aerolite.LOGGER.info("The new world takes the shaft settings of the world creation menu");
+            Aerolite.LOGGER.info("The new world takes the offered shaft settings");
         } else if (offeredAny) {
-            Aerolite.LOGGER.info("Dropped the shaft settings of the world creation menu, because the world is not new");
+            Aerolite.LOGGER.info("Dropped the offered shaft settings, because the world is not new");
         }
     }
 

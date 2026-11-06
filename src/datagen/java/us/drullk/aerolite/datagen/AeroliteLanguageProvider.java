@@ -20,6 +20,7 @@ import us.drullk.aerolite.world.VariationList;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -223,6 +224,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.preview.center", "Center");
         this.add("createWorld.customize.aerolite.preview.reset_center", "Reset");
         this.add("aerolite.configuration.panelWidth", "Preview Panel Width");
+        this.add("aerolite.configuration.applyDefaultPillars", "Apply Default Pillars");
     }
 
     /** The name of a variation list, under {@code pillar_variations.<namespace>.<path>}. */

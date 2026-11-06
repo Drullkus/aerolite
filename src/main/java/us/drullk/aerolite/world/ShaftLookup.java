@@ -11,6 +11,7 @@ import net.minecraft.world.level.Level;
 import us.drullk.aerolite.Aerolite;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,12 +22,16 @@ import java.util.Optional;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
  *
  * @param variations the registry {@code aerolite:shaft_variation}
  * @param lists      the registry {@code aerolite:variation_list}
  * @param placements the registry {@code aerolite:shaft_placement}
  */
 public record ShaftLookup(HolderGetter<ShaftVariation> variations, HolderGetter<VariationList> lists, HolderGetter<ShaftPlacement> placements) {
+
+    /** One stone variation with weight 1. */
+    public static final VariationList STONE_LIST = new VariationList(List.of(new VariationList.Entry(ShaftRegistries.STONE, 1)));
 
     public static ShaftLookup of(HolderLookup.Provider registries) {
         return new ShaftLookup(
@@ -77,6 +82,29 @@ public record ShaftLookup(HolderGetter<ShaftVariation> variations, HolderGetter<
         return new DimensionSettings(this.placement(dimension), this.resolve(list));
     }
 
+    /** The placement of the dimension and the variations of the list. A list without a known variation gives stone. */
+    public DimensionSettings dimensionOrStone(ResourceKey<Level> dimension, VariationList list) {
+        DimensionSettings settings = this.dimension(dimension, list);
+        return settings.variations().isEmpty() ? this.dimension(dimension, STONE_LIST) : settings;
+    }
+
+    /**
+     * Adds the default pillars: every dimension of {@code dimensions} that has its own variation list and no settings, with that list.
+     * A configured dimension and the cloud height stay.
+     */
+    public AeroliteSettings withDefaults(AeroliteSettings settings, Collection<ResourceKey<Level>> dimensions) {
+        AeroliteSettings edited = settings;
+        for (ResourceKey<Level> dimension : dimensions) {
+            if (!edited.dimensions().containsKey(dimension)) {
+                Optional<Holder.Reference<VariationList>> list = this.lists.get(ShaftRegistries.listOf(dimension));
+                if (list.isPresent()) {
+                    edited = edited.withDimension(dimension, this.dimensionOrStone(dimension, list.get().value()));
+                }
+            }
+        }
+        return edited;
+    }
+
     /** The default settings of a dimension. A dimension other than the recognized ones gets stone with weight 1. */
     public DimensionSettings defaults(ResourceKey<Level> dimension) {
         ResourceKey<VariationList> listKey = ShaftRegistries.DIMENSION_LISTS.get(dimension);
@@ -86,8 +114,7 @@ public record ShaftLookup(HolderGetter<ShaftVariation> variations, HolderGetter<
                 return this.dimension(dimension, list.get().value());
             }
         }
-        VariationList stone = new VariationList(List.of(new VariationList.Entry(ShaftRegistries.STONE, 1)));
-        return this.dimension(dimension, stone);
+        return this.dimension(dimension, STONE_LIST);
     }
 
     /** The default settings of the preset: the three vanilla dimensions and the default cloud height. */

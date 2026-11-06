@@ -430,11 +430,26 @@ The player sets the pillar settings in the World tab of the create world screen.
 ### Settings holder
 
 - The client component `ShaftSettingsHolder` holds the settings of the open world creation flow.
-- A create world screen that the holder does not track starts a new flow. The holder then holds blank settings.
+- A create world screen that the holder does not track starts a new flow.
+- While the common config switch `applyDefaultPillars` is on, a new flow starts with the default pillars. See [Default pillars](#default-pillars).
+- While that switch is off, a new flow starts with blank settings.
 - Blank settings hold no dimension and the default cloud height.
 - The pillars screen, the dimension screen and the preview read and write the holder. No screen reads or writes the generator.
 - The title screen and the world list end the flow. When one of them opens, the holder resets and clears the pending settings.
 - Cancel in the create world screen returns to one of those screens. So a cancelled flow leaves blank settings and no pending settings.
+
+### Default pillars
+
+- The default pillars of a world are the result of the Defaults button on blank settings.
+- The common config switch `applyDefaultPillars` gives each new world the default pillars. It is on by default.
+- The switch applies to each world type.
+- In a new flow, the pillars screen and the preview show the default pillars from the start.
+- The player can change or remove the default pillars. A player who removes every dimension gets blank settings, so the world gets no pillars.
+- The Defaults button stays. It adds the dimensions that the player removed or that a data pack change added.
+- The recreate action of the world list also starts a new flow. So a recreated world also starts with the default pillars.
+- On a dedicated server, `DedicatedDefaultPillars` offers the default pillars to a new world at `ServerAboutToStartEvent`.
+- That offer holds each level stem of the world without an Aerolite generator. Its cloud height is the data map value of `aerolite:overworld`.
+- An old world keeps its pillars. The switch acts only on a new world.
 
 ### Hand-over to the server
 
@@ -448,7 +463,8 @@ The player sets the pillar settings in the World tab of the create world screen.
 - So the server claims once at its start, not at each level load.
 - An old world drops the pending settings. It claims nothing.
 - The server stop clears the pending and the claimed settings.
-- A dedicated server gets no offer. Its pending settings stay empty.
+- A dedicated server gets its offer from `DedicatedDefaultPillars`. With the switch off, its pending settings stay empty.
+- The GameTest server gets no offer.
 - The level binding uses the claimed settings. See [Level binding](#level-binding).
 
 ### World tab row
@@ -1279,8 +1295,9 @@ Overworld wood weights:
 
 ## Config
 
-Use two config files:
+Use three config files:
 
+- Common config: `applyDefaultPillars`. See [Default pillars](#default-pillars).
 - Server config (synced to clients): one switch per structure set that turns center placement on or off.
 - Client config: the ImGui panel (visible on start, panel width) and the tree block render (hue saturation, hue brightness, a switch for the Veil render path).
 - The client config holds only the panel width now. The other client values come with their features.
