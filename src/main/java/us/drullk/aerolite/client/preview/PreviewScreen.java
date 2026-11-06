@@ -26,10 +26,12 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import org.joml.Matrix4f;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.PresetTools;
+import us.drullk.aerolite.client.YLimits;
 import us.drullk.aerolite.world.AeroliteSettings;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.BiConsumer;
 
@@ -45,6 +47,7 @@ import java.util.function.BiConsumer;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -189,6 +192,12 @@ public class PreviewScreen extends Screen {
             }
         }
         return -1;
+    }
+
+    /** The build limits of a dimension of the world, or empty when the preview cannot show it. */
+    public Optional<YLimits> yLimits(ResourceKey<Level> key) {
+        int index = this.dimensionIndex(key);
+        return index < 0 ? Optional.empty() : Optional.of(new YLimits(this.dimensions.get(index).minY(), this.dimensions.get(index).maxY()));
     }
 
     /** The key of the previewed dimension, or null when the context holds no dimension that the preview can show. */

@@ -91,6 +91,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -139,6 +140,30 @@ public final class ShaftGameTests {
         helper.assertTrue(ChunkPyramid.LOADING_PYRAMID.getStepTo(shafts).targetStatus() == shafts, "The loading pyramid has no shafts step");
         helper.assertTrue(ChunkPyramid.GENERATION_PYRAMID.getStepTo(ChunkStatus.FEATURES).getAccumulatedRadiusOf(shafts) >= 1,
                 "The features step does not wait for the shafts of its neighbors");
+        helper.succeed();
+    }
+
+    /** The paint of each column and its shafts writes no block outside the pillar range. */
+    @GameTest(template = "empty")
+    public static void paintStaysInsideThePillarRange(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        DimensionSettings settings = twoVariations().withPlacement(TestSettings.PLACEMENT.withShaftSpacing(32, 64).withColumnChance(1).withYRange(0, 128));
+        ShaftLayout layout = new ShaftLayout(mazes, 42, Level.OVERWORLD, level.getMinBuildHeight(), level.getMaxBuildHeight(), settings);
+        int solid = 0;
+        for (int cell = 0; cell < 6; cell++) {
+            ShaftLayout.Shaft zShaft = layout.shaft(ShaftLayout.Axis.Z, cell).orElseThrow();
+            ShaftLayout.Shaft xShaft = layout.shaft(ShaftLayout.Axis.X, cell).orElseThrow();
+            ChunkPos pos = new ChunkPos(SectionPos.blockToSectionCoord(zShaft.position()), SectionPos.blockToSectionCoord(xShaft.position()));
+            ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+            painter.paint(layout, chunk);
+            for (BlockPos at : BlockPos.betweenClosed(pos.getMinBlockX(), level.getMinBuildHeight(), pos.getMinBlockZ(), pos.getMaxBlockX(), level.getMaxBuildHeight() - 1, pos.getMaxBlockZ())) {
+                if (!chunk.getBlockState(at).isAir()) {
+                    solid++;
+                    helper.assertTrue(at.getY() >= 0 && at.getY() < 128, "The paint wrote a block outside the pillar range");
+                }
+            }
+        }
+        helper.assertTrue(solid > 0, "The paint wrote no block");
         helper.succeed();
     }
 

@@ -9,6 +9,7 @@ import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.DimensionSettings;
+import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftLookup;
 import us.drullk.aerolite.world.ShaftRegistries;
 import us.drullk.aerolite.world.ShippedShaftData;
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 class PresetEditsTest {
 
@@ -41,6 +43,36 @@ class PresetEditsTest {
         PresetEdits edits = new PresetEdits(new PresetSliders());
         edits.useRegistries(ShippedShaftData.registries());
         return edits;
+    }
+
+    @Test
+    void rangeSlidersFollowTheBuildLimits() {
+        YLimits limits = new YLimits(-64, 320);
+        assertTrue(limits.hasRange());
+        assertEquals(20, limits.steps());
+        ShaftPlacement full = new ShaftPlacement(64, 128, 0.3F);
+        assertEquals(0, limits.bottomStep(full));
+        assertEquals(20, limits.topStep(full));
+        assertEquals(-64, limits.bottomAt(0));
+        assertEquals(256, limits.bottomAt(20));
+        assertEquals(0, limits.topAt(0));
+        assertEquals(320, limits.topAt(20));
+        assertTrue(!new YLimits(0, 64).hasRange());
+    }
+
+    @Test
+    void rangeSliderPushesTheOtherBound() {
+        YLimits limits = new YLimits(0, 256);
+        ShaftPlacement placement = new ShaftPlacement(64, 128, 0.3F, 0, 128);
+        ShaftPlacement raised = this.edits.withBottomStep(placement, limits, limits.steps());
+        assertEquals(192, raised.minY());
+        assertEquals(256, raised.maxY());
+        ShaftPlacement lowered = this.edits.withTopStep(raised, limits, 0);
+        assertEquals(0, lowered.minY());
+        assertEquals(64, lowered.maxY());
+        ShaftPlacement kept = this.edits.withBottomStep(placement, limits, 2);
+        assertEquals(32, kept.minY());
+        assertEquals(128, kept.maxY());
     }
 
     @Test

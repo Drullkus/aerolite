@@ -2,6 +2,7 @@ package us.drullk.aerolite.world.shaft;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
 import us.drullk.aerolite.world.DimensionSettings;
@@ -34,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public final class ShaftLayout {
 
@@ -59,7 +61,7 @@ public final class ShaftLayout {
      *
      * @param cell     the cell index of the shaft on the cross axis
      * @param position the cross axis coordinate of the shaft center
-     * @param slot     the index of the slot that holds the shaft, counted from the bottom build limit
+     * @param slot     the index of the slot that holds the shaft, counted from the bottom of the pillar range
      */
     public record Shaft(Axis axis, int cell, int position, int slot, int centerY) {
     }
@@ -115,6 +117,7 @@ public final class ShaftLayout {
 
     /**
      * @param dimension the dimension; its name makes the layout of each dimension differ
+     * @param minY      the bottom build limit
      * @param maxY      the top build limit, exclusive
      */
     public ShaftLayout(ShaftMazes mazes, long seed, ResourceKey<Level> dimension, int minY, int maxY, DimensionSettings settings) {
@@ -122,8 +125,8 @@ public final class ShaftLayout {
         this.placement = settings.placement();
         this.variations = settings.variations();
         this.totalWeight = this.variations.stream().mapToInt(WeightedVariation::weight).sum();
-        this.minY = minY;
-        this.maxY = maxY;
+        this.minY = Mth.clamp(this.placement.minY(), minY, maxY);
+        this.maxY = Mth.clamp(this.placement.maxY(), this.minY, maxY);
         MixedRandomFactory root = new MixedRandomFactory(seed).fork("aerolite:shafts/" + dimension.location());
         this.root = root;
         this.shaftRandom = root.fork("shaft");
@@ -136,7 +139,7 @@ public final class ShaftLayout {
         this.shearNoise = new FractalNoise(root.fromHashOf("shear"), SHEAR_OCTAVES, SHEAR_SCALE);
 
         // The bottom slot and the top slot hold no shaft.
-        int slotCount = Math.max(0, (maxY - minY) / SLOT - 2);
+        int slotCount = Math.max(0, (this.maxY - this.minY) / SLOT - 2);
         int[] slots = new int[slotCount];
         for (int k = 0; k < slotCount; k++) {
             slots[k] = k + 1;
@@ -201,10 +204,12 @@ public final class ShaftLayout {
         return this.shearNoise;
     }
 
+    /** The bottom of the pillar range, inside the build limits. */
     public int minY() {
         return this.minY;
     }
 
+    /** The top of the pillar range, exclusive, inside the build limits. */
     public int maxY() {
         return this.maxY;
     }
@@ -322,7 +327,7 @@ public final class ShaftLayout {
                 Integer.MIN_VALUE / ShaftMaze.CHUNK, Integer.MAX_VALUE / ShaftMaze.CHUNK - 1);
     }
 
-    /** The surface pattern of one column. Its chunks are the chunk sections from the bottom build limit to the top build limit. */
+    /** The surface pattern of one column. Its chunks are the chunk sections of the pillar range. */
     public SurfacePattern columnMaze(Column column) {
         List<ShaftMaze.Box> boxes = column.junctions().stream().map(ColumnJunction::box).toList();
         ShaftMaze.BoxLookup lookup = (min, max) -> boxes.stream().filter(box -> box.center() >= min && box.center() <= max).toList();

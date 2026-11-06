@@ -48,6 +48,7 @@ import java.util.Optional;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public class AerolitePresetScreen extends Screen {
 
@@ -171,7 +172,7 @@ public class AerolitePresetScreen extends Screen {
 
     /** Opens the screen of one dimension with a copy of the settings. Done there sends the edited settings back. */
     private void openDimension(ResourceKey<Level> dimension) {
-        this.minecraft.setScreen(new DimensionSettingsScreen(this, this.tools, dimension, this.settings, chosen -> {
+        this.minecraft.setScreen(new DimensionSettingsScreen(this, this.tools, dimension, YLimits.of(this.context, dimension), this.settings, chosen -> {
             this.settings = chosen;
             this.rebuildPending = true;
         }));

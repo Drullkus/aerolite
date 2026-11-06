@@ -16,7 +16,8 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Prefab | An entry of `aerolite:variation_list`. The add row copies its weights. |
 | Pillar | A straight beam of blocks, at most 13x13 across, that runs along one axis. Its shape sets its cross section. |
 | Horizontal pillar | A pillar that runs along X or Z. It is infinite. |
-| Column | A pillar that runs along Y. It spans the build height and is sheared at both ends. Columns bind horizontal pillars. |
+| Column | A pillar that runs along Y. It spans the pillar range and is sheared at both ends. Columns bind horizontal pillars. |
+| Pillar range | The Y range that holds the pillars of a dimension. Its bounds are multiples of 16. |
 | Junction | The 15x15x15 box where a column crosses a horizontal pillar. |
 | Interior | The solid core of a pillar inside its outer layer. The Pillar shape has an 11x11 interior. |
 | Outer layer | The one-block skin around the interior. It holds the pattern. |
@@ -81,7 +82,7 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Segment surface | The surface of one segment: one band per ring and one patch surface per patch face. A pattern fills it, and the paint reads it. |
 | Patch surface | The 15x15 cells of one exposed face of a junction box. |
 | Pattern binding | The component that makes the surface pattern of one pattern settings class. `PatternBindings` collects the bindings. |
-| Slot | One 16-block band of the build height. Each slot belongs to X pillars or to Z pillars. |
+| Slot | One 16-block band of the pillar range. Each slot belongs to X pillars or to Z pillars. |
 | Seed | The block at the tip of a walk. It grows the tree. |
 | Tree | A random walker tree. It roots on a pillar and walks into the air. |
 | Hue | The blockstate property of a tree block, 0 to 15. |
@@ -353,7 +354,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 
 - The cloud height is one setting of the whole preset. It is not a pillar placement value.
 - Each dimension has its own pillar settings: one pillar placement and one variation list.
-- The pillar placement holds the minimum pillar spacing, the maximum pillar spacing and the column chance.
+- The pillar placement holds the minimum pillar spacing, the maximum pillar spacing, the column chance and the pillar range.
 - Each variation holds its own decay scale, decay threshold, erosion threshold, pattern and shape.
 
 | Setting | Scope | Default |
@@ -369,6 +370,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 | Minimum pillar spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Maximum pillar spacing | Dimension | The placement entry of the dimension, else `aerolite:default` |
 | Column chance | Dimension | The placement entry of the dimension, else `aerolite:default` |
+| Pillar range | Dimension | The placement entry of the dimension, else `aerolite:default`. Only the Nether ships a range of its own, Y 0 to Y 128. |
 | Variation list | Dimension | The own variation list of the dimension, for example `aerolite:overworld_pillars`. The classes in `datagen/shaft/` hold the shipped lists. |
 | Maze decay scale | Variation | 64 blocks |
 | Maze decay threshold | Variation | 0.35 |
@@ -401,6 +403,13 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The island height band is the Y range of the island centers in the generating layer.
 - The pillar spacing is the center distance of two neighbor horizontal pillars on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a pillar.
+- The pillar range of a placement is the field `min_y` and the exclusive field `max_y`.
+- A placement without these fields spans the build height. So the pillars of an old save stay.
+- The constructor of `ShaftPlacement` snaps each bound to the nearest multiple of 16.
+- The top stays at least 64 blocks above the bottom. So each axis keeps at least one slot.
+- The range `ShaftPlacement.LOWEST_Y` to `ShaftPlacement.HIGHEST_Y` spans the build height of every dimension.
+- `ShaftLayout` clamps the range to the build limits of the level.
+- A range outside the build limits holds no pillars.
 - The dimension settings are a map from dimension to pillar placement and variation list.
 - Every variation list holds at least one variation with a positive weight.
 - A dimension without an entry in the map gets no pillars.
@@ -583,7 +592,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 - A tab bar at the top holds two tabs: Pillar Placement and Pillar Variations.
 - The footer holds Done and Cancel.
 - Done writes the edited settings back to the pillars screen. Cancel and Escape drop them.
-- The tab Pillar Placement holds the column chance slider, then the two spacing sliders in one row.
+- The tab Pillar Placement holds the column chance slider, then the two spacing sliders in one row, then the two range sliders in one row.
 - The tab Pillar Variations holds the rows of each variation, then the Add Variation button.
 - The rows of a variation are, from top to bottom: the slider rows, the pattern rows and the shape row. The heading "Blocks", one row per block field and the button row follow.
 - The slider rows are the weight and maze bias row, then the decay scale row. The decay threshold and erosion threshold row follows.
@@ -616,6 +625,9 @@ The player sets the pillar settings in the World tab of the create world screen.
 - The button row holds the Copy button (export), the Paste button (import) and the Remove button, in that sequence.
 - The column chance slider runs from 0% to 100% in steps of 5%.
 - The spacing sliders run from 32 to 1024 blocks in steps of 16.
+- The range sliders read "Pillar Bottom" and "Pillar Top". They run over the build limits of the dimension in steps of 16.
+- A range slider that comes within 64 blocks of the other pushes it along. `YLimits` holds the steps.
+- A dimension that the world does not hold has no range sliders. Neither has a dimension of 64 blocks or less.
 - A spacing slider that passes the other spacing slider pushes it along.
 - The weight slider runs from 0 to 16. The last positive weight of a dimension does not go below 1.
 - The maze bias slider runs from 5% to 95% in steps of 5%.
@@ -717,7 +729,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 - Each dimension header starts open.
 - The id of a dimension header does not change in a rebuild. So the header keeps its open state after an add or a remove.
 - Each dimension header holds two groups that start open: Pillar Placement and Pillar Variations.
-- The group Pillar Placement holds the column chance slider and the two spacing sliders.
+- The group Pillar Placement holds the column chance slider, the two spacing sliders and the two range sliders.
 - The group Pillar Variations holds the variation rows and the Add Variation button.
 - Each variation row of the panel shows the sliders in the menu sequence: weight, maze bias, decay scale, decay threshold, erosion threshold.
 - A Lines maze shows no maze bias slider in the panel.
@@ -952,13 +964,13 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - Each axis is a jittered grid. The cell size is the mean of the minimum and the maximum spacing. Each cell holds one pillar at a seeded place.
 - A margin of half the minimum spacing in each cell keeps each neighbor distance between the minimum and the maximum.
 - The smallest minimum spacing of 32 keeps at least 16 blocks between two pillars on the same axis.
-- The build height is cut into slots of 16 blocks. The bottom slot and the top slot hold no horizontal pillar.
+- The pillar range is cut into slots of 16 blocks. The bottom slot and the top slot hold no horizontal pillar.
 - The seed shuffles which of the other slots belong to X pillars and which to Z pillars.
 - A horizontal pillar picks one slot of its axis. Inside the slot it picks an offset of 1 or 2, so at least one block of air separates it from a pillar in the next slot.
 - A column can stand where an X pillar and a Z pillar cross in plan view. The column chance setting decides which crossings get one.
 - A crossing gets no column unless at least one slot lies between the slots of its two pillars.
 - Each column has a top end and a bottom end.
-- The top end is uniform from 16 blocks above the highest junction box to the top build limit. The bottom end is uniform from the bottom build limit to 16 blocks below the lowest junction box.
+- The top end is uniform from 16 blocks above the highest junction box to the top of the pillar range. The bottom end is uniform from the bottom of the pillar range to 16 blocks below the lowest junction box.
 - Those 16 blocks hold the shortest shear band and the 8-block margin.
 - Shear thins each column toward its two ends. No column ends in a flat cut.
 - Near a column end, a noise threshold removes blocks from the column. The threshold rises toward the end, so fewer blocks remain the closer they are to it.
@@ -1011,7 +1023,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The union of all segments is one tree. A chunk boundary gets several crossings, so no wall ring marks it.
 - A chunk needs at most two segments: its own, which can be a junction segment, and the connector segment before it along the axis.
 - A column is cut into segments of one chunk section, like a horizontal pillar. A column segment is a pure function of the world seed, the column and the section index.
-- At a build limit, a segment gets no virtual node on the outer side.
+- At an end of the pillar range, a segment gets no virtual node on the outer side.
 - A junction cuts the maze grid of both pillars. The one-block rim around each pillar attachment sits on even positions, so it is wall.
 - A junction exposes two patches, the faces that no pillar covers. The seed picks one patch for the horizontal pillar. The other patch serves the column.
 - The bezel holds the face offsets 5, 6 and 7 in both face directions. The patch area inside it is 9x9.
@@ -1360,5 +1372,6 @@ The repository owner cites AI-generated work, so every session Claude works in m
 
 When a new question appears, add it here and ask the user before you implement it.
 
+- The bedrock of the vanilla Nether. A column end can replace bedrock blocks at Y 0 to 4 and at Y 123 to 127. The owner has not picked the rule.
 - The capacity of `PatternCache` and of `ChaosScenes`. The owner has not picked the cache sizes.
 - The patch area of the patterns on a Bridge ring. Chaos paints no patch area there. Bricks paints only the outer columns there. The owner has not picked the rule.

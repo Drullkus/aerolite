@@ -21,6 +21,7 @@ import us.drullk.aerolite.world.VariationList;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -55,6 +56,8 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.column_chance", "Column Chance: %s");
         this.add("createWorld.customize.aerolite.min_shaft_spacing", "Minimum Pillar Spacing: %s");
         this.add("createWorld.customize.aerolite.max_shaft_spacing", "Maximum Pillar Spacing: %s");
+        this.add("createWorld.customize.aerolite.pillar_bottom", "Pillar Bottom: Y %s");
+        this.add("createWorld.customize.aerolite.pillar_top", "Pillar Top: Y %s");
         this.add("createWorld.customize.aerolite.decay_scale", "Maze Decay Scale: %s");
         this.add("createWorld.customize.aerolite.decay_threshold", "Maze Decay Threshold: %s");
         this.add("createWorld.customize.aerolite.erosion_threshold", "Erosion Threshold: %s");

@@ -53,6 +53,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetEdits {
@@ -180,6 +181,18 @@ public final class PresetEdits {
     public ShaftPlacement withMaxSpacingStep(ShaftPlacement placement, int step) {
         int max = this.sliders.spacing(step);
         return placement.withShaftSpacing(Math.min(max, placement.minShaftSpacing()), max);
+    }
+
+    /** A bottom within the smallest span of the top pushes the top along. */
+    public ShaftPlacement withBottomStep(ShaftPlacement placement, YLimits limits, int step) {
+        int min = limits.bottomAt(step);
+        return placement.withYRange(min, Math.max(placement.maxY(), min + ShaftPlacement.MIN_Y_SPAN));
+    }
+
+    /** A top within the smallest span of the bottom pushes the bottom along. */
+    public ShaftPlacement withTopStep(ShaftPlacement placement, YLimits limits, int step) {
+        int max = limits.topAt(step);
+        return placement.withYRange(Math.min(placement.minY(), max - ShaftPlacement.MIN_Y_SPAN), max);
     }
 
     public int decayStep(ShaftVariation variation) {

@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 class AeroliteSettingsTest {
 
@@ -121,9 +122,42 @@ class AeroliteSettingsTest {
     @Test
     void defaultsGiveEachVanillaDimensionItsOwnPlacement() {
         assertEquals(new ShaftPlacement(64, 256, 0.3F), defaults().placement(Level.OVERWORLD));
-        assertEquals(new ShaftPlacement(96, 192, 0.7F), defaults().placement(Level.NETHER));
+        assertEquals(new ShaftPlacement(96, 192, 0.7F, 0, 128), defaults().placement(Level.NETHER));
         assertEquals(new ShaftPlacement(64, 256, 0.9F), defaults().placement(Level.END));
         assertEquals(-32, defaults().cloudHeight());
+    }
+
+    @Test
+    void onlyTheNetherHasAPillarRangeOfItsOwn() {
+        assertEquals(new ShaftPlacement(64, 256, 0.3F).minY(), ShaftPlacement.LOWEST_Y);
+        assertEquals(new ShaftPlacement(64, 256, 0.3F).maxY(), ShaftPlacement.HIGHEST_Y);
+        for (ResourceLocation id : ShippedShaftData.PLACEMENTS) {
+            ShaftPlacement placement = ShippedShaftData.lookup().placements().getOrThrow(ResourceKey.create(ShaftRegistries.SHAFT_PLACEMENT, id)).value();
+            boolean nether = id.equals(Level.NETHER.location());
+            assertEquals(nether ? 0 : ShaftPlacement.LOWEST_Y, placement.minY(), id.toString());
+            assertEquals(nether ? 128 : ShaftPlacement.HIGHEST_Y, placement.maxY(), id.toString());
+        }
+    }
+
+    @Test
+    void placementWithoutARangeSpansTheBuildHeight() {
+        ShaftPlacement parsed = ShaftPlacement.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(
+                "{\"min_shaft_spacing\": 64, \"max_shaft_spacing\": 96, \"column_chance\": 0.5}")).getOrThrow();
+        assertEquals(new ShaftPlacement(64, 96, 0.5F), parsed);
+    }
+
+    @Test
+    void pillarRangeSnapsToTheStepAndKeepsTheSmallestSpan() {
+        assertEquals(0, new ShaftPlacement(64, 96, 0.5F, 7, 128).minY());
+        assertEquals(16, new ShaftPlacement(64, 96, 0.5F, 8, 128).minY());
+        assertEquals(-16, new ShaftPlacement(64, 96, 0.5F, -9, 128).minY());
+        assertEquals(128, new ShaftPlacement(64, 96, 0.5F, 0, 135).maxY());
+        assertEquals(64, new ShaftPlacement(64, 96, 0.5F, 0, 16).maxY());
+        ShaftPlacement top = new ShaftPlacement(64, 96, 0.5F, 9000, 9000);
+        assertEquals(ShaftPlacement.HIGHEST_Y, top.maxY());
+        assertEquals(ShaftPlacement.HIGHEST_Y - ShaftPlacement.MIN_Y_SPAN, top.minY());
+        ShaftPlacement range = new ShaftPlacement(64, 96, 0.5F, 0, 128);
+        assertEquals(range, ShaftPlacement.CODEC.parse(JsonOps.INSTANCE, ShaftPlacement.CODEC.encodeStart(JsonOps.INSTANCE, range).getOrThrow()).getOrThrow());
     }
 
     @Test
@@ -380,7 +414,7 @@ class AeroliteSettingsTest {
                 "interior", "junction", "wall", "path", "surface", "trusses"), List.copyOf(json.keySet()));
         assertFalse(json.has("weight"));
         JsonObject placement = ShaftPlacement.CODEC.encodeStart(JsonOps.INSTANCE, ShaftPlacement.DEFAULT).getOrThrow().getAsJsonObject();
-        assertEquals(Set.of("min_shaft_spacing", "max_shaft_spacing", "column_chance"), placement.keySet());
+        assertEquals(Set.of("min_shaft_spacing", "max_shaft_spacing", "column_chance", "min_y", "max_y"), placement.keySet());
     }
 
     @Test

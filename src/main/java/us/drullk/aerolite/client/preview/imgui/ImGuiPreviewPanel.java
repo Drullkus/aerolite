@@ -28,6 +28,7 @@ import us.drullk.aerolite.client.AeroliteClientConfig;
 import us.drullk.aerolite.client.PresetEdits;
 import us.drullk.aerolite.client.PresetSliders;
 import us.drullk.aerolite.client.PresetTools;
+import us.drullk.aerolite.client.YLimits;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
 import us.drullk.aerolite.client.preview.PreviewDimension;
 import us.drullk.aerolite.client.preview.PreviewPanel;
@@ -74,6 +75,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -466,7 +468,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return pressed;
     }
 
-    /** The column chance and the two spacing sliders. */
+    /** The column chance, the two spacing sliders and the two pillar range sliders. */
     private AeroliteSettings drawPlacement(AeroliteSettings settings, ResourceKey<Level> dimension) {
         PresetSliders sliders = this.tools().sliders();
         ShaftPlacement placement = settings.placement(dimension);
@@ -485,7 +487,27 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         if (max >= 0) {
             placement = this.tools().edits().withMaxSpacingStep(placement, max);
         }
+        Optional<YLimits> limits = this.screen().yLimits(dimension).filter(YLimits::hasRange);
+        if (limits.isPresent()) {
+            placement = this.drawRange(placement, limits.get());
+        }
         return settings.withPlacement(dimension, placement);
+    }
+
+    /** The two pillar range sliders. A slider that comes too near the other pushes it along. */
+    private ShaftPlacement drawRange(ShaftPlacement start, YLimits limits) {
+        ShaftPlacement placement = start;
+        int bottomStep = limits.bottomStep(placement);
+        int bottom = this.stepSlider("##pillar_bottom", bottomStep, limits.steps(), text("pillar_bottom", limits.bottomAt(bottomStep)));
+        if (bottom >= 0) {
+            placement = this.tools().edits().withBottomStep(placement, limits, bottom);
+        }
+        int topStep = limits.topStep(placement);
+        int top = this.stepSlider("##pillar_top", topStep, limits.steps(), text("pillar_top", limits.topAt(topStep)));
+        if (top >= 0) {
+            placement = this.tools().edits().withTopStep(placement, limits, top);
+        }
+        return placement;
     }
 
     /**

@@ -21,6 +21,7 @@ import static us.drullk.aerolite.datagen.shaft.DimensionShaftEntries.*;
  * The shipped shaft data of the Nether.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 @Component
 public final class NetherShaftEntries implements DimensionShaftEntries {
@@ -42,7 +43,8 @@ public final class NetherShaftEntries implements DimensionShaftEntries {
 
     @Override
     public ShaftPlacement placement() {
-        return new ShaftPlacement(6 * CHUNK, 12 * CHUNK, 0.7f);
+        // The bedrock ceiling of the vanilla Nether ends at Y 127.
+        return new ShaftPlacement(6 * CHUNK, 12 * CHUNK, 0.7f, 0, 8 * CHUNK);
     }
 
     @Override

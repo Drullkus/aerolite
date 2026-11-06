@@ -4,23 +4,50 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.dimension.DimensionType;
 
 /**
  * The placement of the shafts and columns of one dimension. The registry {@code aerolite:shaft_placement} holds one placement per dimension id.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  *
  * @param minShaftSpacing the smallest center distance of two neighbor horizontal shafts on one axis
  * @param maxShaftSpacing the largest center distance of two neighbor horizontal shafts on one axis
  * @param columnChance    the chance that a crossing of two shafts in plan view gets a column
+ * @param minY            the bottom of the pillar range, a multiple of {@link #Y_STEP}
+ * @param maxY            the top of the pillar range, exclusive, a multiple of {@link #Y_STEP}
  */
-public record ShaftPlacement(int minShaftSpacing, int maxShaftSpacing, float columnChance) {
+public record ShaftPlacement(int minShaftSpacing, int maxShaftSpacing, float columnChance, int minY, int maxY) {
 
     public static final int MIN_SHAFT_SPACING = 32;
     public static final int MAX_SHAFT_SPACING = 1024;
+    public static final int Y_STEP = 16;
+    /** The lowest bottom of a dimension type. As a range bottom, it spans the build height of each dimension. */
+    public static final int LOWEST_Y = DimensionType.MIN_Y;
+    /** The highest top of a dimension type. As a range top, it spans the build height of each dimension. */
+    public static final int HIGHEST_Y = DimensionType.MAX_Y + 1;
+    /** Four slots: the two edge slots and one slot per axis. */
+    public static final int MIN_Y_SPAN = 64;
 
     public static final ShaftPlacement DEFAULT = new ShaftPlacement(64, 128, 0.3F);
+
+    /** Each range bound snaps to a multiple of the step. The top stays at least the smallest span above the bottom. */
+    public ShaftPlacement {
+        minY = Mth.clamp(snapY(minY), LOWEST_Y, HIGHEST_Y - MIN_Y_SPAN);
+        maxY = Mth.clamp(snapY(maxY), minY + MIN_Y_SPAN, HIGHEST_Y);
+    }
+
+    /** A placement whose pillar range spans the build height. */
+    public ShaftPlacement(int minShaftSpacing, int maxShaftSpacing, float columnChance) {
+        this(minShaftSpacing, maxShaftSpacing, columnChance, LOWEST_Y, HIGHEST_Y);
+    }
+
+    private static int snapY(int y) {
+        return Math.floorDiv(y + Y_STEP / 2, Y_STEP) * Y_STEP;
+    }
 
     private static final Codec<Integer> SPACING_CODEC = Codec.intRange(MIN_SHAFT_SPACING, MAX_SHAFT_SPACING);
 
@@ -28,7 +55,9 @@ public record ShaftPlacement(int minShaftSpacing, int maxShaftSpacing, float col
     public static final MapCodec<ShaftPlacement> MAP_CODEC = RecordCodecBuilder.<ShaftPlacement>mapCodec(instance -> instance.group(
             AeroliteCodecs.defaultedField(SPACING_CODEC, "min_shaft_spacing", DEFAULT.minShaftSpacing).forGetter(ShaftPlacement::minShaftSpacing),
             AeroliteCodecs.defaultedField(SPACING_CODEC, "max_shaft_spacing", DEFAULT.maxShaftSpacing).forGetter(ShaftPlacement::maxShaftSpacing),
-            AeroliteCodecs.defaultedField(Codec.floatRange(0, 1), "column_chance", DEFAULT.columnChance).forGetter(ShaftPlacement::columnChance)
+            AeroliteCodecs.defaultedField(Codec.floatRange(0, 1), "column_chance", DEFAULT.columnChance).forGetter(ShaftPlacement::columnChance),
+            AeroliteCodecs.defaultedField(Codec.INT, "min_y", LOWEST_Y).forGetter(ShaftPlacement::minY),
+            AeroliteCodecs.defaultedField(Codec.INT, "max_y", HIGHEST_Y).forGetter(ShaftPlacement::maxY)
     ).apply(instance, ShaftPlacement::new)).validate(ShaftPlacement::validate);
 
     public static final Codec<ShaftPlacement> CODEC = MAP_CODEC.codec();
@@ -46,11 +75,15 @@ public record ShaftPlacement(int minShaftSpacing, int maxShaftSpacing, float col
     }
 
     public ShaftPlacement withShaftSpacing(int min, int max) {
-        return new ShaftPlacement(min, max, this.columnChance);
+        return new ShaftPlacement(min, max, this.columnChance, this.minY, this.maxY);
     }
 
     public ShaftPlacement withColumnChance(float chance) {
-        return new ShaftPlacement(this.minShaftSpacing, this.maxShaftSpacing, chance);
+        return new ShaftPlacement(this.minShaftSpacing, this.maxShaftSpacing, chance, this.minY, this.maxY);
+    }
+
+    public ShaftPlacement withYRange(int min, int max) {
+        return new ShaftPlacement(this.minShaftSpacing, this.maxShaftSpacing, this.columnChance, min, max);
     }
 
 }

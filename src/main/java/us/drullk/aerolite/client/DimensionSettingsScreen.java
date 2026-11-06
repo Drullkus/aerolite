@@ -40,6 +40,7 @@ import us.drullk.aerolite.world.pattern.TilesSettings;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -59,6 +60,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public class DimensionSettingsScreen extends Screen {
 
@@ -77,6 +79,7 @@ public class DimensionSettingsScreen extends Screen {
     private final PresetSliders sliders;
     private final PresetEdits edits;
     private final ResourceKey<Level> dimension;
+    private final Optional<YLimits> limits;
     private final Consumer<AeroliteSettings> onDone;
     private final HeaderAndFooterLayout layout = new HeaderAndFooterLayout(this);
     private final TabManager tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
@@ -92,16 +95,19 @@ public class DimensionSettingsScreen extends Screen {
     private boolean rebuildPending;
 
     /**
+     * @param limits   the build limits of the dimension; a dimension that the world does not hold has none
      * @param settings the settings of every dimension; the screen edits the entry of {@code dimension}
      * @param onDone   takes the edited settings when the user clicks Done
      */
-    public DimensionSettingsScreen(Screen parent, PresetTools tools, ResourceKey<Level> dimension, AeroliteSettings settings, Consumer<AeroliteSettings> onDone) {
+    public DimensionSettingsScreen(Screen parent, PresetTools tools, ResourceKey<Level> dimension, Optional<YLimits> limits, AeroliteSettings settings,
+                                   Consumer<AeroliteSettings> onDone) {
         super(Component.translatable(KEY + "dimension_title", tools.edits().dimensionName(dimension)));
         this.parent = parent;
         this.tools = tools;
         this.sliders = tools.sliders();
         this.edits = tools.edits();
         this.dimension = dimension;
+        this.limits = limits;
         this.settings = settings;
         this.onDone = onDone;
     }
@@ -148,7 +154,7 @@ public class DimensionSettingsScreen extends Screen {
         return this.settings.placement(this.dimension);
     }
 
-    /** The column chance and the two spacing sliders. */
+    /** The column chance, the two spacing sliders and the two pillar range sliders. */
     private void populatePlacement(SettingsList list) {
         list.addRow(new StepSlider(PresetSliders.FRACTION_STEPS, this.sliders.fractionStep(this.placement().columnChance()),
                 step -> Component.translatable(KEY + "column_chance", this.sliders.percent(step)),
@@ -168,6 +174,25 @@ public class DimensionSettingsScreen extends Screen {
                     spacing[0].setStep(this.sliders.spacingStep(this.placement().minShaftSpacing()));
                 });
         list.addRow(spacing);
+        this.limits.filter(YLimits::hasRange).ifPresent(limits -> this.addRangeRow(list, limits));
+    }
+
+    /** The two pillar range sliders. A slider that comes too near the other pushes it along. */
+    private void addRangeRow(SettingsList list, YLimits limits) {
+        StepSlider[] range = new StepSlider[2];
+        range[0] = new StepSlider(limits.steps(), limits.bottomStep(this.placement()),
+                step -> Component.translatable(KEY + "pillar_bottom", limits.bottomAt(step)),
+                step -> {
+                    this.editPlacement(current -> this.edits.withBottomStep(current, limits, step));
+                    range[1].setStep(limits.topStep(this.placement()));
+                });
+        range[1] = new StepSlider(limits.steps(), limits.topStep(this.placement()),
+                step -> Component.translatable(KEY + "pillar_top", limits.topAt(step)),
+                step -> {
+                    this.editPlacement(current -> this.edits.withTopStep(current, limits, step));
+                    range[0].setStep(limits.bottomStep(this.placement()));
+                });
+        list.addRow(range);
     }
 
     private void editPlacement(UnaryOperator<ShaftPlacement> edit) {

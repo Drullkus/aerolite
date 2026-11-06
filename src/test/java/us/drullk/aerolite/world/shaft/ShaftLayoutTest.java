@@ -48,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_20-42_565ea277-886a-4768-9539-b9f2ca85c88e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 class ShaftLayoutTest {
 
@@ -70,6 +71,48 @@ class ShaftLayoutTest {
         assertEquals(11, z.length);
         int[] all = IntStream.concat(Arrays.stream(x), Arrays.stream(z)).sorted().toArray();
         assertTrue(Arrays.equals(IntStream.range(1, 23).toArray(), all));
+    }
+
+    private ShaftLayout netherLayout(long seed, int bottom, int top) {
+        return new ShaftLayout(this.mazes, seed, Level.NETHER, 0, 256,
+                TestSettings.OVERWORLD.withPlacement(TestSettings.PLACEMENT.withShaftSpacing(32, 64).withColumnChance(1).withYRange(bottom, top)));
+    }
+
+    @Test
+    void pillarRangeHoldsEveryPillarAndColumn() {
+        ShaftLayout layout = netherLayout(5, 0, 128);
+        assertEquals(0, layout.minY());
+        assertEquals(128, layout.maxY());
+        int[] all = IntStream.concat(Arrays.stream(layout.slots(ShaftLayout.Axis.X)), Arrays.stream(layout.slots(ShaftLayout.Axis.Z))).sorted().toArray();
+        assertTrue(Arrays.equals(IntStream.rangeClosed(1, 6).toArray(), all));
+        int columns = 0;
+        for (int cell = 0; cell < 64; cell++) {
+            for (ShaftLayout.Axis axis : ShaftLayout.Axis.values()) {
+                ShaftLayout.Shaft shaft = layout.shaft(axis, cell).orElseThrow();
+                assertTrue(shaft.centerY() - ShaftLayout.RADIUS >= 16 && shaft.centerY() + ShaftLayout.RADIUS < 112, "A shaft leaves the inner slots");
+            }
+            for (int other = 0; other < 64; other++) {
+                Optional<ShaftLayout.Column> column = layout.column(cell, other);
+                if (column.isPresent()) {
+                    columns++;
+                    assertTrue(column.get().bottomEnd() >= 0 && column.get().topEnd() <= 128, "A column leaves the pillar range");
+                    assertTrue(column.get().bottomEnd() < column.get().topEnd(), "A column has no height");
+                }
+            }
+        }
+        assertTrue(columns > 0, "The range holds no column");
+    }
+
+    @Test
+    void pillarRangeClampsToTheBuildLimits() {
+        ShaftLayout wide = netherLayout(5, -2032, 2032);
+        assertEquals(0, wide.minY());
+        assertEquals(256, wide.maxY());
+        ShaftLayout above = netherLayout(5, 512, 640);
+        assertEquals(256, above.minY());
+        assertEquals(256, above.maxY());
+        assertTrue(above.shaft(ShaftLayout.Axis.X, 0).isEmpty(), "A range above the build limits holds a shaft");
+        assertTrue(above.column(0, 0).isEmpty(), "A range above the build limits holds a column");
     }
 
     @Test
@@ -255,7 +298,7 @@ class ShaftLayoutTest {
     /** A fingerprint of the shafts, the columns and their variations, from the shipped defaults with seed 3446441043220923556. */
     private static final Map<ResourceKey<Level>, String> DEFAULT_FINGERPRINTS = Map.of(
             Level.OVERWORLD, "99372b51bcacbf30d9a104cccd9753448144bcf3a70c72615465864defb928a4",
-            Level.NETHER, "79c880bb00e9da608e171ac15c314cc25a64acd32fafd67ce8c548c2df3176c4",
+            Level.NETHER, "c9acc14794357c1178a781f7117cc68692fb9544e621270b09366847a817fecb",
             Level.END, "cce6afb5774f6165e0f2e8799aa7f78e4d8bd7c700a05acf9aeec58e59e59b2f"
     );
 

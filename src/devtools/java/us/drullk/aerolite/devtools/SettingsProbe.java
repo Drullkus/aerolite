@@ -74,15 +74,17 @@ import java.util.function.BooleanSupplier;
 
 /**
  * The screenshot probe of the settings screens. The system property {@value #PROPERTY} turns it on.
- * After the first screen shows, it opens the create world screen, the pillars screen with the defaults,
+ * After the first screen shows, it opens the create world screen, the pillars screen with the defaults, the tab Pillar Placement of the Nether,
  * the dimension screen of the Overworld on the tab Pillar Variations with each pattern type picked in turn, and the preview with the panel.
  * On the tab Pillar Variations it also opens the provider screen of each block field with one provider type each.
  * The last preview state shows the panel at its narrowest width. The run keeps that width only until the next resize.
  * The last steps open the provider tabs of the preview panel, one per provider type.
  * Then the shape scenes show an I-beam and a Bridge with columns, and one scene with one variation per shape and a column at each crossing.
+ * The last scene shows the shipped Nether from the side, inside its build height.
  * It saves one PNG per state from the window front buffer under {@code screenshots/} of the game directory. Then it stops the game.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  */
 public final class SettingsProbe {
 
@@ -163,6 +165,11 @@ public final class SettingsProbe {
         this.act("settings button", () -> press(minecraft.screen, KEY + "settings"));
         this.step("defaults", RENDER_WAIT, () -> minecraft.screen instanceof AerolitePresetScreen && press(minecraft.screen, KEY + "defaults"));
         this.grab("settings-02-pillars.png");
+        this.act("configure nether", () -> widgets(minecraft.screen, ArrowButton.class).get(1).onPress());
+        this.step("nether placement", RENDER_WAIT, () -> minecraft.screen instanceof DimensionSettingsScreen);
+        this.grab("settings-02b-nether-placement.png");
+        this.act("cancel nether", () -> press(minecraft.screen, "gui.cancel"));
+        this.step("pillars again", RENDER_WAIT, () -> minecraft.screen instanceof AerolitePresetScreen);
         this.act("configure overworld", () -> widgets(minecraft.screen, ArrowButton.class).getFirst().onPress());
         this.step("variations tab", RENDER_WAIT, () -> {
             if (!(minecraft.screen instanceof DimensionSettingsScreen screen)) {
@@ -238,6 +245,16 @@ public final class SettingsProbe {
         this.queueImGuiEditors();
         this.queueShapes();
         this.queueShapePairs();
+        this.act("nether", () -> {
+            PreviewScreen screen = (PreviewScreen) minecraft.screen;
+            screen.applyPanelUnits(360);
+            screen.setDimension(Level.NETHER);
+            screen.setRadius(6);
+            screen.camera().setYaw(35);
+            screen.camera().setPitch(5);
+        });
+        this.step("nether built", 20, () -> minecraft.screen instanceof PreviewScreen screen && screen.progress().phase() == PreviewBuilder.Phase.DONE);
+        this.grab("nether-range.png");
         this.step("stop", 60, () -> {
             LOGGER.info("Settings probe: done");
             minecraft.stop();
