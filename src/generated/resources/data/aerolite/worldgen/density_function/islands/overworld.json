@@ -1,0 +1,11 @@
+{
+  "type": "aerolite:voronoi_islands",
+  "cell_height": 128,
+  "cell_size": 256,
+  "empty_chance": 0.1,
+  "fill_max": 0.9,
+  "fill_min": 0.3,
+  "jitter": 0.8,
+  "layer_min_y": 0,
+  "noise": "aerolite:islands"
+}

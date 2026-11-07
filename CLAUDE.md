@@ -86,12 +86,12 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Seed | The block at the tip of a walk. It grows the tree. |
 | Tree | A random walker tree. It roots on a pillar and walks into the air. |
 | Hue | The blockstate property of a tree block, 0 to 15. |
-| Cell | One 3D Voronoi polyhedron. |
-| Generating layer | The one horizontal layer of cells that produces islands. |
-| Island | The terrain in one cell of the generating layer. |
-| Island type | Landmass, biosphere, lake bowl or donut. |
-| Bridge | A walkable path between the islands of two neighbor cells. |
-| Center structure | A vanilla structure whose start is at a cell center. |
+| Cell | One 3D Voronoi polyhedron of the island lattice. |
+| Generating layer | The row 0 of the island lattice. Only its cells hold islands. |
+| Island | The cell of the generating layer, scaled about its site by its fill fraction. |
+| Island type | A composition of density functions in the editor. Planned for 0.6.0. |
+| Bridge | A walkable path between the islands of two neighbor cells. Planned for 0.6.0. |
+| Center structure | A vanilla structure whose start is at a cell center. Planned for 0.6.0. |
 
 ## Project identity
 
@@ -286,6 +286,7 @@ Data generation writes:
 - The Javadoc of `SettingsProbe` lists each captured state in sequence.
 - The probe saves one PNG of the window front buffer per state under `screenshots/` of the game directory. Then it stops the game.
 - With `-Pmute`, the PNG files land in `run-mute/screenshots/`.
+- The system property `aerolite.devtools.islandsProbe` turns on the islands probe, `IslandsProbe`. It creates an Islands world and saves a side view and a top view of the first island.
 - Every run loads the test source set as part of the mod `aerolite`.
 - A stale test class in the IDE output breaks the mod load. After a branch change, run Build > Rebuild Project in IntelliJ IDEA.
 
@@ -317,6 +318,7 @@ The folder `prototypes/` at the repository root holds standalone prototypes, lik
 
 - The preset is "Aerolite Void". Its key is `aerolite:void`. Its lang key is `generator.aerolite.void`.
 - The preset is in `#minecraft:normal`. It shows in the world type list without Alt.
+- The Islands preset `aerolite:islands` is the second preset. See [Islands](#islands).
 - The preset gives a vanilla noise generator to the Overworld, the Nether and the End. Each generator uses the Aerolite noise settings of its dimension.
 - A dedicated server needs `level-type=aerolite:void` in `server.properties`.
 - The old key `aerolite:aerolite` gives the vanilla default preset. The server logs "Failed to parse level-type aerolite:aerolite, defaulting to minecraft:normal".
@@ -1232,82 +1234,31 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 
 ## Islands
 
-### Voronoi
-
-- Cells are 3D Voronoi polyhedra. The mean distance between cell centers is the cell size setting.
-- Only the generating layer produces islands. The cells above and below it produce nothing.
-- The cells above and below still shape the islands. Their faces push the island top up into hills and the island bottom down into beards.
-- Each cell in the generating layer gets one island, one island type and one biome from the allowed biome list.
-- The Voronoi cell gives the primitive solid of the island. Softening, warping and noise come after.
-- The biome drives the shape of the island. Plains are flat. Mountains are tall, triangular and jagged.
-
-### Density functions
-
-- Register Aerolite density function types in Java: the Voronoi, the island primitive and the warp.
-- Reference them from the noise settings JSON that data generation writes.
-- Vanilla density functions do the rest.
-
-### Island types
-
-**Landmass.** The biome terrain on the Voronoi primitive.
-
-**Donut.** A torus in any planar orientation, made of landmass terrain. The hole radius is a random fraction of the outer radius, from one quarter to two thirds.
-
-**Biosphere.** Terrain inside a glass dome. Each biosphere is one permutation of dome shape, glass color and biome:
-
-- Dome shapes: a sphere, a polyhedron, or a donut in horizontal orientation.
-- A polyhedron is one of the five Platonic solids, or the Voronoi cell of the island.
-- The glass shell is one block thick.
-- A biome tag names the biomes that get tinted glass. Default members: the cave biomes, the Pale Garden, the Nether biomes and the End biomes. The Pale Garden does not exist in 1.21.1. Keep the entry for later versions.
-- Every other biome picks from a weighted list: clear glass has weight 32, each of the 16 stained glasses has weight 1.
-- The biome keeps its terrain characteristics inside the dome.
-- A cave biome hangs terrain from the dome ceiling. It is not a glass top over a stone bottom.
-
-**Lake bowl.** A bowl that holds water. Each lake bowl is one permutation of shape and orientation:
-
-- Shapes: a polyhedron or a half blob. A polyhedron is one of the five Platonic solids, or the Voronoi cell of the island.
-- Orientation: from flat to a tilt of 30 degrees.
-- The water never spills. The water surface stays below the lowest point of the rim.
-
-### Bridges
-
-- A bridge joins the islands of two cells that share a face in the generating layer.
-- Only a seeded subset of neighbor pairs gets a bridge. The bridge chance setting sets the chance.
-- A bridge is a straight deck from island edge to island edge. Each bridge picks its shape and its material at random.
-
-Shape:
-
-- 50 percent: 3 blocks wide, no rail.
-- 50 percent: 5 blocks wide, with a rail on both edges.
-- The deck is lower slabs of the material. Under a rail block, a full block of the material replaces the slab.
-
-Material, by dimension:
-
-| Dimension | Chance | Deck | Rail |
-|---|---|---|---|
-| Overworld | 95% | Planks, weighted by wood | Fence of the same wood |
-| Overworld | 4% | Cobblestone | Cobblestone wall |
-| Overworld | 1% | Smooth stone | Stone brick wall |
-| Nether | 80% | Crimson or warped planks, equal weight | Fence of the same wood |
-| Nether | 15% | Nether bricks | Nether brick fence |
-| Nether | 5% | Red nether bricks | Red nether brick wall |
-| End | 95% | End stone, with end stone brick slabs for the deck | End stone brick wall |
-| End | 5% | Purpur | End stone brick wall |
-
-Overworld wood weights:
-
-| Wood | Weight |
-|---|---|
-| Oak | 64 |
-| Spruce, dark oak, mangrove | 16 |
-| Birch, acacia | 8 |
-| Jungle, cherry, bamboo | 4 |
-
-### Center structures
-
-- Every vanilla structure set of each dimension gets an Aerolite placement.
-- The placement puts the structure start at a cell center, on the island. No structure generates in the air.
-- An underground structure starts at the cell center in XZ, at a depth below the island surface. The depth is clamped so that the start stays inside the island solid.
+- The Islands preset is "Aerolite Islands". Its key is `aerolite:islands`. Its lang key is `generator.aerolite.islands`. It is in `#minecraft:normal`.
+- The Islands preset gives a vanilla noise generator to the Overworld, the Nether and the End. Each generator uses the island noise settings of its dimension, `aerolite:islands/<dimension>`.
+- The Overworld of the Islands preset uses the dimension type `aerolite:overworld`. The Nether and the End keep their vanilla dimension types.
+- Each dimension keeps its vanilla biome source and the vanilla climate functions of its noise router.
+- The End router carries the vanilla End islands function as its erosion. The End biome source reads the erosion.
+- The final density of each dimension is the island density function of that dimension, `aerolite:islands/<dimension>`, inside `minecraft:interpolated`.
+- The initial density without jaggedness is the same function, not interpolated. The vanilla surface rules read it.
+- The island density function type is `aerolite:voronoi_islands`. `VoronoiIslands` is its class. `VoronoiLattice` holds the lattice math.
+- The fields are `noise`, `cell_size`, `cell_height`, `layer_min_y`, `jitter`, `fill_min`, `fill_max` and `empty_chance`. `AeroliteIslandEntries` holds the shipped values.
+- The lattice puts one site in each box of `cell_size` by `cell_height` by `cell_size` blocks. The row 0 of boxes starts at `layer_min_y`.
+- A cell is the 3D Voronoi polyhedron of its site. Only the row 0 holds islands. The rows above and below shape the cells of the row 0.
+- An island is its cell scaled about its site by the fill fraction of the cell. The fill fraction is a seeded value between `fill_min` and `fill_max`.
+- A cell of the row 0 holds no island when its seeded value is below `empty_chance`.
+- The density is positive inside an island. Near the island surface its unit is about one block.
+- The field `noise` is the seed channel. The random state wires it with the world seed. The lattice seed derives from three values of the wired noise.
+- A lattice with an unwired noise has the seed 0. The JUnit tests use it.
+- The search reach and the wall reach of the lattice derive from the box sizes and the jitter. `VoronoiLattice` states the rule.
+- The sea level of each island dimension is at or below the lowest Y of lava. So no lava fills the void. `IslandGameTests` checks it.
+- The surface rules are the vanilla rules of each dimension. So an island top gets the vanilla surface of its biome.
+- The pillars coexist with the islands. The pillar step replaces island blocks.
+- The Islands preset has no customize screen. The cloud height of its Overworld is the data map value.
+- Island types, inner cells, cell merging, island bridges and center structures are 0.6.0 work.
+- The island types of 0.6.0 are compositions of density functions in a node editor with a preview. The output node is the noise router with its 15 inputs.
+- `llm/handoffs/0.5.0-islands.md` on `claude/islands-handoff` holds the earlier island decisions. The scope reset of 2026-11-06 supersedes its island types, shapes and merge rules.
+- The prototypes under `prototypes/` of the island shapes stay as reference.
 
 ## Config
 
@@ -1349,6 +1300,8 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - The settings JUnit tests check the pattern settings JSON, the provider codec and comparison, and the variation JSON.
 - The client JUnit tests check the pattern edit rules, the provider drafts, the provider text and the panel tabs.
 - GameTests check the pattern bindings in the bean context and the blocks that the paint writes for each pattern.
+- `IslandGameTests` checks the Islands preset, the seed wiring of the island function and the blocks of a generated island chunk.
+- The island JUnit tests check the lattice and the island density.
 - The shape GameTests check the cross sections, the trusses, the hole and the column web plane. They also check erosion and the one crossing of a horizontal Bridge pillar.
 
 ## AI attribution procedure

@@ -85,6 +85,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
 public final class SettingsProbe {
 
@@ -646,7 +647,7 @@ public final class SettingsProbe {
     }
 
     /** Presses the first button whose text has the key. Returns false when no such button exists. */
-    private static boolean press(@Nullable Screen screen, String key) {
+    static boolean press(@Nullable Screen screen, String key) {
         for (AbstractWidget widget : widgets(screen, AbstractWidget.class)) {
             if (widget instanceof Button button && hasKey(button.getMessage(), key)) {
                 button.onPress();
@@ -668,7 +669,7 @@ public final class SettingsProbe {
     }
 
     /** Saves the window front buffer, which also holds the ImGui panel, as a PNG. */
-    private static void grabFront(String file) {
+    static void grabFront(String file) {
         Minecraft minecraft = Minecraft.getInstance();
         int[] width = new int[1];
         int[] height = new int[1];
