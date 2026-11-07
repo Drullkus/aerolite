@@ -2,6 +2,7 @@ package us.drullk.aerolite.devtools;
 
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.tabs.TabNavigationBar;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
@@ -11,6 +12,7 @@ import net.minecraft.world.level.levelgen.DensityFunctions;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
+import us.drullk.aerolite.client.IslandsPresetScreen;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.island.VoronoiLattice;
@@ -23,7 +25,8 @@ import java.util.function.BooleanSupplier;
 
 /**
  * The screenshot probe of the Islands preset. The system property {@value #PROPERTY} turns it on.
- * After the first screen shows, it creates a creative world of the Islands preset with the seed {@value #SEED} and commands on.
+ * After the first screen shows, it picks the Islands preset, opens its customize screen and saves it.
+ * Then it creates a creative world of that preset with the seed {@value #SEED} and commands on.
  * It accepts the experimental features warning.
  * It puts the player in spectator mode at the first island of the row 0 and saves a side view and a top view
  * under {@code screenshots/} of the game directory. Then it stops the game.
@@ -93,6 +96,23 @@ public final class IslandsProbe {
             state.setName("Islands probe");
             return true;
         });
+        // The Customize button sits in the World tab.
+        this.step("world tab", 1, () -> {
+            if (!(minecraft.screen instanceof CreateWorldScreen screen)) {
+                return false;
+            }
+            SettingsProbe.widgets(screen, TabNavigationBar.class).getFirst().selectTab(1, false);
+            return true;
+        });
+        this.step("customize", 10, () -> SettingsProbe.press(minecraft.screen, "selectWorld.customizeType"));
+        this.step("grab settings", 10, () -> {
+            if (!(minecraft.screen instanceof IslandsPresetScreen)) {
+                return false;
+            }
+            SettingsProbe.grabFront("islands-00-settings.png");
+            return true;
+        });
+        this.step("settings done", 1, () -> SettingsProbe.press(minecraft.screen, "gui.done"));
         this.step("create", 10, () -> SettingsProbe.press(minecraft.screen, "selectWorld.create"));
         // A world of a data pack preset shows the experimental features warning before it loads.
         this.step("confirm experimental", 10, () -> minecraft.level != null || minecraft.screen instanceof ConfirmScreen && SettingsProbe.press(minecraft.screen, "gui.yes"));

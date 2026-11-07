@@ -38,6 +38,9 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.void.vanilla_biomes", "Vanilla biomes");
         this.add("createWorld.customize.aerolite.void.biome", "Biome");
         this.add("createWorld.customize.aerolite.void.reset", "Reset");
+        this.add("createWorld.customize.aerolite.islands.title", "Aerolite Islands");
+        this.add("createWorld.customize.aerolite.islands", "Islands");
+        this.add("createWorld.customize.aerolite.distortion", "Cell Boundary Distortion: %s");
         this.add("createWorld.customize.aerolite.title", "Amazing Pillars");
         this.add("createWorld.customize.aerolite.pillars", "Amazing Pillars");
         this.add("createWorld.customize.aerolite.settings", "Settings");

@@ -94,6 +94,7 @@ import java.util.Set;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-05_02-37_b76a8fd1-f370-4f0b-ae16-df6b75f51a08.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -564,12 +565,12 @@ public final class ShaftGameTests {
     @GameTest(template = "empty")
     public static void voidPresetBiomeKeepsNoiseSettings(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        WorldDimensions preset = presetBiomes.presetDimensions(level.registryAccess());
+        WorldDimensions preset = presetBiomes.presetDimensions(level.registryAccess(), AeroliteWorldgen.PRESET);
         helper.assertTrue(presetBiomes.fixedBiomes(preset).values().stream().allMatch(Optional::isEmpty), "A preset dimension has a fixed biome");
         Holder<Biome> deltas = level.registryAccess().registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.BASALT_DELTAS);
         Map<ResourceKey<LevelStem>, Optional<Holder<Biome>>> picked = presetBiomes.fixedBiomes(preset);
         picked.put(LevelStem.NETHER, Optional.of(deltas));
-        WorldDimensions edited = presetBiomes.withBiomes(level.registryAccess(), preset, picked);
+        WorldDimensions edited = presetBiomes.withBiomes(level.registryAccess(), AeroliteWorldgen.PRESET, preset, picked);
         NoiseBasedChunkGenerator nether = (NoiseBasedChunkGenerator) edited.dimensions().get(LevelStem.NETHER).generator();
         helper.assertTrue(nether.getBiomeSource() instanceof FixedBiomeSource, "The picked Nether biome gave no fixed biome source");
         helper.assertTrue(presetBiomes.fixedBiome(edited, LevelStem.NETHER).equals(Optional.of(deltas)), "The Nether does not hold the picked biome");
@@ -579,7 +580,7 @@ public final class ShaftGameTests {
         helper.assertTrue(overworld.generatorSettings().is(AeroliteWorldgen.OVERWORLD_NOISE), "The Overworld lost the Aerolite noise settings");
         helper.assertTrue(edited.dimensions().get(LevelStem.OVERWORLD).type().is(AeroliteWorldgen.OVERWORLD_TYPE), "The Overworld lost the Aerolite dimension type");
         picked.put(LevelStem.NETHER, Optional.empty());
-        WorldDimensions reset = presetBiomes.withBiomes(level.registryAccess(), edited, picked);
+        WorldDimensions reset = presetBiomes.withBiomes(level.registryAccess(), AeroliteWorldgen.PRESET, edited, picked);
         NoiseBasedChunkGenerator resetNether = (NoiseBasedChunkGenerator) reset.dimensions().get(LevelStem.NETHER).generator();
         helper.assertTrue(resetNether.getBiomeSource() instanceof MultiNoiseBiomeSource, "Reset did not give the Nether its multi noise biome source");
         helper.assertTrue(resetNether.generatorSettings().is(AeroliteWorldgen.NETHER_NOISE), "Reset lost the Aerolite noise settings");

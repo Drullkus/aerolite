@@ -6,6 +6,7 @@ import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.pattern.ChaosSettings;
 
 /**
@@ -15,6 +16,7 @@ import us.drullk.aerolite.world.pattern.ChaosSettings;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class PresetSliders {
@@ -25,6 +27,8 @@ public final class PresetSliders {
     public static final int FRACTION_STEPS = 20;
     public static final int CLOUD_HEIGHT_STEP = 8;
     public static final int CLOUD_HEIGHT_STEPS = (AeroliteSettings.MAX_CLOUD_HEIGHT - AeroliteSettings.MIN_CLOUD_HEIGHT) / CLOUD_HEIGHT_STEP;
+    public static final int DISTORTION_STEP = 2;
+    public static final int DISTORTION_STEPS = (VoronoiIslands.MAX_DISTORTION - VoronoiIslands.MIN_DISTORTION) / DISTORTION_STEP;
     /** Steps of 0.05 from the smallest to the largest maze bias. */
     public static final int BIAS_STEPS = Math.round((ShaftVariation.MAX_BIAS - ShaftVariation.MIN_BIAS) * FRACTION_STEPS);
     /** The bias step of a uniform maze. */
@@ -100,6 +104,15 @@ public final class PresetSliders {
 
     public int cloudHeightStep(int height) {
         return Math.round((height - AeroliteSettings.MIN_CLOUD_HEIGHT) / (float) CLOUD_HEIGHT_STEP);
+    }
+
+    /** The cell boundary distortion of a slider step, in blocks. */
+    public int distortion(int step) {
+        return VoronoiIslands.MIN_DISTORTION + DISTORTION_STEP * step;
+    }
+
+    public int distortionStep(double distortion) {
+        return (int) Math.round((distortion - VoronoiIslands.MIN_DISTORTION) / DISTORTION_STEP);
     }
 
     public float bias(int step) {

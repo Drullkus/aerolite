@@ -623,7 +623,7 @@ public final class SettingsProbe {
     }
 
     /** Every widget of the type under the container, in the sequence of the children. */
-    private static <T> List<T> widgets(@Nullable ContainerEventHandler container, Class<T> type) {
+    static <T> List<T> widgets(@Nullable ContainerEventHandler container, Class<T> type) {
         List<T> found = new ArrayList<>();
         if (container != null) {
             collect(container, type, found);

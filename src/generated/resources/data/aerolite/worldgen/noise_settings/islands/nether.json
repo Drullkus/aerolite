@@ -25,7 +25,17 @@
     },
     "fluid_level_floodedness": 0.0,
     "fluid_level_spread": 0.0,
-    "initial_density_without_jaggedness": "aerolite:islands/nether",
+    "initial_density_without_jaggedness": {
+      "type": "minecraft:max",
+      "argument1": "aerolite:islands/nether",
+      "argument2": {
+        "type": "minecraft:y_clamped_gradient",
+        "from_value": 1.0,
+        "from_y": 0,
+        "to_value": -1.0,
+        "to_y": 4
+      }
+    },
     "lava": 0.0,
     "ridges": 0.0,
     "temperature": {

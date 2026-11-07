@@ -52,6 +52,13 @@ public final class AeroliteIslandEntries {
     public static final double FILL_MIN = 0.3;
     public static final double FILL_MAX = 0.9;
     public static final double EMPTY_CHANCE = 0.1;
+    /** The largest shift of the cell boundary distortion, in blocks. */
+    public static final double DISTORTION = 12.0;
+    /** The wavelength of the first distortion octave, in blocks. */
+    public static final int DISTORTION_SCALE = 64;
+    public static final int DISTORTION_OCTAVES = 3;
+    /** The height of the surface floor above the bottom of a dimension, in blocks. */
+    public static final int FLOOR_HEIGHT = 4;
 
     private static final ResourceKey<DensityFunction> SHIFT_X = vanillaFunction("shift_x");
     private static final ResourceKey<DensityFunction> SHIFT_Z = vanillaFunction("shift_z");
@@ -67,7 +74,8 @@ public final class AeroliteIslandEntries {
         HolderGetter<NormalNoise.NoiseParameters> noises = context.lookup(Registries.NOISE);
         DensityFunction.NoiseHolder noise = new DensityFunction.NoiseHolder(noises.getOrThrow(AeroliteWorldgen.ISLANDS_NOISE));
         for (ResourceKey<DensityFunction> key : List.of(AeroliteWorldgen.OVERWORLD_ISLANDS, AeroliteWorldgen.NETHER_ISLANDS, AeroliteWorldgen.END_ISLANDS)) {
-            context.register(key, new VoronoiIslands(noise, CELL_SIZE, CELL_HEIGHT, LAYER_MIN_Y, JITTER, FILL_MIN, FILL_MAX, EMPTY_CHANCE));
+            context.register(key, new VoronoiIslands(noise, CELL_SIZE, CELL_HEIGHT, LAYER_MIN_Y, JITTER, FILL_MIN, FILL_MAX, EMPTY_CHANCE,
+                    DISTORTION, DISTORTION_SCALE, DISTORTION_OCTAVES));
         }
     }
 
@@ -75,16 +83,17 @@ public final class AeroliteIslandEntries {
         HolderGetter<DensityFunction> functions = context.lookup(Registries.DENSITY_FUNCTION);
         HolderGetter<NormalNoise.NoiseParameters> noises = context.lookup(Registries.NOISE);
         context.register(AeroliteWorldgen.ISLANDS_OVERWORLD_NOISE,
-                settings(-64, 384, Blocks.STONE.defaultBlockState(), -64, overworldRouter(functions, noises), SurfaceRuleData.overworld()));
+                settings(-64, 384, Blocks.STONE.defaultBlockState(), -64, overworldRouter(functions, noises, -64), SurfaceRuleData.overworld()));
         context.register(AeroliteWorldgen.ISLANDS_NETHER_NOISE,
-                settings(0, 256, Blocks.NETHERRACK.defaultBlockState(), 0, netherRouter(functions, noises), SurfaceRuleData.nether()));
+                settings(0, 256, Blocks.NETHERRACK.defaultBlockState(), 0, netherRouter(functions, noises, 0), SurfaceRuleData.nether()));
         context.register(AeroliteWorldgen.ISLANDS_END_NOISE,
-                settings(0, 256, Blocks.END_STONE.defaultBlockState(), 0, endRouter(functions), SurfaceRuleData.end()));
+                settings(0, 256, Blocks.END_STONE.defaultBlockState(), 0, endRouter(functions, 0), SurfaceRuleData.end()));
     }
 
     /**
      * Noise settings whose final density is the interpolated island density function. The default fluid is air.
      * The noise step samples the final density once per 4x4x4 cell and interpolates. The initial density stays exact.
+     * The initial density holds the surface floor. The vanilla surface rules read it.
      * A sea level at or below Y -54 keeps the noise step from filling the bottom with lava.
      */
     private static NoiseGeneratorSettings settings(int minY, int height, BlockState defaultBlock, int seaLevel, NoiseRouter router, SurfaceRules.RuleSource surfaceRule) {
@@ -103,8 +112,17 @@ public final class AeroliteIslandEntries {
         );
     }
 
+    /**
+     * The initial density: the island density over the surface floor. The floor is a Y gradient from 1 at the bottom of the dimension
+     * to -1 {@value #FLOOR_HEIGHT} blocks up. So a column outside every island has a preliminary surface level at the bottom.
+     * Without it, a surface grid corner outside every island has no preliminary surface level, and the vanilla rules give the island edge no surface.
+     */
+    private static DensityFunction initialDensity(DensityFunction islands, int minY) {
+        return DensityFunctions.max(islands, DensityFunctions.yClampedGradient(minY, minY + FLOOR_HEIGHT, 1.0, -1.0));
+    }
+
     /** The vanilla Overworld climate over the island density. */
-    private static NoiseRouter overworldRouter(HolderGetter<DensityFunction> functions, HolderGetter<NormalNoise.NoiseParameters> noises) {
+    private static NoiseRouter overworldRouter(HolderGetter<DensityFunction> functions, HolderGetter<NormalNoise.NoiseParameters> noises, int minY) {
         // [VANILLACOPY] NoiseRouterData#overworld, the climate functions only; the island density replaces the terrain
         DensityFunction shiftX = function(functions, SHIFT_X);
         DensityFunction shiftZ = function(functions, SHIFT_Z);
@@ -124,7 +142,7 @@ public final class AeroliteIslandEntries {
                 function(functions, NoiseRouterData.EROSION),
                 function(functions, NoiseRouterData.DEPTH),
                 function(functions, NoiseRouterData.RIDGES),
-                islands,
+                initialDensity(islands, minY),
                 terrain,
                 zero,
                 zero,
@@ -133,7 +151,7 @@ public final class AeroliteIslandEntries {
     }
 
     /** The vanilla Nether climate over the island density. */
-    private static NoiseRouter netherRouter(HolderGetter<DensityFunction> functions, HolderGetter<NormalNoise.NoiseParameters> noises) {
+    private static NoiseRouter netherRouter(HolderGetter<DensityFunction> functions, HolderGetter<NormalNoise.NoiseParameters> noises, int minY) {
         // [VANILLACOPY] NoiseRouterData#noNewCaves, the climate functions only; the island density replaces the terrain
         DensityFunction shiftX = function(functions, SHIFT_X);
         DensityFunction shiftZ = function(functions, SHIFT_Z);
@@ -142,17 +160,17 @@ public final class AeroliteIslandEntries {
         DensityFunction islands = function(functions, AeroliteWorldgen.NETHER_ISLANDS);
         DensityFunction terrain = DensityFunctions.interpolated(islands);
         DensityFunction zero = DensityFunctions.zero();
-        return new NoiseRouter(zero, zero, zero, zero, temperature, vegetation, zero, zero, zero, zero, islands, terrain, zero, zero, zero);
+        return new NoiseRouter(zero, zero, zero, zero, temperature, vegetation, zero, zero, zero, zero, initialDensity(islands, minY), terrain, zero, zero, zero);
     }
 
     /** The vanilla End erosion over the island density. The End biome source reads the erosion. */
-    private static NoiseRouter endRouter(HolderGetter<DensityFunction> functions) {
+    private static NoiseRouter endRouter(HolderGetter<DensityFunction> functions, int minY) {
         // [VANILLACOPY] NoiseRouterData#end, the erosion only; the island density replaces the terrain
         DensityFunction erosion = DensityFunctions.cache2d(DensityFunctions.endIslands(0L));
         DensityFunction islands = function(functions, AeroliteWorldgen.END_ISLANDS);
         DensityFunction terrain = DensityFunctions.interpolated(islands);
         DensityFunction zero = DensityFunctions.zero();
-        return new NoiseRouter(zero, zero, zero, zero, zero, zero, zero, erosion, zero, zero, islands, terrain, zero, zero, zero);
+        return new NoiseRouter(zero, zero, zero, zero, zero, zero, zero, erosion, zero, zero, initialDensity(islands, minY), terrain, zero, zero, zero);
     }
 
     public void worldPreset(BootstrapContext<WorldPreset> context) {

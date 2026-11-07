@@ -12,6 +12,7 @@ import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldDimensions;
+import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import tamaized.beanification.Component;
 
 import java.util.LinkedHashMap;
@@ -20,10 +21,11 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The biome edits of the Aerolite Void preset. A dimension of the preset has its vanilla biome source or one fixed biome.
+ * The biome edits of the Aerolite Void preset and the Islands preset. A dimension of the preset has its vanilla biome source or one fixed biome.
  * A rebuilt dimension keeps its dimension type and the noise settings of its noise generator.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
 @Component
 public final class VoidPresetBiomes {
@@ -52,17 +54,17 @@ public final class VoidPresetBiomes {
         return biomes;
     }
 
-    /** The dimensions of the Aerolite Void preset in the registries. */
-    public WorldDimensions presetDimensions(RegistryAccess registries) {
-        return registries.registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(AeroliteWorldgen.PRESET).value().createWorldDimensions();
+    /** The dimensions of the preset in the registries. */
+    public WorldDimensions presetDimensions(RegistryAccess registries, ResourceKey<WorldPreset> preset) {
+        return registries.registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(preset).value().createWorldDimensions();
     }
 
     /**
      * The dimensions with each listed dimension rebuilt. A biome gives a fixed biome source. An empty value gives the biome source of the preset.
      * A dimension keeps the noise settings of its noise generator. A dimension without a noise generator takes the generator settings of the preset.
      */
-    public WorldDimensions withBiomes(RegistryAccess registries, WorldDimensions current, Map<ResourceKey<LevelStem>, Optional<Holder<Biome>>> biomes) {
-        WorldDimensions preset = this.presetDimensions(registries);
+    public WorldDimensions withBiomes(RegistryAccess registries, ResourceKey<WorldPreset> presetKey, WorldDimensions current, Map<ResourceKey<LevelStem>, Optional<Holder<Biome>>> biomes) {
+        WorldDimensions preset = this.presetDimensions(registries, presetKey);
         Map<ResourceKey<LevelStem>, LevelStem> stems = new LinkedHashMap<>(current.dimensions());
         biomes.forEach((stem, biome) -> {
             LevelStem presetStem = preset.dimensions().get(stem);

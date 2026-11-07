@@ -1,24 +1,30 @@
 package us.drullk.aerolite.world.island;
 
+import com.google.gson.JsonElement;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.core.Holder;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
+import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Checks the island density: positive at the site of a filled cell, negative outside the row 0 and in an empty cell.
+ * Also checks the distortion: its shift bound, its identity at zero, its copy and its codec.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
 class VoronoiIslandsTest {
 
     private static final DensityFunction.NoiseHolder NOISE = new DensityFunction.NoiseHolder(Holder.direct(new NormalNoise.NoiseParameters(-7, 1.0)));
-    private static final VoronoiIslands ISLANDS = new VoronoiIslands(NOISE, 256, 128, 0, 0.8, 0.3, 0.9, 0.1);
+    private static final VoronoiIslands ISLANDS = new VoronoiIslands(NOISE, 256, 128, 0, 0.8, 0.3, 0.9, 0.1, 0.0, 64, 3);
+    private static final VoronoiIslands DISTORTED = ISLANDS.withDistortion(12.0);
 
     @Test
     void filledCellIsSolidAtItsSiteAndHollowOnItsWall() {
@@ -75,6 +81,73 @@ class VoronoiIslandsTest {
     @Test
     void contextComputeMatchesThePointCompute() {
         assertEquals(ISLANDS.compute(10, 20, 30), ISLANDS.compute(new DensityFunction.SinglePointContext(10, 20, 30)));
+    }
+
+    @Test
+    void warpShiftsEachAxisByAtMostTheDistortionAndNotAtAll() {
+        Random random = new Random(7);
+        double largest = 0;
+        for (int i = 0; i < 2000; i++) {
+            double x = (random.nextDouble() - 0.5) * 2048;
+            double y = (random.nextDouble() - 0.5) * 512;
+            double z = (random.nextDouble() - 0.5) * 2048;
+            assertEquals(new Vec3(x, y, z), ISLANDS.warp(x, y, z), "A distortion of 0 moved the position");
+            Vec3 warped = DISTORTED.warp(x, y, z);
+            double shift = Math.max(Math.abs(warped.x - x), Math.max(Math.abs(warped.y - y), Math.abs(warped.z - z)));
+            assertTrue(shift <= DISTORTED.distortion(), "A shift of " + shift + " passes the distortion");
+            largest = Math.max(largest, shift);
+        }
+        assertTrue(largest > DISTORTED.distortion() / 4, "The warp shifts too little");
+    }
+
+    @Test
+    void distortedDensityIsTheUndistortedDensityAtTheWarpedPosition() {
+        Random random = new Random(11);
+        int changed = 0;
+        for (int i = 0; i < 2000; i++) {
+            double x = (random.nextDouble() - 0.5) * 2048;
+            double y = (random.nextDouble() - 0.5) * 512;
+            double z = (random.nextDouble() - 0.5) * 2048;
+            Vec3 warped = DISTORTED.warp(x, y, z);
+            assertEquals(ISLANDS.compute(warped.x, warped.y, warped.z), DISTORTED.compute(x, y, z), "The distorted density is not the density at the warped position");
+            if (ISLANDS.compute(x, y, z) != DISTORTED.compute(x, y, z)) {
+                changed++;
+            }
+        }
+        assertTrue(changed > 0, "The distortion changed no density");
+    }
+
+    @Test
+    void withDistortionKeepsTheOtherFieldsAndTheSeed() {
+        assertEquals(12.0, DISTORTED.distortion());
+        assertEquals(ISLANDS.distortionScale(), DISTORTED.distortionScale());
+        assertEquals(ISLANDS.distortionOctaves(), DISTORTED.distortionOctaves());
+        assertEquals(ISLANDS.cellSize(), DISTORTED.cellSize());
+        assertEquals(ISLANDS.cellHeight(), DISTORTED.cellHeight());
+        assertEquals(ISLANDS.layerMinY(), DISTORTED.layerMinY());
+        assertEquals(ISLANDS.jitter(), DISTORTED.jitter());
+        assertEquals(ISLANDS.fillMin(), DISTORTED.fillMin());
+        assertEquals(ISLANDS.fillMax(), DISTORTED.fillMax());
+        assertEquals(ISLANDS.emptyChance(), DISTORTED.emptyChance());
+        assertEquals(ISLANDS.lattice().seed(), DISTORTED.lattice().seed());
+        assertEquals(DISTORTED.compute(5, 60, 9), ISLANDS.withDistortion(12.0).compute(5, 60, 9), "Two copies with one distortion differ");
+        assertNotEquals(DISTORTED.warp(5, 60, 9), ISLANDS.withDistortion(6.0).warp(5, 60, 9), "Two distortions give one warp");
+    }
+
+    @Test
+    void codecRoundTripKeepsEveryField() {
+        JsonElement json = VoronoiIslands.MAP_CODEC.codec().encodeStart(JsonOps.INSTANCE, DISTORTED).getOrThrow();
+        for (String key : new String[] {"noise", "cell_size", "cell_height", "layer_min_y", "jitter", "fill_min", "fill_max", "empty_chance", "distortion", "distortion_scale", "distortion_octaves"}) {
+            assertTrue(json.getAsJsonObject().has(key), "The JSON lacks " + key);
+        }
+        VoronoiIslands parsed = VoronoiIslands.MAP_CODEC.codec().parse(JsonOps.INSTANCE, json).getOrThrow();
+        assertEquals(DISTORTED.distortion(), parsed.distortion());
+        assertEquals(DISTORTED.distortionScale(), parsed.distortionScale());
+        assertEquals(DISTORTED.distortionOctaves(), parsed.distortionOctaves());
+        assertEquals(DISTORTED.cellSize(), parsed.cellSize());
+        assertEquals(DISTORTED.cellHeight(), parsed.cellHeight());
+        assertEquals(DISTORTED.fillMax(), parsed.fillMax());
+        assertEquals(DISTORTED.compute(5, 60, 9), parsed.compute(5, 60, 9), "The parsed function gives another density");
     }
 
 }
