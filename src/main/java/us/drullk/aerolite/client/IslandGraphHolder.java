@@ -13,6 +13,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import tamaized.beanification.Autowired;
 import tamaized.beanification.PostConstruct;
 import us.drullk.aerolite.world.island.GraphSettings;
+import us.drullk.aerolite.world.island.IslandPack;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 
 import javax.annotation.Nullable;
@@ -20,8 +21,9 @@ import javax.annotation.Nullable;
 /**
  * Holds the graphs of the island editor for the open world creation flow. The Islands screen reads and writes them.
  * The first read of a flow loads the router graphs from the dimensions of the world being created.
+ * When the temporary data pack folder of the flow holds an island pack, the first read also restores the graphs from it.
+ * Done in the Islands screen keeps the graphs and writes the island pack through {@link IslandPackApplier}.
  * A new create world screen, the screen "Preparing world data", the title screen and the world list end the flow and drop the graphs.
- * No writer reads the graphs yet.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
@@ -32,14 +34,18 @@ public final class IslandGraphHolder {
     private static final Component PREPARING_WORLD_DATA = Component.translatable("createWorld.preparing");
 
     private final GraphSettings graphSettings;
+    private final IslandPack pack;
+    private final IslandPackApplier applier;
     @Nullable
     private IslandGraphs graphs;
     /** The create world screen of the open flow, or null when no flow is open. */
     @Nullable
     private CreateWorldScreen flow;
 
-    public IslandGraphHolder(@Autowired GraphSettings graphSettings) {
+    public IslandGraphHolder(@Autowired GraphSettings graphSettings, @Autowired IslandPack pack, @Autowired IslandPackApplier applier) {
         this.graphSettings = graphSettings;
+        this.pack = pack;
+        this.applier = applier;
     }
 
     @PostConstruct
@@ -51,6 +57,7 @@ public final class IslandGraphHolder {
     public IslandGraphs graphs(WorldCreationContext context) {
         if (this.graphs == null) {
             this.graphs = this.graphSettings.start(context.selectedDimensions(), context.worldgenLoadContext());
+            this.pack.restore(this.applier.existing(this.flow), this.graphs);
         }
         return this.graphs.copy();
     }
@@ -58,6 +65,12 @@ public final class IslandGraphHolder {
     /** Keeps a copy of the graphs for the flow. */
     public void set(IslandGraphs graphs) {
         this.graphs = graphs.copy();
+    }
+
+    /** Keeps a copy of the graphs for the flow and writes the island pack of the create world screen. */
+    public void done(CreateWorldScreen screen, IslandGraphs graphs) {
+        this.set(graphs);
+        this.applier.apply(screen, graphs);
     }
 
     private void onOpening(ScreenEvent.Opening event) {

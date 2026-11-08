@@ -1,5 +1,6 @@
 package us.drullk.aerolite.world.island.graph;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.DataResult;
 import net.minecraft.resources.ResourceKey;
@@ -23,6 +24,7 @@ import java.util.function.Consumer;
  * Each router graph keeps the router JSON that it loaded from. Dimension default saves the field of that JSON.
  * The positions of the function nodes of each graph are in memory by function node id. The output box has the key {@link GraphLayout#BOX}.
  * An entry that the editor opens without an edit stays in a cache. An edit moves it to the edited function graphs.
+ * The first load of an entry keeps its saved JSON as the start JSON. A restored entry has no start JSON.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
@@ -60,6 +62,7 @@ public final class IslandGraphs {
     private final Map<ResourceKey<Level>, JsonObject> shipped = new HashMap<>();
     private final Map<ResourceLocation, FunctionGraph> edited = new LinkedHashMap<>();
     private final Map<ResourceLocation, FunctionGraph> loaded = new HashMap<>();
+    private final Map<ResourceLocation, JsonElement> start = new HashMap<>();
     private final Map<GraphId, Map<Integer, Sidecar.Position>> positions = new HashMap<>();
 
     /** Adds the router graph of a dimension and the router JSON that dimension default saves. */
@@ -68,12 +71,13 @@ public final class IslandGraphs {
         this.shipped.put(dimension, shippedRouter.deepCopy());
     }
 
-    /** A copy whose graphs and positions are copies. The cache of opened entries stays behind. */
+    /** A copy whose graphs and positions are copies. The cache of opened entries stays behind. The start JSON comes along. */
     public IslandGraphs copy() {
         IslandGraphs copy = new IslandGraphs();
         this.routers.forEach((dimension, graph) -> copy.putRouter(dimension, graph.copy(), this.shipped.get(dimension)));
         this.edited.forEach((entry, graph) -> copy.edited.put(entry, graph.copy()));
         this.positions.forEach((id, map) -> copy.positions.put(id, new HashMap<>(map)));
+        copy.start.putAll(this.start);
         return copy;
     }
 
@@ -111,7 +115,10 @@ public final class IslandGraphs {
             return DataResult.success(graph);
         }
         DataResult<FunctionGraph> load = loader.load(entry);
-        load.ifSuccess(result -> this.loaded.put(entry, result));
+        load.ifSuccess(result -> {
+            this.loaded.put(entry, result);
+            GraphJson.write(result).ifSuccess(json -> this.start.putIfAbsent(entry, json));
+        });
         return load;
     }
 
@@ -126,6 +133,20 @@ public final class IslandGraphs {
         }
         this.loaded.remove(entry);
         this.edited.put(entry, graph);
+    }
+
+    /** Puts a function graph from an island pack as the edited function graph of an entry. The entry loses its start JSON. */
+    public void restoreEdited(ResourceLocation entry, FunctionGraph graph) {
+        this.loaded.remove(entry);
+        this.start.remove(entry);
+        this.edited.put(entry, graph);
+    }
+
+    /** The saved JSON of the first load of an entry, or null for an entry that the flow did not load. */
+    @Nullable
+    public JsonElement startJson(ResourceLocation entry) {
+        JsonElement json = this.start.get(entry);
+        return json == null ? null : json.deepCopy();
     }
 
     /** The positions of the function nodes of a graph, by id. The map is live. */

@@ -1,15 +1,23 @@
 package us.drullk.aerolite.devtools;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.mojang.logging.LogUtils;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.tabs.TabNavigationBar;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.DensityFunctions;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
@@ -18,6 +26,8 @@ import us.drullk.aerolite.client.preview.IslandEditor;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.island.IslandPack;
+import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.island.graph.FieldValue;
@@ -27,11 +37,17 @@ import us.drullk.aerolite.world.island.graph.IslandSettingsFunctionNode;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.stream.Stream;
 
 /**
  * The screenshot probe of the Islands preset. The system property {@value #PROPERTY} turns it on.
@@ -39,9 +55,11 @@ import java.util.function.BooleanSupplier;
  * It opens the islands preview at the radius {@value #PREVIEW_RADIUS}, waits for the build and saves it.
  * Then it saves the island editor: the router graph of the Overworld, the function graph of the Overworld island entry,
  * the palette, the field editor of the selected island function node after a field edit, and the red error of a router constant out of range.
- * It undoes each edit before it goes on.
+ * It keeps the cell size {@value #PROBE_CELL_SIZE} of the field edit and undoes the router edit.
+ * Done in the preview and in the Islands screen write the island pack and reload the world creation context.
  * Then it creates a creative world of that preset with the seed {@value #SEED} and commands on.
  * It accepts the experimental features warning.
+ * In the new world it checks the island pack folder, the cell size of the server registries and the cell size of the first island.
  * It puts the player in spectator mode at the first island of the row 0 and saves a side view and a top view
  * under {@code screenshots/} of the game directory. Then it stops the game.
  *
@@ -72,7 +90,7 @@ public final class IslandsProbe {
     /** The canvas point of the palette. */
     private static final float PALETTE_X = 40;
     private static final float PALETTE_Y = 40;
-    /** The cell size of the field edit. The probe restores the old value after the capture. */
+    /** The cell size of the field edit. The edit stays through Done, so the island pack carries it. */
     private static final int PROBE_CELL_SIZE = 384;
     /** The camera pitch of the editor captures. The editor window covers the low half of the game view. */
     private static final float EDITOR_PITCH = 70;
@@ -80,6 +98,12 @@ public final class IslandsProbe {
     private static final float ROUTER_PAN_Y = -240;
     /** A constant outside the vanilla range of a router output. */
     private static final double OUT_OF_RANGE = 2000000;
+
+    /** The files that the island pack of the probe holds. */
+    private static final List<String> PACK_FILES = List.of(
+            IslandPack.PACK_META,
+            IslandPack.entryPath(Registries.DENSITY_FUNCTION, OVERWORLD_ISLANDS),
+            IslandPack.entrySidecarPath(OVERWORLD_ISLANDS));
 
     private record Step(String name, int delay, BooleanSupplier action) {
     }
@@ -161,13 +185,35 @@ public final class IslandsProbe {
         this.queueEditor();
         this.step("preview done", 1, () -> minecraft.screen instanceof PreviewScreen && SettingsProbe.press(minecraft.screen, "gui.done"));
         this.step("settings done", 10, () -> minecraft.screen instanceof IslandsPresetScreen && SettingsProbe.press(minecraft.screen, "gui.done"));
+        this.step("pack reloaded", 10, () -> {
+            if (!(minecraft.screen instanceof CreateWorldScreen screen)) {
+                return false;
+            }
+            List<String> enabled = screen.getUiState().getSettings().dataConfiguration().dataPacks().getEnabled();
+            LOGGER.info("Islands probe: the enabled data packs after Done are {}", enabled);
+            return enabled.contains(IslandPack.PACK_ID);
+        });
         this.step("create", 10, () -> SettingsProbe.press(minecraft.screen, "selectWorld.create"));
         // A world of a data pack preset shows the experimental features warning before it loads.
         this.step("confirm experimental", 10, () -> minecraft.level != null || minecraft.screen instanceof ConfirmScreen && SettingsProbe.press(minecraft.screen, "gui.yes"));
         this.step("world loaded", 20, () -> minecraft.level != null && minecraft.player != null && minecraft.screen == null && minecraft.getSingleplayerServer() != null);
+        this.step("pack folder", 1, () -> {
+            checkPackFolder(minecraft.getSingleplayerServer());
+            return true;
+        });
+        this.step("pack registries", 1, () -> {
+            checkRegistries(minecraft.getSingleplayerServer());
+            return true;
+        });
         this.step("find island", 1, () -> {
-            this.island = firstIsland(minecraft.getSingleplayerServer());
+            MinecraftServer server = minecraft.getSingleplayerServer();
+            this.island = firstIsland(server);
             LOGGER.info("Islands probe: the first island sits at {} {} {}", this.island.siteX(), this.island.siteY(), this.island.siteZ());
+            int cellSize = IslandSettings.of(islands(server)).cellSize();
+            if (cellSize != PROBE_CELL_SIZE) {
+                throw new IllegalStateException("Pack check (c) failed: the island function of the Overworld has the cell size " + cellSize);
+            }
+            LOGGER.info("Islands probe: pack check (c) passed: the island function of the Overworld has the cell size {}", cellSize);
             minecraft.player.connection.sendCommand("gamemode spectator");
             return true;
         });
@@ -277,15 +323,9 @@ public final class IslandsProbe {
                 && screen.progress().phase() == PreviewBuilder.Phase.DONE);
         this.step("grab field editor", EDITOR_WAIT, () -> {
             SettingsProbe.grabFront("islands-07-field-editor.png");
-            IslandEditor editor = editor();
-            Integer functionNode = editor == null ? null : islandsFunctionNode(editor);
-            if (functionNode != null) {
-                editor.setField(functionNode, "cell_size", new FieldValue.Int(cellSize[0]));
-            }
+            LOGGER.info("Islands probe: the cell size {} changed to {}", cellSize[0], PROBE_CELL_SIZE);
             return true;
         });
-        this.step("restore built", EDITOR_WAIT, () -> Minecraft.getInstance().screen instanceof PreviewScreen screen
-                && screen.progress().phase() == PreviewBuilder.Phase.DONE);
         this.step("break the router", 1, () -> {
             IslandEditor editor = editor();
             if (editor == null) {
@@ -324,8 +364,72 @@ public final class IslandsProbe {
         return true;
     }
 
-    /** The first island of the row 0 along X from the origin. */
-    private static VoronoiLattice.Cell firstIsland(MinecraftServer server) {
+    /** Pack check (a): the world holds the island pack with the expected files. */
+    private static void checkPackFolder(MinecraftServer server) {
+        Path pack = server.getWorldPath(LevelResource.DATAPACK_DIR).resolve(IslandPack.NAME);
+        List<String> files;
+        try (Stream<Path> paths = Files.walk(pack)) {
+            files = paths.filter(Files::isRegularFile).map(path -> pack.relativize(path).toString().replace('\\', '/')).sorted().toList();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Pack check (a) failed: the folder " + pack + " does not list", exception);
+        }
+        LOGGER.info("Islands probe: the island pack {} holds {}", pack, files);
+        if (!files.containsAll(PACK_FILES)) {
+            throw new IllegalStateException("Pack check (a) failed: the island pack lacks one of " + PACK_FILES);
+        }
+        LOGGER.info("Islands probe: pack check (a) passed");
+    }
+
+    /** Pack check (b): the router of the Overworld noise settings of the server reaches an island function of the probe cell size. */
+    private static void checkRegistries(MinecraftServer server) {
+        RegistryAccess registries = server.registryAccess();
+        RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registries);
+        NoiseGeneratorSettings settings = registries.registryOrThrow(Registries.NOISE_SETTINGS).get(OVERWORLD_ISLANDS);
+        if (settings == null) {
+            throw new IllegalStateException("Pack check (b) failed: the server has no noise settings " + OVERWORLD_ISLANDS);
+        }
+        JsonElement router = NoiseGeneratorSettings.DIRECT_CODEC.encodeStart(ops, settings).getOrThrow().getAsJsonObject().get("noise_router");
+        Integer cellSize = cellSize(router, registries, ops, new HashSet<>());
+        if (cellSize == null || cellSize != PROBE_CELL_SIZE) {
+            throw new IllegalStateException("Pack check (b) failed: the router of " + OVERWORLD_ISLANDS + " reaches the cell size " + cellSize);
+        }
+        LOGGER.info("Islands probe: pack check (b) passed: the router of {} reaches voronoi_islands with cell_size {}", OVERWORLD_ISLANDS, cellSize);
+    }
+
+    /** The cell size of the first {@code aerolite:voronoi_islands} object in the JSON. A string follows its density function entry. */
+    @Nullable
+    private static Integer cellSize(JsonElement json, RegistryAccess registries, RegistryOps<JsonElement> ops, Set<String> visited) {
+        if (json.isJsonPrimitive() && json.getAsJsonPrimitive().isString() && visited.add(json.getAsString())) {
+            ResourceLocation id = ResourceLocation.tryParse(json.getAsString());
+            DensityFunction entry = id == null ? null : registries.registryOrThrow(Registries.DENSITY_FUNCTION).get(id);
+            return entry == null ? null : DensityFunction.DIRECT_CODEC.encodeStart(ops, entry).result()
+                    .map(entryJson -> cellSize(entryJson, registries, ops, visited)).orElse(null);
+        }
+        if (json.isJsonObject()) {
+            JsonObject object = json.getAsJsonObject();
+            if (object.has("type") && "aerolite:voronoi_islands".equals(object.get("type").getAsString())) {
+                return object.get("cell_size").getAsInt();
+            }
+            for (Map.Entry<String, JsonElement> field : object.entrySet()) {
+                Integer found = cellSize(field.getValue(), registries, ops, visited);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        if (json.isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray()) {
+                Integer found = cellSize(element, registries, ops, visited);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The island density function of the Overworld of the server. */
+    private static VoronoiIslands islands(MinecraftServer server) {
         DensityFunction function = server.overworld().getChunkSource().randomState().router().finalDensity();
         while (true) {
             if (function instanceof DensityFunctions.HolderHolder holder) {
@@ -339,6 +443,12 @@ public final class IslandsProbe {
         if (!(function instanceof VoronoiIslands islands)) {
             throw new IllegalStateException("The final density of the Overworld is not the island density function");
         }
+        return islands;
+    }
+
+    /** The first island of the row 0 along X from the origin. */
+    private static VoronoiLattice.Cell firstIsland(MinecraftServer server) {
+        VoronoiIslands islands = islands(server);
         for (int ix = 0; ix < 16; ix++) {
             VoronoiLattice.Cell cell = islands.lattice().cell(ix, 0, 0);
             if (islands.hasIsland(cell)) {

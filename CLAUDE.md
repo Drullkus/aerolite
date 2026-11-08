@@ -103,6 +103,8 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Sidecar | The JSON file next to a density function JSON that holds the canvas positions by path. |
 | Path | The field names from the graph output to a function node, joined by `/`. |
 | Dimension default | The state of a router output that keeps the field of the shipped noise settings of the dimension. |
+| Island pack | The world data pack `aerolite_islands`. It holds the graphs of the island editor as density function and noise settings entries. |
+| Start JSON | The saved JSON of a density function entry at its first load in the flow. |
 
 ## Project identity
 
@@ -226,6 +228,9 @@ Rules:
 - `WindowMixin` reduces `getWidth` in framebuffer pixels, `getScreenWidth` in screen coordinates and `getGuiScaledWidth` in GUI units.
 - A mixin gets no bean injection. `WindowMixin` calls `BeanContext.inject` after it finds an open preview screen.
 - `NoiseChunkAccessor` opens the cell sizes and the interpolated block state of a noise chunk. No API fills a chunk from noise without a structure manager.
+- The access transformer `META-INF/accesstransformer.cfg` opens three members of `CreateWorldScreen`: `tempDataPackDir`, `getDataPackSelectionSettings` and `applyNewPackConfig`.
+- The island pack needs them to reload the world creation context. No API or event reloads that context.
+- `applyNewPackConfig` reloads also when the pack list stays the same. `tryApplyNewDataPacks` skips that reload.
 
 ## Package annotations
 
@@ -300,6 +305,7 @@ Data generation writes:
 - With `-Pmute`, the PNG files land in `run-mute/screenshots/`.
 - The system property `aerolite.devtools.islandsProbe` turns on the islands probe, `IslandsProbe`. It saves the Islands screen and the islands preview, creates an Islands world and saves a side view and a top view of the first island.
 - The islands probe also saves the island editor states. The Javadoc of `IslandsProbe` lists them.
+- The islands probe keeps a cell size edit through Done. In the new world it checks the island pack and logs each check.
 - Every run loads the test source set as part of the mod `aerolite`.
 - A stale test class in the IDE output breaks the mod load. After a branch change, run Build > Rebuild Project in IntelliJ IDEA.
 
@@ -1297,9 +1303,9 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The distortion scale slider steps through the powers of two from 8 to 1024. The octaves slider runs from 1 to 8.
 - The sliders edit the island function node of the first router graph that reaches one. See [Island editor](#island-editor).
 - Without such a function node, the sliders start at the first island density function of the preset dimensions.
-- Done writes the graphs to the graph holder and the island settings through `IslandGenerators`. A dimension whose island density function has the settings stays as it is.
-- Any other dimension with an island density function gets direct generator settings. Only its two terrain functions hold the new island density function. The other router functions keep their registry references.
-- The world saves the direct generator settings in `level.dat`.
+- Done writes the biome choices, then the graphs to the graph holder and the island pack. See [Island pack](#island-pack).
+- Done writes no direct generator settings. A direct holder in `level.dat` ignores the island pack.
+- `IslandGenerators` stays for the worlds of 0.5.0, which hold direct generator settings.
 - The footer of the Islands screen holds Done, Preview and Cancel. The Preview button shows only when ImGui loaded.
 - Preview opens the islands preview with a copy of the graphs. Done in the preview sends the copy and the seed text back. Cancel drops them.
 - The islands preview is the preview screen with the graphs. `PreviewScreen.islands` makes it.
@@ -1339,7 +1345,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 
 - The node canvas of the islands preview is the island editor. It opens only in the world creation flow.
 - `IslandGraphHolder` keeps the graphs of the open flow. It resets with the flow, like the settings holder.
-- No writer reads the graphs of the holder yet.
+- The island pack writer reads the graphs of the holder at Done.
 - Each preset dimension with a noise generator has one router graph. Its outputs start on dimension default.
 - The previewed dimension picks the shown router graph.
 - The editor window first shows above the footer buttons of the preview. The footer buttons draw over ImGui.
@@ -1361,6 +1367,29 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The build puts the JSON of each edited entry in the place of its references. This inline serves the preview only.
 - A validator problem or a decode error fails the build. The terrain then keeps the last good build.
 - The field editor shows the validator problems and the build error in red.
+
+### Island pack
+
+- The island pack is the folder `aerolite_islands` in the data pack folder. `IslandPack` writes and reads it.
+- The pack overrides an entry under its own id. So each reference to the entry resolves to the edited graph.
+- An edited function graph writes its density function entry when its saved JSON differs from its start JSON.
+- An entry from a restore has no start JSON. So it writes its entry at each Done.
+- A router graph whose saved router differs from its dimension default writes the noise settings entry that its generator names.
+- That file keeps every other field of the noise settings as the context registries hold them.
+- The folder `aerolite_sidecar` holds the sidecars and the dimension default router of each written router graph. It is no registry folder.
+- The dimension default router of a dimension is `data/aerolite/aerolite_sidecar/dimension_default/<dimension path>.json`.
+- The restore loads the router graph against that file. So a Recreate flow keeps the dimension default of the shipped router.
+- A pack without a written graph is no pack. Done then removes the folder.
+- Done in the Islands screen writes the pack into the temporary data pack folder of the create world screen.
+- Then `IslandPackApplier` reloads the world creation context with the pack as the last enabled pack.
+- The reload parses the dimensions again, so each generator names the noise settings of the new registries.
+- The world creation copies the temporary folder into the world. So the first session uses the pack.
+- The writer puts the partial pack next to the temporary data pack folder. Then it moves the pack into that folder.
+- A failed reload puts back the island pack of the unchanged context and returns to the create world screen.
+- Cancel and Escape in the Islands screen write no pack and remove no pack.
+- The create world screen removes its temporary data pack folder at world creation and at its own Cancel.
+- Recreate copies the world data packs into the temporary folder. The world type then shows the vanilla default.
+- After a pick of the Islands preset, the first read of the graph holder restores the graphs from the pack.
 
 ## Config
 
@@ -1408,6 +1437,7 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - The graph JUnit tests also check the inline step, the slider map, the graph layout and the new field values.
 - `IslandGameTests` checks that a router graph on dimension default fills a chunk like the shipped noise settings.
 - `IslandGameTests` checks that a slider write reaches the built router.
+- `IslandPackTest` checks the island pack content as a pure function of the graphs, and the restore from that content.
 - The shape GameTests check the cross sections, the trusses, the hole and the column web plane. They also check erosion and the one crossing of a horizontal Bridge pillar.
 
 ## AI attribution procedure

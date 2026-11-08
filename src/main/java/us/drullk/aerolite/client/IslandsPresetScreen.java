@@ -4,21 +4,14 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationContext;
-import net.minecraft.core.Holder;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.dimension.LevelStem;
-import net.minecraft.world.level.levelgen.WorldDimensions;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.VoidPresetBiomes;
 import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 
@@ -27,7 +20,7 @@ import java.util.function.UnaryOperator;
  * and the island settings sliders above the dimension rows. The cell boundary distortion slider comes first.
  * The screen edits a copy of the graphs of the graph holder. The sliders edit the first {@code aerolite:voronoi_islands} function node
  * of the first router graph that reaches one. Without such a function node, they start at the island density function of the world.
- * Done writes the graphs to the holder and the island settings to the generators.
+ * Done writes the biome choices to the generators, then the graphs to the holder and the island pack.
  * The Preview button opens the islands preview with a copy of the graphs. Done in the preview sends the copy back.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
@@ -134,16 +127,11 @@ public final class IslandsPresetScreen extends VoidPresetScreen {
                 }).open();
     }
 
-    /** Writes the graphs to the holder, then applies the edits. */
+    /** Applies the edits, then writes the graphs to the holder and the island pack. The pack reloads the context after the biome edit. */
     @Override
     protected void done() {
-        this.tools().graphHolder().set(this.graphs);
         super.done();
-    }
-
-    @Override
-    protected WorldDimensions dimensions(RegistryAccess registries, WorldDimensions current, Map<ResourceKey<LevelStem>, Optional<Holder<Biome>>> biomes) {
-        return this.tools().islands().withSettings(super.dimensions(registries, current, biomes), this.settings);
+        this.tools().graphHolder().done(this.parent(), this.graphs);
     }
 
 }
