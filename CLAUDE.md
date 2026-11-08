@@ -305,7 +305,9 @@ Data generation writes:
 - With `-Pmute`, the PNG files land in `run-mute/screenshots/`.
 - The system property `aerolite.devtools.islandsProbe` turns on the islands probe, `IslandsProbe`. It saves the Islands screen and the islands preview, creates an Islands world and saves a side view and a top view of the first island.
 - The islands probe also saves the island editor states. The Javadoc of `IslandsProbe` lists them.
+- The islands probe also captures the palette, the dimension cycle button, the recreate flow and the reload failure.
 - The islands probe keeps a cell size edit through Done. In the new world it checks the island pack and logs each check.
+- `GlfwInput` drives the installed GLFW callbacks of the game window: cursor, wheel, mouse buttons and keys.
 - Every run loads the test source set as part of the mod `aerolite`.
 - A stale test class in the IDE output breaks the mod load. After a branch change, run Build > Rebuild Project in IntelliJ IDEA.
 
@@ -885,7 +887,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 - `ImGuiPanelFont` adds the panel font on each font event of imgui-mc.
 - Each popup icon renders at the framebuffer pixel size of its row, rounded up to a multiple of 16.
 - A change of that pixel size renders the icon atlas again.
-- The islands preview shows the node canvas window over the game view, left of the panel. See [Island editor](#island-editor).
+- The open island editor shows the node canvas window over the whole game window. See [Island editor](#island-editor).
 - `ImGuiNodeCanvas` owns the imnodes context. It creates the context on the ImGui post load event of imgui-mc.
 - imgui-mc creates no imnodes context.
 - imnodes has no canvas zoom. The node canvas scales the positions, the imnodes style, the item spacing and the font itself.
@@ -1301,7 +1303,9 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The island bottom slider runs over the build height of every dimension in steps of 16.
 - The jitter, fill and empty chance sliders run from 0% to 100% in steps of 5%. A fill slider that passes the other pushes it along.
 - The distortion scale slider steps through the powers of two from 8 to 1024. The octaves slider runs from 1 to 8.
-- The sliders edit the island function node of the first router graph that reaches one. See [Island editor](#island-editor).
+- The Islands screen has a dimension cycle button above the sliders.
+- The sliders edit the router graph of the dimension of that button. See [Island editor](#island-editor).
+- The cycle button lists each dimension whose router graph reaches an island function node.
 - Without such a function node, the sliders start at the first island density function of the preset dimensions.
 - Done writes the biome choices, then the graphs to the graph holder and the island pack. See [Island pack](#island-pack).
 - Done writes no direct generator settings. A direct holder in `level.dat` ignores the island pack.
@@ -1351,7 +1355,22 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - A shipped constant opens as a constant function node.
 - A shipped reference opens as a reference node, for example `aerolite:islands/overworld`.
 - The previewed dimension picks the shown router graph.
-- The editor window first shows above the footer buttons of the preview. The footer buttons draw over ImGui.
+- The editor starts closed in each islands preview.
+- The Node Editor button of the Islands section of the panel opens the editor.
+- The cross on the title bar closes the editor.
+- Each open puts the window over the whole game window, inside the margin `ImGuiNodeCanvas.MARGIN`.
+- While open, the window moves and resizes freely. The next open puts it back at the margin.
+- Escape closes the editor first. The next Escape closes the preview.
+- A focused text field takes the first Escape. The editor then stays open.
+- While the editor is open, the preview screen ignores the mouse and each key except Escape.
+- While the editor is open, the pan, the view gizmo and the panel take no input.
+- The footer buttons of the preview hide while the editor is open.
+- The editor window background is opaque.
+- A function node with a problem has a red title bar.
+- The problem text of a function node shows only while that function node is selected.
+- A problem without a function node shows under the fields.
+- The notice line under the problems names no error.
+- The build error splits into lines by path. Each line goes to the function node at its path.
 - The router box holds one input pin per router field. An unlinked pin shows Dimension default or its constant.
 - Open on a reference node shows the function graph of its entry. Back returns to the router graph.
 - An entry without an edit loads from the density function registry of the creation context.
@@ -1359,7 +1378,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The field editor right of the canvas edits the selected function node. The range of the field clamps the input.
 - A splitter between the canvas and the field editor sets the field editor width. Half the window caps it.
 - The splitter writes the field editor width to the client config on release. `AeroliteClientConfig` holds its bounds.
-- The editor window is never narrower than two least field editor widths, unless the game view is narrower.
+- The editor window is never narrower than two least field editor widths, unless the game window is narrower.
 - The wheel over the palette does not zoom the canvas.
 - A field label wider than the label column takes its own line. Its field starts the next line.
 - The scroll wheel over the canvas zooms the canvas around the cursor.
@@ -1400,10 +1419,14 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The island pack is the folder `aerolite_islands` in the data pack folder. `IslandPack` writes and reads it.
 - The pack overrides an entry under its own id. So each reference to the entry resolves to the edited graph.
 - An edited function graph writes its density function entry when its saved JSON differs from its start JSON.
-- An entry from a restore has no start JSON. So it writes its entry at each Done.
+- Each written entry also writes its start JSON under `aerolite_sidecar/start_json`.
+- A restored entry takes the start JSON of its pack.
+- A restored entry whose saved JSON equals its start JSON writes no file.
+- A recreated pack without a difference from the start is removed at Done.
 - A router graph whose saved router differs from its dimension default writes the noise settings entry that its generator names.
 - That file keeps every other field of the noise settings as the context registries hold them.
 - The folder `aerolite_sidecar` holds the sidecars and the dimension default router of each written router graph. It is no registry folder.
+- The field `router` of a router sidecar holds the position of the router box.
 - The dimension default router of a dimension is `data/aerolite/aerolite_sidecar/dimension_default/<dimension path>.json`.
 - The restore takes that file as the dimension default of the router graph. So a Recreate flow keeps the dimension default of the shipped router.
 - A pack without a written graph is no pack. Done then removes the folder.
@@ -1413,9 +1436,13 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The world creation copies the temporary folder into the world. So the first session uses the pack.
 - The writer puts the partial pack next to the temporary data pack folder. Then it moves the pack into that folder.
 - A failed reload puts back the island pack of the unchanged context and returns to the create world screen.
+- `IslandPackApplier` takes its reload as an injected `IslandPackApplier.ReloadStep`.
 - Cancel and Escape in the Islands screen write no pack and remove no pack.
 - The create world screen removes its temporary data pack folder at world creation and at its own Cancel.
-- Recreate copies the world data packs into the temporary folder. The world type then shows the vanilla default.
+- Recreate copies the world data packs into the temporary folder.
+- `RecreatePreset` then picks Aerolite Islands when the copied packs hold the island pack.
+- Else it picks Aerolite Void when the copied packs hold the world pillar pack.
+- A recreated world loses its biome choices. The vanilla world type setter replaces the dimensions.
 - After a pick of the Islands preset, the first read of the graph holder restores the graphs from the pack.
 
 ## Config
@@ -1494,5 +1521,5 @@ The repository owner cites AI-generated work, so every session Claude works in m
 When a new question appears, add it here and ask the user before you implement it.
 
 - The capacity of `PatternCache` and of `ChaosScenes`. The owner has not picked the cache sizes.
-- The sliders of the Islands screen edit the island function node of the first router graph only. Done applies them to every dimension. The owner has not picked the rule for the other router graphs.
+- A failed reload keeps the graphs of the failed Done in the graph holder. The owner has not picked the rule.
 - The patch area of the patterns on a Bridge ring. Chaos paints no patch area there. Bricks paints only the outer columns there. The owner has not picked the rule.
