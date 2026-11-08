@@ -20,6 +20,7 @@ import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.island.graph.FunctionGraph;
 import us.drullk.aerolite.world.island.graph.FunctionNodeGraph;
 import us.drullk.aerolite.world.island.graph.GraphJson;
+import us.drullk.aerolite.world.island.graph.GraphLayout;
 import us.drullk.aerolite.world.island.graph.GraphProblem;
 import us.drullk.aerolite.world.island.graph.GraphValidator;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
@@ -48,9 +49,11 @@ import java.util.stream.Stream;
  * An edited function graph writes its density function entry under its own id. So the pack overrides the shipped entry.
  * An edited function graph whose saved JSON equals its start JSON writes no file.
  * Each written graph gets a sidecar under {@value #SIDECAR}. A changed router graph also keeps its dimension default router there.
+ * Each written entry with a start JSON also keeps that start JSON there. So a restored entry compares against the start of the first flow.
  * The game reads no registry from {@value #SIDECAR}.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 @Component
 public final class IslandPack {
@@ -67,6 +70,7 @@ public final class IslandPack {
     private static final String ROUTER_SIDECAR = "noise_router";
     private static final String ENTRY_SIDECAR = "density_function";
     private static final String DIMENSION_DEFAULT = "dimension_default";
+    private static final String START_JSON = "start_json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Pattern DENSITY_FUNCTION_FILE = Pattern.compile(
             "data/([^/]+)/" + Pattern.quote(Registries.elementsDirPath(Registries.DENSITY_FUNCTION)) + "/(.+)\\.json");
@@ -81,7 +85,7 @@ public final class IslandPack {
     /**
      * The files of the pack by path inside the pack. The map is empty when no graph differs from its start.
      * A router graph differs when its saved router differs from its dimension default router.
-     * An edited function graph differs when its saved JSON differs from its start JSON. A restored entry has no start JSON, so it differs.
+     * An edited function graph differs when its saved JSON differs from its start JSON. An entry without a start JSON differs.
      * A validator problem, a save error or a changed router graph without a noise settings entry is the error of the result.
      */
     public DataResult<Map<String, JsonElement>> files(IslandGraphs graphs, Map<ResourceKey<Level>, NoiseSettingsEntry> settings,
@@ -126,11 +130,15 @@ public final class IslandPack {
                 return written.map(ignored -> Map.<String, JsonElement>of());
             }
             JsonElement json = written.getOrThrow();
-            if (json.equals(graphs.startJson(id))) {
+            JsonElement start = graphs.startJson(id);
+            if (json.equals(start)) {
                 continue;
             }
             files.put(entryPath(Registries.DENSITY_FUNCTION, id), json);
             files.put(entrySidecarPath(id), sidecarJson(graphs.sidecar(new IslandGraphs.GraphId.Entry(id), edited.getValue())));
+            if (start != null) {
+                files.put(startJsonPath(id), start);
+            }
         }
         if (files.isEmpty()) {
             return DataResult.success(Map.of());
@@ -146,6 +154,7 @@ public final class IslandPack {
      * A dimension with a dimension default router in the pack loads its router graph again, with that router as its dimension default.
      * Each output of that router graph links to the function nodes of the router of the pack.
      * Each density function entry of the pack becomes an edited function graph. Each sidecar gives the positions of its graph.
+     * A router sidecar also gives the position of the router box. The start JSON file of an entry becomes its start JSON.
      */
     public void restore(Map<String, JsonElement> files, IslandGraphs graphs) {
         for (ResourceKey<Level> dimension : graphs.dimensions()) {
@@ -158,7 +167,7 @@ public final class IslandPack {
             router.ifError(error -> Aerolite.LOGGER.warn("The island pack router of {} does not load: {}", dimension.location(), error.message()));
             router.ifSuccess(graph -> {
                 graphs.putRouter(dimension, graph, base.getAsJsonObject());
-                applySidecar(files.get(routerSidecarPath(dimension)), graph, graphs.positions(new IslandGraphs.GraphId.Router(dimension)));
+                applySidecar(files.get(routerSidecarPath(dimension)), graph, graphs.positions(new IslandGraphs.GraphId.Router(dimension)), true);
             });
         }
         for (Map.Entry<String, JsonElement> file : files.entrySet()) {
@@ -171,7 +180,11 @@ public final class IslandPack {
             graph.ifError(error -> Aerolite.LOGGER.warn("The island pack entry {} does not load: {}", id, error.message()));
             graph.ifSuccess(loaded -> {
                 graphs.restoreEdited(id, loaded);
-                applySidecar(files.get(entrySidecarPath(id)), loaded, graphs.positions(new IslandGraphs.GraphId.Entry(id)));
+                JsonElement start = files.get(startJsonPath(id));
+                if (start != null) {
+                    graphs.setStartJson(id, start);
+                }
+                applySidecar(files.get(entrySidecarPath(id)), loaded, graphs.positions(new IslandGraphs.GraphId.Entry(id)), false);
             });
         }
     }
@@ -241,6 +254,11 @@ public final class IslandPack {
         return "data/" + id.getNamespace() + "/" + SIDECAR + "/" + ENTRY_SIDECAR + "/" + id.getPath() + ".json";
     }
 
+    /** The path inside the pack of the start JSON of a density function entry. */
+    public static String startJsonPath(ResourceLocation id) {
+        return "data/" + Aerolite.MODID + "/" + SIDECAR + "/" + START_JSON + "/" + id.getNamespace() + "/" + id.getPath() + ".json";
+    }
+
     /** The path inside the pack of the sidecar of the router graph of a dimension. */
     public static String routerSidecarPath(ResourceKey<Level> dimension) {
         return "data/" + Aerolite.MODID + "/" + SIDECAR + "/" + ROUTER_SIDECAR + "/" + dimension.location().getPath() + ".json";
@@ -251,7 +269,8 @@ public final class IslandPack {
         return "data/" + Aerolite.MODID + "/" + SIDECAR + "/" + DIMENSION_DEFAULT + "/" + dimension.location().getPath() + ".json";
     }
 
-    private static void applySidecar(@Nullable JsonElement json, FunctionNodeGraph graph, Map<Integer, Sidecar.Position> positions) {
+    /** Puts the positions of a sidecar into a graph. Only a router graph takes the field {@code router}. */
+    private static void applySidecar(@Nullable JsonElement json, FunctionNodeGraph graph, Map<Integer, Sidecar.Position> positions, boolean router) {
         if (json == null) {
             return;
         }
@@ -260,6 +279,9 @@ public final class IslandPack {
                 .ifSuccess(sidecar -> {
                     positions.clear();
                     positions.putAll(sidecar.apply(graph));
+                    if (router) {
+                        sidecar.router().ifPresent(box -> positions.put(GraphLayout.BOX, box));
+                    }
                 });
     }
 

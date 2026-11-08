@@ -38,11 +38,20 @@ import java.util.Map;
  * Writes the island pack into the temporary data pack folder of a create world screen and reloads its world creation context.
  * The reload re-reads the dimensions against the new registries, so the generators name the noise settings of the pack.
  * The world creation copies that folder into the world, so the first session already uses the pack.
+ * The reload is a {@link ReloadStep}. A failed reload puts the pack of the unchanged context back into the folder.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class IslandPackApplier {
+
+    /** The reload of the world creation context after a change of the pack folder. */
+    @FunctionalInterface
+    public interface ReloadStep {
+        /** Starts the reload. The reload calls {@code onFailure} when the context does not load. */
+        void reload(boolean withPack, Runnable onFailure);
+    }
 
     private final IslandPack pack;
     private final GraphSettings graphSettings;
@@ -69,41 +78,55 @@ public final class IslandPackApplier {
         if (selection == null) {
             return;
         }
-        Path folder = selection.getFirst();
+        PackRepository repository = selection.getSecond();
+        ReloadStep reload = (withPack, onFailure) -> {
+            repository.reload();
+            List<String> enabled = new ArrayList<>(current.dataPacks().getEnabled());
+            enabled.remove(IslandPack.PACK_ID);
+            if (withPack) {
+                // The last enabled pack wins, so the island pack overrides the mod data.
+                enabled.add(IslandPack.PACK_ID);
+            }
+            List<String> disabled = repository.getAvailableIds().stream().filter(id -> !enabled.contains(id)).toList();
+            WorldDataConfiguration configuration = new WorldDataConfiguration(new DataPackConfig(enabled, disabled), current.enabledFeatures());
+            screen.applyNewPackConfig(repository, configuration, ignored -> onFailure.run());
+        };
+        this.writeAndReload(selection.getFirst(), files, reload, () -> Minecraft.getInstance().setScreen(screen));
+    }
+
+    /**
+     * Writes or removes the pack in the data pack folder, then runs the reload when the folder changed.
+     * A failed reload writes the pack of the folder before this call again, then runs {@code afterFailure}.
+     * Gives true when the reload started.
+     */
+    public boolean writeAndReload(Path folder, Map<String, JsonElement> files, ReloadStep reload, Runnable afterFailure) {
         Map<String, JsonElement> previous = this.pack.read(folder.resolve(IslandPack.NAME));
         boolean changed;
         try {
             changed = this.pack.write(folder, files);
         } catch (IOException exception) {
             Aerolite.LOGGER.error("The write of the island pack to {} failed", folder, exception);
-            return;
+            return false;
         }
         if (!changed) {
-            return;
+            return false;
         }
         Aerolite.LOGGER.info("{} the island pack in {}. The world creation context reloads.", files.isEmpty() ? "Removed" : "Wrote", folder);
-        PackRepository repository = selection.getSecond();
-        repository.reload();
-        List<String> enabled = new ArrayList<>(current.dataPacks().getEnabled());
-        enabled.remove(IslandPack.PACK_ID);
-        if (!files.isEmpty()) {
-            // The last enabled pack wins, so the island pack overrides the mod data.
-            enabled.add(IslandPack.PACK_ID);
-        }
-        List<String> disabled = repository.getAvailableIds().stream().filter(id -> !enabled.contains(id)).toList();
-        WorldDataConfiguration configuration = new WorldDataConfiguration(new DataPackConfig(enabled, disabled), current.enabledFeatures());
-        screen.applyNewPackConfig(repository, configuration, ignored -> this.onFailure(screen, folder, previous));
+        reload.reload(!files.isEmpty(), () -> {
+            this.onFailure(folder, previous);
+            afterFailure.run();
+        });
+        return true;
     }
 
     /** The vanilla failure screen calls back here. The folder gets the pack of the unchanged context again. */
-    private void onFailure(CreateWorldScreen screen, Path folder, Map<String, JsonElement> previous) {
+    private void onFailure(Path folder, Map<String, JsonElement> previous) {
         Aerolite.LOGGER.error("The world creation context did not load the island pack. The island pack in {} returns to its state before Done", folder);
         try {
             this.pack.write(folder, previous);
         } catch (IOException exception) {
             Aerolite.LOGGER.error("The return of the island pack in {} failed", folder, exception);
         }
-        Minecraft.getInstance().setScreen(screen);
     }
 
     /** The noise settings entry that the generator of each preset dimension names, encoded with the registries of the context. */

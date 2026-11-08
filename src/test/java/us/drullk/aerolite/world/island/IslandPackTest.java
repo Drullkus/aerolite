@@ -1,5 +1,6 @@
 package us.drullk.aerolite.world.island;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.island.graph.FunctionGraph;
 import us.drullk.aerolite.world.island.graph.FunctionNode;
 import us.drullk.aerolite.world.island.graph.GraphJson;
+import us.drullk.aerolite.world.island.graph.GraphLayout;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
@@ -21,6 +23,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the content of the island pack as a pure function of the graphs, and the restore of graphs from that content.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 class IslandPackTest {
 
@@ -43,6 +50,8 @@ class IslandPackTest {
     private static final String ENTRY_SIDECAR_PATH = "data/aerolite/aerolite_sidecar/density_function/islands/overworld.json";
     private static final String ROUTER_SIDECAR_PATH = "data/aerolite/aerolite_sidecar/noise_router/overworld.json";
     private static final String DIMENSION_DEFAULT_PATH = "data/aerolite/aerolite_sidecar/dimension_default/overworld.json";
+    private static final String START_JSON_PATH = "data/aerolite/aerolite_sidecar/start_json/aerolite/islands/overworld.json";
+    private static final Sidecar.Position BOX_POSITION = new Sidecar.Position(700, -20);
     private static final IslandSettings OTHER = new IslandSettings(384, 96, -32, 0.25, 0.1, 0.7, 0.35, 6.0, 128, 2);
     private static final double BARRIER = 0.5;
     private static final Sidecar.Position ROOT_POSITION = new Sidecar.Position(30, 40);
@@ -212,6 +221,149 @@ class IslandPackTest {
         assertEquals(ROOT_POSITION, restored.positions(new IslandGraphs.GraphId.Entry(ISLANDS)).get(root));
         assertEquals(OTHER, restored.islands(OVERWORLD, loader()).orElseThrow());
         assertEquals(files, this.files(restored), "The restored graphs write another pack");
+    }
+
+    @Test
+    void routerBoxPositionRoundTripsThroughTheRouterSidecar() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        RouterGraph editedRouter = edited.router(OVERWORLD);
+        assertNotNull(editedRouter);
+        unlink(editedRouter, "barrier", new RouterGraph.Constant(BARRIER));
+        edited.positions(new IslandGraphs.GraphId.Router(OVERWORLD)).put(GraphLayout.BOX, BOX_POSITION);
+        assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
+        edited.positions(new IslandGraphs.GraphId.Entry(ISLANDS)).put(GraphLayout.BOX, BOX_POSITION);
+        Map<String, JsonElement> files = this.files(edited);
+        JsonObject router = files.get(ROUTER_SIDECAR_PATH).getAsJsonObject().getAsJsonObject("router");
+        assertNotNull(router, "The router sidecar has no router field");
+        assertEquals(BOX_POSITION.x(), router.get("x").getAsFloat());
+        assertEquals(BOX_POSITION.y(), router.get("y").getAsFloat());
+        assertFalse(files.get(ENTRY_SIDECAR_PATH).getAsJsonObject().has("router"), "The entry sidecar has a router field");
+
+        IslandGraphs restored = graphs(files.get(SETTINGS_PATH).getAsJsonObject().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertEquals(BOX_POSITION, restored.positions(new IslandGraphs.GraphId.Router(OVERWORLD)).get(GraphLayout.BOX),
+                "The restore did not place the router box");
+        assertEquals(files, this.files(restored), "The restored graphs write another pack");
+    }
+
+    @Test
+    void routerSidecarWithoutRouterFieldStillLoads() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        RouterGraph editedRouter = edited.router(OVERWORLD);
+        assertNotNull(editedRouter);
+        unlink(editedRouter, "barrier", new RouterGraph.Constant(BARRIER));
+        Map<String, JsonElement> files = new LinkedHashMap<>(this.files(edited));
+        assertFalse(files.get(ROUTER_SIDECAR_PATH).getAsJsonObject().has("router"), "A router box without a position wrote a router field");
+        IslandGraphs restored = graphs(files.get(SETTINGS_PATH).getAsJsonObject().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertFalse(restored.positions(new IslandGraphs.GraphId.Router(OVERWORLD)).containsKey(GraphLayout.BOX), "The restore invented a router box position");
+    }
+
+    @Test
+    void startJsonIsWrittenAndRestored() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
+        JsonElement start = edited.startJson(ISLANDS);
+        assertNotNull(start, "The first load kept no start JSON");
+        Map<String, JsonElement> files = this.files(edited);
+        assertEquals(start, files.get(START_JSON_PATH), "The pack holds another start JSON");
+        assertEquals(START_JSON_PATH, IslandPack.startJsonPath(ISLANDS));
+
+        IslandGraphs restored = graphs(settings().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertEquals(start, restored.startJson(ISLANDS), "The restore did not give the entry its start JSON");
+        assertEquals(files, this.files(restored), "The restored graphs write another pack");
+    }
+
+    @Test
+    void restoredEntrySetBackToItsStartWritesNoFile() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        IslandSettings start = edited.islands(OVERWORLD, loader()).orElseThrow();
+        assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
+        Map<String, JsonElement> files = this.files(edited);
+
+        IslandGraphs restored = graphs(settings().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertTrue(restored.setIslands(OVERWORLD, start, loader()));
+        assertTrue(this.files(restored).isEmpty(), "A restored entry equal to its start JSON wrote a pack");
+    }
+
+    @Test
+    void olderPackWithoutStartJsonStillDiffers() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        IslandSettings start = edited.islands(OVERWORLD, loader()).orElseThrow();
+        assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
+        Map<String, JsonElement> files = new LinkedHashMap<>(this.files(edited));
+        assertNotNull(files.remove(START_JSON_PATH), "The pack holds no start JSON");
+
+        IslandGraphs restored = graphs(settings().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertTrue(restored.setIslands(OVERWORLD, start, loader()));
+        Map<String, JsonElement> again = this.files(restored);
+        assertTrue(again.containsKey(ENTRY_PATH), "A restored entry without a start JSON wrote no file");
+        assertFalse(again.containsKey(START_JSON_PATH), "An entry without a start JSON wrote a start JSON file");
+    }
+
+    @Test
+    void newEntryWritesTheRegistryEntryAsItsStartJson() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
+        JsonElement registry = GraphJson.write(GraphJson.readFunction(generated(ENTRY_PATH)).getOrThrow()).getOrThrow();
+        Map<String, JsonElement> files = this.files(edited);
+        assertEquals(registry, files.get(START_JSON_PATH), "The start JSON of a new entry is not its registry entry");
+        assertFalse(registry.equals(files.get(ENTRY_PATH)), "The edited entry equals its registry entry");
+    }
+
+    @Test
+    void entrySidecarWithRouterFieldGivesNoBoxPosition() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
+        Map<String, JsonElement> files = new LinkedHashMap<>(this.files(edited));
+        JsonObject sidecar = files.get(ENTRY_SIDECAR_PATH).getAsJsonObject().deepCopy();
+        JsonObject box = new JsonObject();
+        box.addProperty("x", BOX_POSITION.x());
+        box.addProperty("y", BOX_POSITION.y());
+        sidecar.add("router", box);
+        files.put(ENTRY_SIDECAR_PATH, sidecar);
+
+        IslandGraphs restored = graphs(settings().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertTrue(restored.edited().containsKey(ISLANDS), "The entry with a router field did not restore");
+        assertFalse(restored.positions(new IslandGraphs.GraphId.Entry(ISLANDS)).containsKey(GraphLayout.BOX),
+                "The entry graph took the router field of its sidecar");
+    }
+
+    @Test
+    void startJsonCompareIgnoresTheKeySequence() {
+        IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
+        IslandSettings start = edited.islands(OVERWORLD, loader()).orElseThrow();
+        assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
+        Map<String, JsonElement> files = new LinkedHashMap<>(this.files(edited));
+        JsonElement reversed = reversed(files.get(START_JSON_PATH));
+        assertFalse(reversed.toString().equals(files.get(START_JSON_PATH).toString()), "The reversed start JSON keeps the key sequence");
+        files.put(START_JSON_PATH, reversed);
+
+        IslandGraphs restored = graphs(settings().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertTrue(restored.setIslands(OVERWORLD, start, loader()));
+        assertTrue(this.files(restored).isEmpty(), "A start JSON in another key sequence counts as a change");
+    }
+
+    /** A copy of the JSON with the keys of each object in reversed sequence. */
+    private static JsonElement reversed(JsonElement json) {
+        if (json.isJsonArray()) {
+            JsonArray array = new JsonArray();
+            json.getAsJsonArray().forEach(element -> array.add(reversed(element)));
+            return array;
+        }
+        if (!json.isJsonObject()) {
+            return json.deepCopy();
+        }
+        List<Map.Entry<String, JsonElement>> entries = new ArrayList<>(json.getAsJsonObject().entrySet());
+        Collections.reverse(entries);
+        JsonObject object = new JsonObject();
+        entries.forEach(entry -> object.add(entry.getKey(), reversed(entry.getValue())));
+        return object;
     }
 
 }

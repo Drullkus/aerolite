@@ -46,6 +46,7 @@
   "createWorld.customize.aerolite.interior_block": "Interior",
   "createWorld.customize.aerolite.island_bottom": "Island Bottom: Y %s",
   "createWorld.customize.aerolite.islands": "Islands",
+  "createWorld.customize.aerolite.islands.dimension": "Dimension",
   "createWorld.customize.aerolite.islands.title": "Aerolite Islands",
   "createWorld.customize.aerolite.jitter": "Jitter: %s",
   "createWorld.customize.aerolite.jitter_tooltip": "The offset range of each cell point",

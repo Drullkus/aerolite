@@ -24,9 +24,10 @@ import java.util.function.Consumer;
  * Each router graph keeps the router JSON that it loaded from. Dimension default saves the field of that JSON.
  * The positions of the function nodes of each graph are in memory by function node id. The output box has the key {@link GraphLayout#BOX}.
  * An entry that the editor opens without an edit stays in a cache. An edit moves it to the edited function graphs.
- * The first load of an entry keeps its saved JSON as the start JSON. A restored entry has no start JSON.
+ * The first load of an entry keeps its saved JSON as the start JSON. A restored entry takes the start JSON of its pack, if the pack holds one.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public final class IslandGraphs {
 
@@ -142,6 +143,11 @@ public final class IslandGraphs {
         this.edited.put(entry, graph);
     }
 
+    /** Sets the start JSON of an entry, for example the start JSON that an island pack keeps for a restored entry. */
+    public void setStartJson(ResourceLocation entry, JsonElement json) {
+        this.start.put(entry, json.deepCopy());
+    }
+
     /** The saved JSON of the first load of an entry, or null for an entry that the flow did not load. */
     @Nullable
     public JsonElement startJson(ResourceLocation entry) {
@@ -154,9 +160,16 @@ public final class IslandGraphs {
         return this.positions.computeIfAbsent(graph, ignored -> new HashMap<>());
     }
 
-    /** The sidecar of a graph. Detached function nodes have no path, so it holds no position for them. */
+    /**
+     * The sidecar of a graph. Detached function nodes have no path, so it holds no position for them.
+     * The sidecar of a router graph also holds the position of the router box.
+     */
     public Sidecar sidecar(GraphId id, FunctionNodeGraph graph) {
-        return Sidecar.of(graph, this.positions(id));
+        Sidecar sidecar = Sidecar.of(graph, this.positions(id));
+        if (id instanceof GraphId.Router) {
+            return sidecar.withRouter(Optional.ofNullable(this.positions(id).get(GraphLayout.BOX)));
+        }
+        return sidecar;
     }
 
     /** The island settings of the first {@code aerolite:voronoi_islands} function node of the dimension. */
@@ -173,16 +186,6 @@ public final class IslandGraphs {
         }
         found.writer().accept(IslandSettingsFunctionNode.write(found.functionNode(), settings));
         return true;
-    }
-
-    /** The first dimension whose router graph reaches an {@code aerolite:voronoi_islands} function node. */
-    public Optional<ResourceKey<Level>> firstIslandsDimension(EntryLoader loader) {
-        for (ResourceKey<Level> dimension : this.routers.keySet()) {
-            if (this.locate(dimension, loader) != null) {
-                return Optional.of(dimension);
-            }
-        }
-        return Optional.empty();
     }
 
     /**
