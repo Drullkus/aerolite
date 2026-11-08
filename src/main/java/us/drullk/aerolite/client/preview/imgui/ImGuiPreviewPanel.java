@@ -66,6 +66,7 @@ import java.util.function.UnaryOperator;
  * A radio left of each dimension name and the dimension combo of the Preview section select the previewed dimension.
  * The pattern widgets of a variation sit at a half indent under the combo Pattern.
  * The block fields of a variation sit in a tab bar. The tab Blocks holds the fields. Each opened field has a tab with its provider editor.
+ * The islands preview also shows the node canvas window over the game view.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -78,6 +79,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -102,6 +104,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     private final int[] framebufferHeight = new int[1];
     private final int[] slider = new int[1];
     private final ImGuiViewGizmo gizmo = new ImGuiViewGizmo();
+    private final ImGuiNodeCanvas nodeCanvas = new ImGuiNodeCanvas();
     private final ImGuiPanelFont font = new ImGuiPanelFont(FONT_SIZE * FONT_SCALE);
     /** The ImGui default style. It exists after the first drawn frame, when the ImGui natives are loaded. */
     @Nullable
@@ -142,6 +145,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
     public static ImGuiPreviewPanel create() {
         ImGuiPreviewPanel panel = new ImGuiPreviewPanel();
         ImGuiMCEvents.INSTANCE.onRegisterImGuiFonts((atlas, defaultFont, fontScale) -> panel.font.register(atlas));
+        panel.nodeCanvas.register();
         ImGuiMCEvents.INSTANCE.preRenderImGuiEvent(panel::drawPre);
         ImGuiMCEvents.INSTANCE.postRenderImGuiEvent(panel::fixFramebufferScale);
         return panel;
@@ -279,6 +283,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             ImGui.end();
         }
         this.gizmo.draw(screen.camera(), this.width);
+        if (screen.islands() != null) {
+            this.nodeCanvas.draw(this.width);
+        }
     }
 
     /** An invisible button on the left edge. A drag moves the edge. The release saves the width and resizes the game view. */

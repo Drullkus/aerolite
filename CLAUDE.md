@@ -871,6 +871,14 @@ The player sets the pillar settings in the World tab of the create world screen.
 - `ImGuiPanelFont` adds the panel font on each font event of imgui-mc.
 - Each popup icon renders at the framebuffer pixel size of its row, rounded up to a multiple of 16.
 - A change of that pixel size renders the icon atlas again.
+- The islands preview shows the node canvas window over the game view, left of the panel.
+- The node canvas holds placeholder nodes and links. It evaluates nothing and saves nothing.
+- `ImGuiNodeCanvas` owns the imnodes context. It creates the context on the ImGui post load event of imgui-mc.
+- imgui-mc creates no imnodes context.
+- imnodes has no canvas zoom.
+- The middle mouse button pans the node canvas.
+- imgui-mc cancels each mouse press and each scroll while ImGui wants the mouse.
+- A drag inside the node canvas does not turn the camera.
 
 ## Data
 
