@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks the tree rule of a graph, the paths of its function nodes and the sidecar round trip. The graphs are arbitrary structures.
+ * Checks the tree rule of a graph, the tree removal, the paths of its function nodes and the sidecar round trip. The graphs are arbitrary structures.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
@@ -79,6 +79,24 @@ class FunctionNodeGraphTest {
         graph.remove(root);
         assertNull(graph.output());
         assertEquals(graph.functionNodes().size(), graph.detached().size());
+    }
+
+    @Test
+    void removeTreeRemovesTheChainUnderItsRootOnly() {
+        FunctionGraph graph = GraphJson.readFunction(JsonParser.parseString(NESTED)).getOrThrow();
+        int add = graph.output();
+        int abs = graph.paths().get("argument1");
+        int shiftX = graph.paths().get("argument1/argument");
+        int spline = graph.paths().get("argument2");
+        graph.removeTree(abs);
+        assertFalse(graph.functionNodes().containsKey(abs), "The root of the removed tree stays");
+        assertFalse(graph.functionNodes().containsKey(shiftX), "A function node under the removed root stays");
+        assertNull(graph.source(new FunctionNodeGraph.Pin(add, "argument1")), "The pin of the removed root keeps a link");
+        assertEquals(spline, graph.source(new FunctionNodeGraph.Pin(add, "argument2")), "The sibling tree lost its link");
+        assertTrue(graph.detached().isEmpty(), "The removal left a detached function node");
+        graph.removeTree(add);
+        assertNull(graph.output());
+        assertTrue(graph.functionNodes().isEmpty(), "The removal of the whole tree left function nodes");
     }
 
     @Test

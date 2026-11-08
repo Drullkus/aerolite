@@ -33,8 +33,11 @@ import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.island.graph.FieldValue;
 import us.drullk.aerolite.world.island.graph.FunctionNode;
 import us.drullk.aerolite.world.island.graph.FunctionNodeGraph;
+import us.drullk.aerolite.world.island.graph.GraphLayout;
+import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.IslandSettingsFunctionNode;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
+import us.drullk.aerolite.world.island.graph.Sidecar;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -55,7 +58,8 @@ import java.util.stream.Stream;
  * It opens the islands preview at the radius {@value #PREVIEW_RADIUS}, waits for the build and saves it.
  * Then it saves the island editor: the router graph of the Overworld, the function graph of the Overworld island entry,
  * the palette, the field editor of the selected island function node after a field edit, and the red error of a router constant out of range.
- * It keeps the cell size {@value #PROBE_CELL_SIZE} of the field edit and undoes the router edit.
+ * It keeps the cell size {@value #PROBE_CELL_SIZE} of the field edit and links the final density output to its function nodes again.
+ * Then it pans the router graph to the final density chain and saves it.
  * Done in the preview and in the Islands screen write the island pack and reload the world creation context.
  * Then it creates a creative world of that preset with the seed {@value #SEED} and commands on.
  * It accepts the experimental features warning.
@@ -96,6 +100,8 @@ public final class IslandsProbe {
     private static final float EDITOR_PITCH = 70;
     /** The canvas panning that shows the final density row of the router box. */
     private static final float ROUTER_PAN_Y = -240;
+    /** The canvas distance of a panned target from the top left corner of the canvas. */
+    private static final float PAN_MARGIN = 40;
     /** A constant outside the vanilla range of a router output. */
     private static final double OUT_OF_RANGE = 2000000;
 
@@ -326,32 +332,78 @@ public final class IslandsProbe {
             LOGGER.info("Islands probe: the cell size {} changed to {}", cellSize[0], PROBE_CELL_SIZE);
             return true;
         });
+        int[] finalDensity = new int[1];
         this.step("break the router", 1, () -> {
             IslandEditor editor = editor();
-            if (editor == null) {
+            RouterGraph router = editor == null ? null : router(editor);
+            Integer root = router == null ? null : router.linked("final_density");
+            if (root == null) {
                 return false;
             }
+            finalDensity[0] = root;
             editor.back();
-            editor.requestPan(0, ROUTER_PAN_Y);
+            Sidecar.Position box = routerPositions(editor).getOrDefault(GraphLayout.BOX, new Sidecar.Position(0, 0));
+            editor.requestPan(PAN_MARGIN + GraphLayout.COLUMN_WIDTH - box.x(), ROUTER_PAN_Y - box.y());
             editor.setRouterOutput("final_density", new RouterGraph.Constant(OUT_OF_RANGE));
             return editor.buildError() != null;
         });
         this.step("grab error", EDITOR_WAIT, () -> {
             SettingsProbe.grabFront("islands-08-build-error.png");
             IslandEditor editor = editor();
-            if (editor != null) {
-                editor.setRouterOutput("final_density", new RouterGraph.DimensionDefault());
+            RouterGraph router = editor == null ? null : router(editor);
+            if (router != null) {
+                router.set("final_density", new RouterGraph.DimensionDefault());
+                router.link(finalDensity[0], "final_density");
+                editor.changed();
             }
             return true;
         });
         this.step("editor restored", EDITOR_WAIT, () -> {
             IslandEditor editor = editor();
             LOGGER.info("Islands probe: the editor build error after the restore is {}", editor == null ? "absent" : editor.buildError());
+            return editor != null && editor.buildError() == null;
+        });
+        this.step("pan to final density", 1, () -> {
+            IslandEditor editor = editor();
+            RouterGraph router = editor == null ? null : router(editor);
+            if (router == null) {
+                return false;
+            }
+            Map<Integer, Sidecar.Position> positions = routerPositions(editor);
+            float left = Float.POSITIVE_INFINITY;
+            float top = Float.POSITIVE_INFINITY;
+            for (int id : router.paths().entrySet().stream().filter(path -> path.getKey().startsWith("final_density"))
+                    .map(Map.Entry::getValue).toList()) {
+                Sidecar.Position position = positions.get(id);
+                if (position != null) {
+                    left = Math.min(left, position.x());
+                    top = Math.min(top, position.y());
+                }
+            }
+            if (left == Float.POSITIVE_INFINITY) {
+                return false;
+            }
+            editor.requestPan(PAN_MARGIN - left, PAN_MARGIN - top);
+            return true;
+        });
+        this.step("grab router panned", EDITOR_WAIT, () -> {
+            SettingsProbe.grabFront("islands-09-router-panned.png");
             if (Minecraft.getInstance().screen instanceof PreviewScreen screen) {
                 screen.camera().setPitch(pitch[0]);
             }
-            return editor != null && editor.buildError() == null;
+            return true;
         });
+    }
+
+    /** The router graph of the previewed dimension, or null. */
+    @Nullable
+    private static RouterGraph router(IslandEditor editor) {
+        return editor.dimension() == null ? null : editor.graphs().router(editor.dimension());
+    }
+
+    /** The canvas positions of the router graph of the previewed dimension. */
+    private static Map<Integer, Sidecar.Position> routerPositions(IslandEditor editor) {
+        return editor.dimension() == null ? Map.of() : editor.graphs().positions(new IslandGraphs.GraphId.Router(editor.dimension()));
     }
 
     private boolean teleport(double x, double y, double z, VoronoiLattice.Cell facing) {

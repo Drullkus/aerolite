@@ -143,7 +143,8 @@ public final class IslandPack {
 
     /**
      * Puts the content of a pack into graphs that start from registries with that pack.
-     * A dimension with a dimension default router in the pack loads its router graph again against that router.
+     * A dimension with a dimension default router in the pack loads its router graph again, with that router as its dimension default.
+     * Each output of that router graph links to the function nodes of the router of the pack.
      * Each density function entry of the pack becomes an edited function graph. Each sidecar gives the positions of its graph.
      */
     public void restore(Map<String, JsonElement> files, IslandGraphs graphs) {
@@ -153,7 +154,7 @@ public final class IslandPack {
                 continue;
             }
             JsonObject current = graphs.shipped(dimension);
-            DataResult<RouterGraph> router = GraphJson.readRouter(current, base.getAsJsonObject());
+            DataResult<RouterGraph> router = GraphJson.readRouter(current);
             router.ifError(error -> Aerolite.LOGGER.warn("The island pack router of {} does not load: {}", dimension.location(), error.message()));
             router.ifSuccess(graph -> {
                 graphs.putRouter(dimension, graph, base.getAsJsonObject());

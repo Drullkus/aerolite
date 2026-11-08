@@ -10,6 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.island.graph.FunctionGraph;
+import us.drullk.aerolite.world.island.graph.FunctionNode;
 import us.drullk.aerolite.world.island.graph.GraphJson;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
@@ -24,7 +25,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,6 +46,7 @@ class IslandPackTest {
     private static final IslandSettings OTHER = new IslandSettings(384, 96, -32, 0.25, 0.1, 0.7, 0.35, 6.0, 128, 2);
     private static final double BARRIER = 0.5;
     private static final Sidecar.Position ROOT_POSITION = new Sidecar.Position(30, 40);
+    private static final Sidecar.Position ROUTER_POSITION = new Sidecar.Position(50, 60);
 
     private final IslandPack pack = new IslandPack();
 
@@ -75,8 +76,16 @@ class IslandPackTest {
     /** Graphs that start from a router, like the graph holder at the start of a flow. */
     private static IslandGraphs graphs(JsonObject router) {
         IslandGraphs graphs = new IslandGraphs();
-        graphs.putRouter(OVERWORLD, GraphJson.readRouter(router, router).getOrThrow(), router);
+        graphs.putRouter(OVERWORLD, GraphJson.readRouter(router).getOrThrow(), router);
         return graphs;
+    }
+
+    /** Removes the function nodes of a router output and gives it a value without a link. */
+    private static void unlink(RouterGraph router, String field, RouterGraph.Unlinked value) {
+        Integer root = router.linked(field);
+        assertNotNull(root, field + " has no link");
+        router.removeTree(root);
+        router.set(field, value);
     }
 
     private Map<String, JsonElement> files(IslandGraphs graphs) {
@@ -93,7 +102,7 @@ class IslandPackTest {
         IslandGraphs graphs = graphs(settings().getAsJsonObject("noise_router"));
         RouterGraph router = graphs.router(OVERWORLD);
         assertNotNull(router);
-        router.set("barrier", new RouterGraph.Constant(BARRIER));
+        unlink(router, "barrier", new RouterGraph.Constant(BARRIER));
         Map<String, JsonElement> files = this.files(graphs);
         assertTrue(files.containsKey(IslandPack.PACK_META), "The pack has no pack.mcmeta");
         assertTrue(files.containsKey(ROUTER_SIDECAR_PATH), "The pack has no router sidecar");
@@ -141,11 +150,26 @@ class IslandPackTest {
     }
 
     @Test
+    void expandedRouterWritesOnlyWhileAnOutputDiffers() {
+        JsonObject shipped = settings().getAsJsonObject("noise_router");
+        IslandGraphs graphs = graphs(shipped);
+        RouterGraph router = graphs.router(OVERWORLD);
+        assertNotNull(router);
+        assertNotNull(router.linked("final_density"), "The final density output did not load expanded");
+        assertTrue(this.files(graphs).isEmpty(), "An untouched expanded router wrote a pack");
+        unlink(router, "final_density", new RouterGraph.Constant(-1.0));
+        assertTrue(this.files(graphs).containsKey(SETTINGS_PATH), "A constant output wrote no noise settings");
+        int root = GraphJson.readInto(router, shipped.get("final_density"), "final_density").getOrThrow();
+        assertTrue(router.link(root, "final_density"));
+        assertTrue(this.files(graphs).isEmpty(), "A router linked to its shipped function nodes again wrote a pack");
+    }
+
+    @Test
     void routerOutputSetBackToDimensionDefaultWritesNothing() {
         IslandGraphs graphs = graphs(settings().getAsJsonObject("noise_router"));
         RouterGraph router = graphs.router(OVERWORLD);
         assertNotNull(router);
-        router.set("barrier", new RouterGraph.Constant(BARRIER));
+        unlink(router, "barrier", new RouterGraph.Constant(BARRIER));
         assertFalse(this.files(graphs).isEmpty(), "A changed router output wrote no pack");
         router.set("barrier", new RouterGraph.DimensionDefault());
         assertTrue(this.files(graphs).isEmpty(), "A router on dimension default wrote a pack");
@@ -156,22 +180,30 @@ class IslandPackTest {
         IslandGraphs edited = graphs(settings().getAsJsonObject("noise_router"));
         RouterGraph editedRouter = edited.router(OVERWORLD);
         assertNotNull(editedRouter);
-        editedRouter.set("barrier", new RouterGraph.Constant(BARRIER));
+        unlink(editedRouter, "barrier", new RouterGraph.Constant(BARRIER));
         assertTrue(edited.setIslands(OVERWORLD, OTHER, loader()));
         FunctionGraph editedEntry = edited.edited().get(ISLANDS);
         assertNotNull(editedEntry);
         Integer editedRoot = editedEntry.output();
         assertNotNull(editedRoot);
         edited.positions(new IslandGraphs.GraphId.Entry(ISLANDS)).put(editedRoot, ROOT_POSITION);
+        Integer editedFinalDensity = editedRouter.linked("final_density");
+        assertNotNull(editedFinalDensity);
+        edited.positions(new IslandGraphs.GraphId.Router(OVERWORLD)).put(editedFinalDensity, ROUTER_POSITION);
         Map<String, JsonElement> files = this.files(edited);
 
-        // Registries with the pack give the router of the pack, so the start sees it as dimension default.
+        // Registries with the pack give the router of the pack, so the start loads that router.
         IslandGraphs restored = graphs(files.get(SETTINGS_PATH).getAsJsonObject().getAsJsonObject("noise_router"));
         this.pack.restore(files, restored);
         RouterGraph router = restored.router(OVERWORLD);
         assertNotNull(router);
-        assertInstanceOf(RouterGraph.Constant.class, router.output("barrier"));
-        assertInstanceOf(RouterGraph.DimensionDefault.class, router.output("final_density"));
+        Integer barrier = router.linked("barrier");
+        assertNotNull(barrier, "The restored barrier output has no link");
+        assertEquals(FunctionNode.Typed.bareConstant(BARRIER), router.functionNode(barrier));
+        Integer finalDensity = router.linked("final_density");
+        assertNotNull(finalDensity, "The restored final density output has no link");
+        assertEquals(ROUTER_POSITION, restored.positions(new IslandGraphs.GraphId.Router(OVERWORLD)).get(finalDensity),
+                "The router sidecar did not place the expanded function node at its path");
         assertEquals(settings().getAsJsonObject("noise_router"), restored.shipped(OVERWORLD));
         FunctionGraph entry = restored.edited().get(ISLANDS);
         assertNotNull(entry, "The restore did not make the entry an edited function graph");

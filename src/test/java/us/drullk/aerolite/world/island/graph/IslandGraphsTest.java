@@ -16,10 +16,11 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks the island sliders over the graphs: the search through a reference node and through dimension default, the write, and the copy.
+ * Checks the island sliders over the graphs: the search through the expanded router, through a reference node and through dimension default, the write, and the copy.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
@@ -34,8 +35,16 @@ class IslandGraphsTest {
 
     private static IslandGraphs graphs(JsonObject router) {
         IslandGraphs graphs = new IslandGraphs();
-        graphs.putRouter(OVERWORLD, GraphJson.readRouter(router, router).getOrThrow(), router);
+        graphs.putRouter(OVERWORLD, GraphJson.readRouter(router).getOrThrow(), router);
         return graphs;
+    }
+
+    /** Removes the function nodes of a router output, so the output shows dimension default. */
+    private static void toDimensionDefault(RouterGraph router, String field) {
+        Integer root = router.linked(field);
+        assertNotNull(root, field + " has no link");
+        router.removeTree(root);
+        router.set(field, new RouterGraph.DimensionDefault());
     }
 
     private static JsonObject shippedRouter() {
@@ -43,8 +52,11 @@ class IslandGraphsTest {
     }
 
     @Test
-    void slidersFollowTheReferenceOfADimensionDefaultOutput() {
+    void slidersFollowTheReferenceNodeOfTheExpandedRouter() {
         IslandGraphs graphs = graphs(shippedRouter());
+        RouterGraph start = graphs.router(OVERWORLD);
+        assertNotNull(start);
+        int count = start.functionNodes().size();
         assertEquals(IslandSettings.DEFAULT, graphs.islands(OVERWORLD, LOADER).orElseThrow());
         assertTrue(graphs.setIslands(OVERWORLD, OTHER, LOADER));
         assertTrue(graphs.edited().containsKey(ISLANDS), "The write did not edit the entry");
@@ -55,6 +67,35 @@ class IslandGraphsTest {
         assertNotNull(router);
         JsonObject built = GraphInline.router(GraphJson.writeRouter(router, graphs.shipped(OVERWORLD)).getOrThrow(), edited).getOrThrow();
         assertEquals(OTHER.cellSize(), built.getAsJsonObject("final_density").getAsJsonObject("argument").get("cell_size").getAsInt());
+        assertEquals(count, router.functionNodes().size(), "The write changed the function nodes of the router graph");
+        assertEquals(shippedRouter(), GraphJson.writeRouter(router, graphs.shipped(OVERWORLD)).getOrThrow(), "The write changed the router graph");
+    }
+
+    @Test
+    void slidersFollowTheReferenceOfADimensionDefaultOutput() {
+        IslandGraphs graphs = graphs(shippedRouter());
+        RouterGraph router = graphs.router(OVERWORLD);
+        assertNotNull(router);
+        toDimensionDefault(router, "initial_density_without_jaggedness");
+        toDimensionDefault(router, "final_density");
+        assertEquals(IslandSettings.DEFAULT, graphs.islands(OVERWORLD, LOADER).orElseThrow());
+        assertTrue(graphs.setIslands(OVERWORLD, OTHER, LOADER));
+        assertTrue(graphs.edited().containsKey(ISLANDS), "The write did not edit the entry");
+        assertNull(router.linked("final_density"), "The write loaded a dimension default output");
+    }
+
+    @Test
+    void writeToAnInlineLinkedOutputChangesTheRouterGraph() {
+        JsonObject router = shippedRouter();
+        router.getAsJsonObject("initial_density_without_jaggedness").add("argument1", GraphTestData.islandFunction("overworld"));
+        IslandGraphs graphs = graphs(router);
+        RouterGraph graph = graphs.router(OVERWORLD);
+        assertNotNull(graph);
+        int count = graph.functionNodes().size();
+        assertTrue(graphs.setIslands(OVERWORLD, OTHER, LOADER));
+        assertTrue(graphs.edited().isEmpty(), "The write edited the entry instead of the inline function node");
+        assertEquals(count, graph.functionNodes().size(), "The write added function nodes to the router graph");
+        assertEquals(OTHER, graphs.islands(OVERWORLD, LOADER).orElseThrow());
     }
 
     @Test
@@ -65,7 +106,7 @@ class IslandGraphsTest {
         IslandGraphs graphs = graphs(router);
         RouterGraph graph = graphs.router(OVERWORLD);
         assertNotNull(graph);
-        assertTrue(graph.linked("initial_density_without_jaggedness") == null, "The output did not start on dimension default");
+        toDimensionDefault(graph, "initial_density_without_jaggedness");
         assertTrue(graphs.setIslands(OVERWORLD, OTHER, LOADER));
         assertNotNull(graph.linked("initial_density_without_jaggedness"), "The write did not load the output into the router graph");
         assertTrue(graphs.edited().isEmpty(), "The write edited the entry instead of the inline function node");
@@ -79,6 +120,7 @@ class IslandGraphsTest {
         IslandGraphs graphs = graphs(router);
         RouterGraph graph = graphs.router(OVERWORLD);
         assertNotNull(graph);
+        toDimensionDefault(graph, "initial_density_without_jaggedness");
         assertTrue(graphs.setIslands(OVERWORLD, OTHER, LOADER));
         int count = graph.functionNodes().size();
         IslandSettings second = OTHER.withCellHeight(192);
@@ -90,12 +132,13 @@ class IslandGraphsTest {
     @Test
     void secondWriteKeepsOneEditedEntry() {
         IslandGraphs graphs = graphs(shippedRouter());
+        int count = graphs.router(OVERWORLD).functionNodes().size();
         assertTrue(graphs.setIslands(OVERWORLD, OTHER, LOADER));
         FunctionGraph entry = graphs.edited().get(ISLANDS);
         assertTrue(graphs.setIslands(OVERWORLD, OTHER.withCellHeight(192), LOADER));
         assertEquals(1, graphs.edited().size());
         assertTrue(graphs.edited().get(ISLANDS) == entry, "The second write made another edited function graph");
-        assertTrue(graphs.router(OVERWORLD).functionNodes().isEmpty(), "The write added function nodes to the router graph");
+        assertEquals(count, graphs.router(OVERWORLD).functionNodes().size(), "The write added function nodes to the router graph");
     }
 
     @Test

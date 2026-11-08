@@ -106,6 +106,17 @@ public abstract sealed class FunctionNodeGraph permits FunctionGraph, RouterGrap
         this.functionNodes.remove(id);
     }
 
+    /** Removes a function node and each function node that feeds it through links. */
+    public void removeTree(int root) {
+        for (String pin : this.functionNode(root).inputPins()) {
+            Integer child = this.inputLinks.get(new Pin(root, pin));
+            if (child != null) {
+                this.removeTree(child);
+            }
+        }
+        this.remove(root);
+    }
+
     /**
      * Links the output of a function node to an input pin. A link that already feeds the pin goes.
      * Returns false and changes nothing when the output already has a link, the pin does not exist, or the link closes a loop.

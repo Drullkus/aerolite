@@ -1334,7 +1334,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - A save writes only the trees under the graph outputs, in the vanilla field sequence.
 - A router output without a link holds a constant or dimension default. A link hides that value.
 - Dimension default saves a copy of the field of the shipped router. The caller gives the shipped router.
-- A router load gives dimension default to each output whose JSON equals the field of the shipped router.
+- A router load links each output to the function nodes of its JSON.
 - The path of a router root is its field name. The path of a function graph root is the empty string.
 - A load keeps a value out of range. `GraphValidator` reports it with its path.
 - `GraphValidator` reports each function node outside the trees at its id, because the save drops it.
@@ -1346,7 +1346,10 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The node canvas of the islands preview is the island editor. It opens only in the world creation flow.
 - `IslandGraphHolder` keeps the graphs of the open flow. It resets with the flow, like the settings holder.
 - The island pack writer reads the graphs of the holder at Done.
-- Each preset dimension with a noise generator has one router graph. Its outputs start on dimension default.
+- Each preset dimension with a noise generator has one router graph.
+- The router graph opens with each output linked to the function nodes of the shipped router.
+- A shipped constant opens as a constant function node.
+- A shipped reference opens as a reference node, for example `aerolite:islands/overworld`.
 - The previewed dimension picks the shown router graph.
 - The editor window first shows above the footer buttons of the preview. The footer buttons draw over ImGui.
 - The router box holds one input pin per router field. An unlinked pin shows Dimension default or its constant.
@@ -1359,6 +1362,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - A new function node takes zero, or the bound nearest zero. A noise field takes the first noise id.
 - Delete removes the selected links and function nodes. The children of a removed function node stay detached.
 - A function node without a position gets one from the layout of `GraphLayout`.
+- The layout gives each output tree its own band of rows, in output sequence.
 - Positions live in memory by function node id. A detached function node has no path, so its sidecar drops it.
 - The panel sliders edit the first `voronoi_islands` function node under the router outputs of the previewed dimension.
 - That search follows reference nodes and the saved JSON of dimension default outputs.
@@ -1378,7 +1382,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - That file keeps every other field of the noise settings as the context registries hold them.
 - The folder `aerolite_sidecar` holds the sidecars and the dimension default router of each written router graph. It is no registry folder.
 - The dimension default router of a dimension is `data/aerolite/aerolite_sidecar/dimension_default/<dimension path>.json`.
-- The restore loads the router graph against that file. So a Recreate flow keeps the dimension default of the shipped router.
+- The restore takes that file as the dimension default of the router graph. So a Recreate flow keeps the dimension default of the shipped router.
 - A pack without a written graph is no pack. Done then removes the folder.
 - Done in the Islands screen writes the pack into the temporary data pack folder of the create world screen.
 - Then `IslandPackApplier` reloads the world creation context with the pack as the last enabled pack.
@@ -1435,7 +1439,7 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - `IslandGameTests` also checks that the terrain fill of the preview writes the blocks of the generator fill, and that its surface follows the biome.
 - The island JUnit tests check the lattice and the island density.
 - The graph JUnit tests also check the inline step, the slider map, the graph layout and the new field values.
-- `IslandGameTests` checks that a router graph on dimension default fills a chunk like the shipped noise settings.
+- `IslandGameTests` checks that the start router graph fills a chunk like the shipped noise settings.
 - `IslandGameTests` checks that a slider write reaches the built router.
 - `IslandPackTest` checks the island pack content as a pure function of the graphs, and the restore from that content.
 - The shape GameTests check the cross sections, the trusses, the hole and the column web plane. They also check erosion and the one crossing of a horizontal Bridge pillar.

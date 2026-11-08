@@ -41,10 +41,11 @@ public final class GraphJson {
     }
 
     /**
-     * Loads a {@code noise_router} object as a router graph. An output whose JSON equals the field of the shipped router loads as dimension default.
-     * Any other bare number becomes a constant output, and any other value becomes a tree of function nodes.
+     * Loads a {@code noise_router} object as a router graph. Each output links to the function nodes of its JSON.
+     * A bare number becomes a constant function node, and a bare string becomes a reference node.
+     * An output that loses its link shows dimension default.
      */
-    public static DataResult<RouterGraph> readRouter(JsonObject router, JsonObject shipped) {
+    public static DataResult<RouterGraph> readRouter(JsonObject router) {
         RouterGraph graph = new RouterGraph(new RouterGraph.DimensionDefault());
         try {
             for (String field : router.keySet()) {
@@ -57,13 +58,7 @@ public final class GraphJson {
                 if (value == null) {
                     throw new GraphJsonException(field, "The router field is missing");
                 }
-                if (value.equals(shipped.get(field))) {
-                    graph.set(field, new RouterGraph.DimensionDefault());
-                } else if (isNumber(value)) {
-                    graph.set(field, new RouterGraph.Constant(value.getAsDouble()));
-                } else {
-                    graph.link(read(graph, value, field), field);
-                }
+                graph.link(read(graph, value, field), field);
             }
         } catch (GraphJsonException exception) {
             return DataResult.error(exception::getMessage);

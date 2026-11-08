@@ -1,6 +1,7 @@
 package us.drullk.aerolite.gametest;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -42,6 +43,7 @@ import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.IslandTerrain;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.island.VoronoiLattice;
+import us.drullk.aerolite.world.island.graph.GraphJson;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 
@@ -367,14 +369,17 @@ public final class IslandGameTests {
                 .getOrThrow(message -> new IllegalStateException("The router graph does not build: " + message)).settings();
     }
 
-    /** A router graph with every output on dimension default fills a chunk like the shipped noise settings. */
+    /** The start router graph links every output to the shipped function nodes and fills a chunk like the shipped noise settings. */
     @GameTest(template = "empty")
-    public static void defaultRouterGraphBuildsTheShippedTerrain(GameTestHelper helper) {
+    public static void startRouterGraphBuildsTheShippedTerrain(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         IslandGraphs graphs = graphSettings.start(presetDimensions(level), level.registryAccess());
         helper.assertTrue(graphs.dimensions().size() == 3, "The preset gave " + graphs.dimensions().size() + " router graphs, not 3");
         RouterGraph router = graphs.router(Level.OVERWORLD);
-        helper.assertTrue(router != null && router.paths().isEmpty(), "An output of the start router graph is not on dimension default");
+        helper.assertTrue(router != null && RouterGraph.FIELDS.stream().allMatch(field -> router.linked(field) != null),
+                "An output of the start router graph has no link");
+        helper.assertTrue(GraphJson.writeRouter(router, graphs.shipped(Level.OVERWORLD)).result().filter(graphs.shipped(Level.OVERWORLD)::equals).isPresent(),
+                "The start router graph does not save the shipped router");
         helper.assertTrue(graphs.islands(Level.OVERWORLD, graphSettings.loader(level.registryAccess())).orElseThrow().equals(IslandSettings.DEFAULT),
                 "The sliders of the start graphs do not read the shipped island settings");
         NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
@@ -417,11 +422,16 @@ public final class IslandGameTests {
         NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
         IslandSettings first = IslandSettings.DEFAULT.withCellSize(384).withJitter(0.5);
         IslandSettings second = first.withCellHeight(192);
+        RouterGraph router = graphs.router(Level.OVERWORLD);
+        helper.assertTrue(router != null, "The Overworld has no router graph");
+        int count = router.functionNodes().size();
+        JsonObject shippedRouter = graphs.shipped(Level.OVERWORLD);
         for (IslandSettings written : List.of(first, second)) {
             helper.assertTrue(graphs.setIslands(Level.OVERWORLD, written, loader), "The Overworld router graph reaches no island function node");
             helper.assertTrue(graphs.edited().size() == 1, "The write edited " + graphs.edited().size() + " entries, not 1");
-            RouterGraph router = graphs.router(Level.OVERWORLD);
-            helper.assertTrue(router != null && router.functionNodes().isEmpty(), "The write added function nodes to the router graph");
+            helper.assertTrue(router.functionNodes().size() == count, "The write changed the function nodes of the router graph");
+            helper.assertTrue(GraphJson.writeRouter(router, shippedRouter).result().filter(shippedRouter::equals).isPresent(),
+                    "The write changed the router graph");
             IslandSettings built = generators.islands(built(level, graphs, shipped)).map(IslandSettings::of)
                     .orElseThrow(() -> new IllegalStateException("The built final density holds no island density function"));
             helper.assertTrue(built.equals(written), "The built router holds " + built + ", not " + written);
@@ -437,6 +447,7 @@ public final class IslandGameTests {
         RouterGraph router = graphs.router(Level.OVERWORLD);
         helper.assertTrue(router != null, "The Overworld has no router graph");
         double constant = -0.25;
+        router.removeTree(router.linked("final_density"));
         router.set("final_density", new RouterGraph.Constant(constant));
         NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
         DensityFunction finalDensity = built(level, graphs, shipped).noiseRouter().finalDensity();

@@ -9,7 +9,8 @@ import java.util.Map;
 /**
  * A left to right layout of a graph by depth. The output box sits in the right column. Each function node sits one column left of its parent.
  * A detached function node without a parent counts as a root, like a function node at a graph output.
- * Within a column, the function nodes stack from the top in the sequence of the outputs and the input pins, then the detached roots by id.
+ * Each root takes one band of rows below the band of the root before it. The roots follow the output sequence, then the detached roots by id.
+ * Within a band, the function nodes of one column stack from the band top in pin sequence. So no two trees share a row.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
@@ -23,6 +24,8 @@ public final class GraphLayout {
     public static final float ROW_HEIGHT = 80;
     /** The added height of each input pin, in canvas units. */
     public static final float PIN_HEIGHT = 30;
+    /** The added height of a reference node for its entry id and its button Open, in canvas units. */
+    public static final float REFERENCE_HEIGHT = 50;
 
     private GraphLayout() {
     }
@@ -42,13 +45,29 @@ public final class GraphLayout {
         int deepest = depths.values().stream().mapToInt(Integer::intValue).max().orElse(0);
         Map<Integer, Sidecar.Position> positions = new LinkedHashMap<>();
         positions.put(BOX, new Sidecar.Position(deepest * COLUMN_WIDTH, 0));
-        Map<Integer, Float> columnTops = new HashMap<>();
-        depths.forEach((id, depth) -> {
-            float y = columnTops.getOrDefault(depth, 0F);
-            positions.put(id, new Sidecar.Position((deepest - depth) * COLUMN_WIDTH, y));
-            columnTops.put(depth, y + ROW_HEIGHT + PIN_HEIGHT * graph.functionNode(id).inputPins().size());
-        });
+        float bandTop = 0;
+        for (int root : roots(graph)) {
+            Map<Integer, Integer> tree = new LinkedHashMap<>();
+            collect(graph, root, 1, tree);
+            Map<Integer, Float> columnTops = new HashMap<>();
+            float bandBottom = bandTop;
+            for (Map.Entry<Integer, Integer> entry : tree.entrySet()) {
+                int depth = entry.getValue();
+                float y = columnTops.getOrDefault(depth, bandTop);
+                positions.put(entry.getKey(), new Sidecar.Position((deepest - depth) * COLUMN_WIDTH, y));
+                float next = y + height(graph.functionNode(entry.getKey()));
+                columnTops.put(depth, next);
+                bandBottom = Math.max(bandBottom, next);
+            }
+            bandTop = bandBottom;
+        }
         return positions;
+    }
+
+    /** The layout height of a function node, in canvas units. */
+    private static float height(FunctionNode functionNode) {
+        float extra = functionNode instanceof FunctionNode.Reference ? REFERENCE_HEIGHT : 0;
+        return ROW_HEIGHT + extra + PIN_HEIGHT * functionNode.inputPins().size();
     }
 
     /** The function nodes at the graph outputs in output sequence, then the detached function nodes without a parent by id. */

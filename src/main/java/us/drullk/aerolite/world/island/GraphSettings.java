@@ -51,7 +51,7 @@ public final class GraphSettings {
     public GraphSettings() {
     }
 
-    /** The router graph of each preset dimension with a noise generator. Each output starts on dimension default. */
+    /** The router graph of each preset dimension with a noise generator. Each output links to the function nodes of the shipped router. */
     public IslandGraphs start(WorldDimensions dimensions, RegistryAccess registries) {
         IslandGraphs graphs = new IslandGraphs();
         RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registries);
@@ -62,7 +62,7 @@ public final class GraphSettings {
             }
             NoiseRouter.CODEC.encodeStart(ops, generator.generatorSettings().value().noiseRouter())
                     .flatMap(json -> json.isJsonObject() ? DataResult.success(json.getAsJsonObject()) : DataResult.error(() -> "The router is not an object"))
-                    .flatMap(json -> GraphJson.readRouter(json, json).map(graph -> Map.entry(graph, json)))
+                    .flatMap(json -> GraphJson.readRouter(json).map(graph -> Map.entry(graph, json)))
                     .ifSuccess(loaded -> graphs.putRouter(Registries.levelStemToLevel(stem), loaded.getKey(), loaded.getValue()));
         }
         return graphs;
