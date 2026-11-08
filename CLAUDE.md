@@ -1295,6 +1295,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - Island types, inner cells, cell merging, island bridges and center structures are 0.6.0 work.
 - The island types of 0.6.0 are compositions of density functions in a node editor with a preview. The output node is the noise router with its 15 inputs.
 - `llm/handoffs/0.5.0-islands.md` on `claude/islands-handoff` holds the earlier island decisions. The scope reset of 2026-11-06 supersedes its island types, shapes and merge rules.
+- The owner designs the island shapes in the editor. A session builds the tools and proposes no shape.
 - The prototypes under `prototypes/` of the island shapes stay as reference.
 
 ## Config
