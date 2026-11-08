@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.island.graph.FunctionGraph;
 import us.drullk.aerolite.world.island.graph.GraphJson;
 import us.drullk.aerolite.world.island.graph.GraphProblem;
+import us.drullk.aerolite.world.island.graph.RouterGraph;
 
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,43 @@ class IslandEditorProblemsTest {
         assertEquals(List.of(), shown.of(abs));
         // A path outside the graph resolves to the root function node, the deepest one on that path.
         assertEquals(List.of("[missing/path] Elsewhere"), shown.of(graph.paths().get("")));
+        assertTrue(shown.notice());
+    }
+
+    @Test
+    void selectedFunctionNodeShowsOnlyItsOwnProblems() {
+        GraphProblem first = new GraphProblem("argument1", "The first problem", 1);
+        GraphProblem second = new GraphProblem("argument2", "The second problem", 2);
+        IslandEditor.ShownProblems shown = IslandEditor.split(List.of(first, second), null, graph());
+        assertEquals(List.of(first.toString()), shown.of(1));
+        assertEquals(List.of(second.toString()), shown.of(2));
+        assertEquals(List.of(), shown.of(null));
+        assertEquals(List.of(), shown.general());
+        assertTrue(shown.notice());
+    }
+
+    @Test
+    void routerBuildErrorAtAPathWithoutAFunctionNodeShowsAsGeneral() {
+        RouterGraph router = new RouterGraph(new RouterGraph.DimensionDefault());
+        int root = GraphJson.readInto(router, JsonParser.parseString("""
+                {"type": "minecraft:abs", "argument": 2.0}
+                """), "final_density").getOrThrow();
+        assertTrue(router.link(root, "final_density"));
+        int argument = router.paths().get("final_density/argument");
+        String buildError = "[final_density/argument] Out of range\n[final_density/argument/deeper] Below it\n"
+                + "[depth] On dimension default\n[/] At the root\nA line without a path";
+        IslandEditor.ShownProblems shown = IslandEditor.split(List.of(), buildError, router);
+        assertEquals(List.of("[final_density/argument] Out of range", "[final_density/argument/deeper] Below it"), shown.of(argument));
+        assertFalse(shown.has(root));
+        assertEquals(List.of("[depth] On dimension default", "[/] At the root", "A line without a path"), shown.general());
+        assertTrue(shown.notice());
+    }
+
+    @Test
+    void buildErrorAloneGivesTheNotice() {
+        IslandEditor.ShownProblems shown = IslandEditor.split(List.of(), "A decode error", graph());
+        assertEquals(Map.of(), shown.byFunctionNode());
+        assertEquals(List.of("A decode error"), shown.general());
         assertTrue(shown.notice());
     }
 

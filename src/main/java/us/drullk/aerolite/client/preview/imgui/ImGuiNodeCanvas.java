@@ -67,6 +67,7 @@ import java.util.Set;
  * The node canvas window over the islands preview. It edits the graphs of the island editor with imnodes.
  * The window shows only while the editor is open. The title bar cross closes it.
  * Each open puts the window over the whole game window, panel and footer included, inside a margin. The window then moves and resizes freely.
+ * The window background is opaque, so the covered panel does not show through.
  * The router graph view holds one router box with one input pin per router field. The function graph view holds one output box.
  * An input pin of a box without a link shows its constant or the switch Dimension default.
  * Each function node shows its type path, its input pins and its output pin. A reference node also shows its entry id and the button Open.
@@ -229,7 +230,15 @@ final class ImGuiNodeCanvas {
         ImGui.setNextWindowSizeConstraints(Math.min(leastWidth, width), 0, Float.MAX_VALUE, Float.MAX_VALUE);
         this.windowOpen.set(true);
         this.drawProblems = editor.shownProblems();
-        boolean expanded = ImGui.begin("Island editor##aerolite_node_canvas", this.windowOpen, WINDOW_FLAGS);
+        // An opaque background keeps the covered panel from showing through.
+        ImVec4 background = ImGui.getStyle().getColor(ImGuiCol.WindowBg);
+        ImGui.pushStyleColor(ImGuiCol.WindowBg, background.x, background.y, background.z, 1);
+        boolean expanded;
+        try {
+            expanded = ImGui.begin("Island editor##aerolite_node_canvas", this.windowOpen, WINDOW_FLAGS);
+        } finally {
+            ImGui.popStyleColor();
+        }
         try {
             if (expanded) {
                 this.drawWindow(screen, editor, font, fontSize);

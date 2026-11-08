@@ -19,7 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the tree rule of a graph, the tree removal, the paths of its function nodes, the path lookup and the sidecar round trip. The graphs are arbitrary structures.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
-
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 class FunctionNodeGraphTest {
