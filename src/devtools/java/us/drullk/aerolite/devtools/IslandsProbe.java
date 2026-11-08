@@ -13,6 +13,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import us.drullk.aerolite.client.IslandsPresetScreen;
+import us.drullk.aerolite.client.preview.PreviewBuilder;
+import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.island.VoronoiLattice;
@@ -26,6 +28,7 @@ import java.util.function.BooleanSupplier;
 /**
  * The screenshot probe of the Islands preset. The system property {@value #PROPERTY} turns it on.
  * After the first screen shows, it picks the Islands preset, opens its customize screen and saves it.
+ * It opens the islands preview at the radius {@value #PREVIEW_RADIUS}, waits for the build and saves it.
  * Then it creates a creative world of that preset with the seed {@value #SEED} and commands on.
  * It accepts the experimental features warning.
  * It puts the player in spectator mode at the first island of the row 0 and saves a side view and a top view
@@ -49,6 +52,7 @@ public final class IslandsProbe {
     private static final int SIDE_DISTANCE = 220;
     private static final int SIDE_HEIGHT = 120;
     private static final int TOP_HEIGHT = 200;
+    private static final int PREVIEW_RADIUS = 10;
 
     private record Step(String name, int delay, BooleanSupplier action) {
     }
@@ -112,7 +116,23 @@ public final class IslandsProbe {
             SettingsProbe.grabFront("islands-00-settings.png");
             return true;
         });
-        this.step("settings done", 1, () -> SettingsProbe.press(minecraft.screen, "gui.done"));
+        this.step("preview", 1, () -> SettingsProbe.press(minecraft.screen, "createWorld.customize.aerolite.preview"));
+        this.step("preview radius", 10, () -> {
+            if (!(minecraft.screen instanceof PreviewScreen screen)) {
+                return false;
+            }
+            screen.setRadius(PREVIEW_RADIUS);
+            LOGGER.info("Islands probe: preview build start");
+            return true;
+        });
+        this.step("preview built", 20, () -> minecraft.screen instanceof PreviewScreen screen && screen.progress().phase() == PreviewBuilder.Phase.DONE);
+        this.step("grab preview", 10, () -> {
+            LOGGER.info("Islands probe: preview build done");
+            SettingsProbe.grabFront("islands-01-preview.png");
+            return true;
+        });
+        this.step("preview done", 1, () -> minecraft.screen instanceof PreviewScreen && SettingsProbe.press(minecraft.screen, "gui.done"));
+        this.step("settings done", 10, () -> minecraft.screen instanceof IslandsPresetScreen && SettingsProbe.press(minecraft.screen, "gui.done"));
         this.step("create", 10, () -> SettingsProbe.press(minecraft.screen, "selectWorld.create"));
         // A world of a data pack preset shows the experimental features warning before it loads.
         this.step("confirm experimental", 10, () -> minecraft.level != null || minecraft.screen instanceof ConfirmScreen && SettingsProbe.press(minecraft.screen, "gui.yes"));
@@ -128,7 +148,7 @@ public final class IslandsProbe {
             return this.teleport(cell.siteX() - SIDE_DISTANCE, cell.siteY() + SIDE_HEIGHT, cell.siteZ() - SIDE_DISTANCE, cell);
         });
         this.step("grab side", CHUNK_WAIT, () -> {
-            SettingsProbe.grabFront("islands-01-side.png");
+            SettingsProbe.grabFront("islands-02-side.png");
             return true;
         });
         this.step("top view", 1, () -> {
@@ -136,7 +156,7 @@ public final class IslandsProbe {
             return this.teleport(cell.siteX() + 1, cell.siteY() + TOP_HEIGHT, cell.siteZ() + 1, cell);
         });
         this.step("grab top", CHUNK_WAIT, () -> {
-            SettingsProbe.grabFront("islands-02-top.png");
+            SettingsProbe.grabFront("islands-03-top.png");
             return true;
         });
         this.step("stop", 10, () -> {

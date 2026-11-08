@@ -79,8 +79,7 @@ public class VoidPresetScreen extends Screen {
         this.list = list;
         this.populate(list);
         LinearLayout footer = layout.addToFooter(LinearLayout.horizontal().spacing(8));
-        footer.addChild(Button.builder(CommonComponents.GUI_DONE, button -> this.done()).build());
-        footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).build());
+        this.addFooterButtons(footer);
         layout.visitWidgets(this::addRenderableWidget);
         layout.arrangeElements();
         list.updateSize(this.width, layout);
@@ -88,6 +87,27 @@ public class VoidPresetScreen extends Screen {
 
     protected PresetTools tools() {
         return this.tools;
+    }
+
+    protected CreateWorldScreen parent() {
+        return this.parent;
+    }
+
+    /** Rebuilds the list on the next tick and keeps the scroll position. */
+    protected void requestRebuild() {
+        this.rebuildPending = true;
+    }
+
+    /** Adds the footer buttons: Done and Cancel. */
+    protected void addFooterButtons(LinearLayout footer) {
+        footer.addChild(Button.builder(CommonComponents.GUI_DONE, button -> this.done()).build());
+        footer.addChild(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose()).build());
+    }
+
+    /** Applies the edits and closes the screen. */
+    protected void done() {
+        this.applyEdits();
+        this.onClose();
     }
 
     protected WorldCreationContext context() {
@@ -160,12 +180,11 @@ public class VoidPresetScreen extends Screen {
     }
 
     /** Applies the edited dimensions to the world and the cloud height to the holder. */
-    private void done() {
+    private void applyEdits() {
         Map<ResourceKey<LevelStem>, Optional<Holder<Biome>>> chosen = Map.copyOf(this.biomes);
         this.parent.getUiState().updateDimensions((registries, dimensions) -> this.dimensions(registries, dimensions, chosen));
         ShaftSettingsHolder holder = this.tools.holder();
         holder.set(holder.settings().withCloudHeight(this.cloudHeight));
-        this.onClose();
     }
 
     /** Rebuilds the list entries from the edited values and keeps the scroll position. */

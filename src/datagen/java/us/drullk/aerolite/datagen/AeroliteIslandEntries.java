@@ -28,7 +28,7 @@ import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteWorldgen;
-import us.drullk.aerolite.world.island.VoronoiIslands;
+import us.drullk.aerolite.world.island.IslandSettings;
 
 import java.util.List;
 import java.util.Map;
@@ -36,27 +36,13 @@ import java.util.Map;
 /**
  * The worldgen entries of the Islands preset: the lattice noise, the island density function of each dimension,
  * the island noise settings and the preset. Each dimension keeps its vanilla biome source and its vanilla climate functions.
+ * {@link IslandSettings#DEFAULT} holds the shipped values of the island density function.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
 @Component
 public final class AeroliteIslandEntries {
 
-    /** The island cell size along X and Z, in blocks. */
-    public static final int CELL_SIZE = 256;
-    /** The island cell height, in blocks. It is the height of the island height band. */
-    public static final int CELL_HEIGHT = 128;
-    /** The bottom of the island height band. */
-    public static final int LAYER_MIN_Y = 0;
-    public static final double JITTER = 0.8;
-    public static final double FILL_MIN = 0.3;
-    public static final double FILL_MAX = 0.9;
-    public static final double EMPTY_CHANCE = 0.1;
-    /** The largest shift of the cell boundary distortion, in blocks. */
-    public static final double DISTORTION = 12.0;
-    /** The wavelength of the first distortion octave, in blocks. */
-    public static final int DISTORTION_SCALE = 64;
-    public static final int DISTORTION_OCTAVES = 3;
     /** The height of the surface floor above the bottom of a dimension, in blocks. */
     public static final int FLOOR_HEIGHT = 4;
 
@@ -74,8 +60,7 @@ public final class AeroliteIslandEntries {
         HolderGetter<NormalNoise.NoiseParameters> noises = context.lookup(Registries.NOISE);
         DensityFunction.NoiseHolder noise = new DensityFunction.NoiseHolder(noises.getOrThrow(AeroliteWorldgen.ISLANDS_NOISE));
         for (ResourceKey<DensityFunction> key : List.of(AeroliteWorldgen.OVERWORLD_ISLANDS, AeroliteWorldgen.NETHER_ISLANDS, AeroliteWorldgen.END_ISLANDS)) {
-            context.register(key, new VoronoiIslands(noise, CELL_SIZE, CELL_HEIGHT, LAYER_MIN_Y, JITTER, FILL_MIN, FILL_MAX, EMPTY_CHANCE,
-                    DISTORTION, DISTORTION_SCALE, DISTORTION_OCTAVES));
+            context.register(key, IslandSettings.DEFAULT.function(noise));
         }
     }
 

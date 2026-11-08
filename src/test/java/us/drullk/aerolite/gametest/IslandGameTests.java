@@ -13,6 +13,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.WorldPresetTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.biome.FixedBiomeSource;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -34,6 +36,8 @@ import tamaized.beanification.Autowired;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.island.IslandGenerators;
+import us.drullk.aerolite.world.island.IslandSettings;
+import us.drullk.aerolite.world.island.IslandTerrain;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.island.VoronoiLattice;
 
@@ -43,8 +47,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Checks the Islands preset: its dimensions, the wired island density function, the surface floor, the distortion edit
- * and the blocks of a generated chunk.
+ * Checks the Islands preset: its dimensions, the wired island density function, the surface floor, the island settings edit,
+ * the blocks of a generated chunk and the terrain fill of the preview.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
@@ -166,13 +170,14 @@ public final class IslandGameTests {
     }
 
     @GameTest(template = "empty")
-    public static void distortionEditRebuildsOnlyTheTerrainFunctions(GameTestHelper helper) {
+    public static void islandSettingsEditRebuildsOnlyTheTerrainFunctions(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         WorldDimensions preset = presetDimensions(level);
-        double shipped = generators.distortion(preset).orElseThrow();
-        WorldDimensions same = generators.withDistortion(preset, shipped);
-        double edited = shipped + 10;
-        WorldDimensions changed = generators.withDistortion(preset, edited);
+        IslandSettings shipped = generators.settings(preset).orElseThrow();
+        helper.assertTrue(shipped.equals(IslandSettings.DEFAULT), "The shipped island settings differ from the default settings");
+        WorldDimensions same = generators.withSettings(preset, shipped);
+        IslandSettings edited = shipped.withDistortion(shipped.distortion() + 10).withCellSize(512);
+        WorldDimensions changed = generators.withSettings(preset, edited);
         RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, level.registryAccess());
         for (ResourceKey<LevelStem> stem : NOISE_SETTINGS.keySet()) {
             String dimension = stem.location().toString();
@@ -183,7 +188,7 @@ public final class IslandGameTests {
             NoiseBasedChunkGenerator after = (NoiseBasedChunkGenerator) editedStem.generator();
             helper.assertTrue(after.getBiomeSource() == before.getBiomeSource(), "The distortion edit changed the biome source of " + dimension);
             helper.assertFalse(after.generatorSettings().is(NOISE_SETTINGS.get(stem)), "The distortion edit kept the registry settings of " + dimension);
-            helper.assertTrue(generators.islands(after).orElseThrow().distortion() == edited, "The distortion edit did not reach the island function of " + dimension);
+            helper.assertTrue(IslandSettings.of(generators.islands(after).orElseThrow()).equals(edited), "The edit did not reach the island function of " + dimension);
             NoiseRouter beforeRouter = before.generatorSettings().value().noiseRouter();
             NoiseRouter afterRouter = after.generatorSettings().value().noiseRouter();
             helper.assertTrue(afterRouter.temperature() == beforeRouter.temperature() && afterRouter.erosion() == beforeRouter.erosion(),
@@ -191,14 +196,84 @@ public final class IslandGameTests {
             RandomState wired = randomState(level, after);
             helper.assertTrue(islands(helper, wired).lattice().seed() == islands(helper, randomState(level, before)).lattice().seed(),
                     "The distortion edit changed the lattice seed of " + dimension);
-            helper.assertTrue(islands(helper, wired).distortion() == edited, "The wired island function of " + dimension + " lost the distortion");
+            helper.assertTrue(IslandSettings.of(islands(helper, wired)).equals(edited), "The wired island function of " + dimension + " lost the edit");
             int minY = after.generatorSettings().value().noiseSettings().minY();
             assertSurfaceFloor(helper, wired.router(), islands(helper, wired), minY, dimension);
             JsonElement json = LevelStem.CODEC.encodeStart(ops, editedStem).getOrThrow(message -> new IllegalStateException("The edited " + dimension + " does not encode: " + message));
             LevelStem parsed = LevelStem.CODEC.parse(ops, json).getOrThrow(message -> new IllegalStateException("The edited " + dimension + " does not parse: " + message));
-            helper.assertTrue(generators.islands(parsed.generator()).orElseThrow().distortion() == edited, "The parsed " + dimension + " lost the distortion");
+            helper.assertTrue(IslandSettings.of(generators.islands(parsed.generator()).orElseThrow()).equals(edited), "The parsed " + dimension + " lost the edit");
         }
         helper.succeed();
+    }
+
+    private static IslandTerrain terrain(ServerLevel level, NoiseBasedChunkGenerator generator, RandomState randomState) {
+        return new IslandTerrain(generator.generatorSettings().value(), randomState, generator.getBiomeSource(),
+                (x, y, z) -> generator.getBiomeSource().getNoiseBiome(x, y, z, randomState.sampler()),
+                level.registryAccess().registryOrThrow(Registries.BIOME), SEED);
+    }
+
+    private static ProtoChunk protoChunk(ServerLevel level, ChunkPos pos) {
+        return new ProtoChunk(pos, UpgradeData.EMPTY, level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+    }
+
+    /** The terrain fill of the preview writes the blocks of the chunk fill of the generator. */
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void previewTerrainFillMatchesTheGeneratorFill(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NoiseBasedChunkGenerator generator = generator(level, LevelStem.OVERWORLD);
+        RandomState randomState = randomState(level, generator);
+        VoronoiLattice.Cell cell = firstIsland(helper, islands(helper, randomState));
+        ChunkPos pos = new ChunkPos(BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ()));
+        ProtoChunk preview = protoChunk(level, pos);
+        terrain(level, generator, randomState).fill(preview);
+        CompletableFuture<ChunkAccess> fill = fill(level, generator, randomState, pos);
+        helper.succeedWhen(() -> {
+            helper.assertTrue(fill.isDone(), "The chunk fill is not done");
+            ChunkAccess chunk = fill.join();
+            int differences = 0;
+            int solids = 0;
+            BlockPos.MutableBlockPos block = new BlockPos.MutableBlockPos();
+            for (int y = chunk.getMinBuildHeight(); y < chunk.getMaxBuildHeight(); y++) {
+                for (int x = 0; x < 16; x++) {
+                    for (int z = 0; z < 16; z++) {
+                        block.set(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
+                        if (!chunk.getBlockState(block).isAir()) {
+                            solids++;
+                        }
+                        if (chunk.getBlockState(block) != preview.getBlockState(block)) {
+                            differences++;
+                        }
+                    }
+                }
+            }
+            helper.assertTrue(solids > 0, "The generator fill placed no block");
+            helper.assertTrue(differences == 0, differences + " blocks of the preview fill differ from the generator fill");
+        });
+    }
+
+    /** The surface of the preview terrain follows the surface rules of the biome. */
+    @GameTest(template = "empty")
+    public static void previewTerrainSurfaceGivesThePlainsIslandAGrassTop(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
+        Holder<net.minecraft.world.level.biome.Biome> plains = level.registryAccess().registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.PLAINS);
+        NoiseBasedChunkGenerator generator = new NoiseBasedChunkGenerator(new FixedBiomeSource(plains), shipped.generatorSettings());
+        RandomState randomState = randomState(level, generator);
+        VoronoiLattice.Cell cell = firstIsland(helper, islands(helper, randomState));
+        BlockPos site = BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ());
+        ProtoChunk chunk = protoChunk(level, new ChunkPos(site));
+        terrain(level, generator, randomState).generate(chunk);
+        BlockPos.MutableBlockPos block = site.mutable();
+        for (int y = chunk.getMaxBuildHeight() - 1; y >= chunk.getMinBuildHeight(); y--) {
+            block.setY(y);
+            if (!chunk.getBlockState(block).isAir()) {
+                helper.assertTrue(chunk.getBlockState(block).is(Blocks.GRASS_BLOCK), "The top block of the site column is " + chunk.getBlockState(block) + ", not grass");
+                helper.assertTrue(chunk.getBlockState(block.below()).is(Blocks.DIRT), "The block under the top is not dirt");
+                helper.succeed();
+                return;
+            }
+        }
+        helper.fail("The site column holds no block");
     }
 
     /**

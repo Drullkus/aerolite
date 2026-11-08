@@ -34,6 +34,7 @@ import us.drullk.aerolite.client.preview.PreviewDimension;
 import us.drullk.aerolite.client.preview.PreviewPanel;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
@@ -76,6 +77,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-02_09-29_550f132f-0def-4354-8b7f-e97e27655707.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -327,10 +329,24 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         return -1;
     }
 
-    /** The Preview section, one header per configured dimension, then the add row. */
+    /**
+     * The Preview section, one header per configured dimension, then the add row.
+     * The islands preview shows the Preview section and the Islands section instead.
+     */
     private void drawContent(PreviewScreen screen) {
         if (ImGui.collapsingHeader(text("preview.section"), ImGuiTreeNodeFlags.DefaultOpen)) {
             this.drawPreview(screen);
+        }
+
+        IslandSettings islands = screen.islands();
+        if (islands != null) {
+            if (ImGui.collapsingHeader(text("islands"), ImGuiTreeNodeFlags.DefaultOpen)) {
+                IslandSettings edited = this.drawIslands(islands);
+                if (!edited.equals(islands)) {
+                    screen.setIslands(edited);
+                }
+            }
+            return;
         }
 
         AeroliteSettings settings = screen.settings();
@@ -338,6 +354,60 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         if (!edited.equals(settings)) {
             screen.setSettings(edited);
         }
+    }
+
+    /** The island settings sliders, in the sequence of the Islands screen. */
+    private IslandSettings drawIslands(IslandSettings start) {
+        PresetSliders sliders = this.tools().sliders();
+        IslandSettings settings = start;
+        int step = this.stepSlider("##distortion", sliders.distortionStep(settings.distortion()), PresetSliders.DISTORTION_STEPS,
+                text("distortion", sliders.distortion(sliders.distortionStep(settings.distortion()))));
+        if (step >= 0) {
+            settings = settings.withDistortion(sliders.distortion(step));
+        }
+        step = this.stepSlider("##cell_size", sliders.cellSizeStep(settings.cellSize()), PresetSliders.CELL_SIZE_STEPS, text("cell_size", settings.cellSize()));
+        if (step >= 0) {
+            settings = settings.withCellSize(sliders.cellSize(step));
+        }
+        step = this.stepSlider("##cell_height", sliders.cellHeightStep(settings.cellHeight()), PresetSliders.CELL_HEIGHT_STEPS, text("cell_height", settings.cellHeight()));
+        if (step >= 0) {
+            settings = settings.withCellHeight(sliders.cellHeight(step));
+        }
+        step = this.stepSlider("##island_bottom", sliders.islandBottomStep(settings.layerMinY()), PresetSliders.ISLAND_BOTTOM_STEPS, text("island_bottom", settings.layerMinY()));
+        if (step >= 0) {
+            settings = settings.withLayerMinY(sliders.islandBottom(step));
+        }
+        int jitter = sliders.fractionStep((float) settings.jitter());
+        step = this.stepSlider("##island_jitter", jitter, PresetSliders.FRACTION_STEPS, text("jitter", sliders.percent(jitter)));
+        if (step >= 0) {
+            settings = settings.withJitter(sliders.fraction(step));
+        }
+        int fillMin = sliders.fractionStep((float) settings.fillMin());
+        step = this.stepSlider("##fill_min", fillMin, PresetSliders.FRACTION_STEPS, text("fill_min", sliders.percent(fillMin)));
+        if (step >= 0) {
+            settings = settings.withFillMin(sliders.fraction(step));
+        }
+        int fillMax = sliders.fractionStep((float) settings.fillMax());
+        step = this.stepSlider("##fill_max", fillMax, PresetSliders.FRACTION_STEPS, text("fill_max", sliders.percent(fillMax)));
+        if (step >= 0) {
+            settings = settings.withFillMax(sliders.fraction(step));
+        }
+        int emptyChance = sliders.fractionStep((float) settings.emptyChance());
+        step = this.stepSlider("##empty_chance", emptyChance, PresetSliders.FRACTION_STEPS, text("empty_chance", sliders.percent(emptyChance)));
+        if (step >= 0) {
+            settings = settings.withEmptyChance(sliders.fraction(step));
+        }
+        step = this.stepSlider("##distortion_scale", sliders.distortionScaleStep(settings.distortionScale()), PresetSliders.DISTORTION_SCALE_STEPS,
+                text("distortion_scale", settings.distortionScale()));
+        if (step >= 0) {
+            settings = settings.withDistortionScale(sliders.distortionScale(step));
+        }
+        step = this.stepSlider("##distortion_octaves", sliders.distortionOctavesStep(settings.distortionOctaves()), PresetSliders.DISTORTION_OCTAVE_STEPS,
+                text("distortion_octaves", settings.distortionOctaves()));
+        if (step >= 0) {
+            settings = settings.withDistortionOctaves(sliders.distortionOctaves(step));
+        }
+        return settings;
     }
 
     /** One collapsing header per configured dimension, then the add row. A removal applies after the loop. */
@@ -931,28 +1001,31 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             screen.reseed();
         }
 
-        if (ImGui.button(text("copy") + "##copy")) {
-            this.tools().json().copy(screen.settings(), this.tools().edits().registries());
-        }
-        if (ImGui.isItemHovered()) {
-            ImGui.setTooltip(text("copy_tooltip"));
-        }
-        ImGui.sameLine();
-        if (ImGui.button(text("paste") + "##paste")) {
-            this.tools().json().paste(this.tools().edits().registries())
-                    .ifSuccess(screen::setSettings)
-                    .ifError(error -> this.tools().json().showPasteFailed(error.message()));
-        }
-        if (ImGui.isItemHovered()) {
-            ImGui.setTooltip(text("paste_tooltip"));
-        }
-        ImGui.sameLine();
-        if (ImGui.button(text("defaults") + "##defaults")) {
-            PresetEdits edits = this.tools().edits();
-            screen.setSettings(edits.withDefaults(screen.settings(), screen.levels()));
-        }
-        if (ImGui.isItemHovered()) {
-            ImGui.setTooltip(text("defaults_tooltip"));
+        // The clipboard buttons move the pillar settings, which the islands preview does not edit.
+        if (screen.islands() == null) {
+            if (ImGui.button(text("copy") + "##copy")) {
+                this.tools().json().copy(screen.settings(), this.tools().edits().registries());
+            }
+            if (ImGui.isItemHovered()) {
+                ImGui.setTooltip(text("copy_tooltip"));
+            }
+            ImGui.sameLine();
+            if (ImGui.button(text("paste") + "##paste")) {
+                this.tools().json().paste(this.tools().edits().registries())
+                        .ifSuccess(screen::setSettings)
+                        .ifError(error -> this.tools().json().showPasteFailed(error.message()));
+            }
+            if (ImGui.isItemHovered()) {
+                ImGui.setTooltip(text("paste_tooltip"));
+            }
+            ImGui.sameLine();
+            if (ImGui.button(text("defaults") + "##defaults")) {
+                PresetEdits edits = this.tools().edits();
+                screen.setSettings(edits.withDefaults(screen.settings(), screen.levels()));
+            }
+            if (ImGui.isItemHovered()) {
+                ImGui.setTooltip(text("defaults_tooltip"));
+            }
         }
 
         int radius = this.stepSlider("##radius", screen.radius() - PreviewScreen.MIN_RADIUS, PreviewScreen.MAX_RADIUS - PreviewScreen.MIN_RADIUS,
@@ -971,7 +1044,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         float fraction = progress.phase() == PreviewBuilder.Phase.DONE ? 1 : progress.fraction();
         ImGui.progressBar(fraction, -1, 0, label);
         ResourceKey<Level> previewed = screen.dimensionKey();
-        if (previewed != null && screen.settings().variations(previewed).isEmpty()) {
+        if (previewed != null && screen.settings().variations(previewed).isEmpty() && screen.islands() == null) {
             ImGui.textWrapped(text("preview.no_shafts"));
         }
 

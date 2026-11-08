@@ -35,7 +35,6 @@ public final class AeroliteClient {
     private final CloudHeightHolder cloudHeight;
     private final CloudHeightSync cloudHeightSync;
     private final VoidPresetBiomes presetBiomes;
-    private final IslandGenerators islandGenerators;
 
     public AeroliteClient(@Autowired PresetSliders sliders, @Autowired PresetEdits edits, @Autowired BlockSearch blocks,
                           @Autowired ShaftPainter painter, @Autowired ShaftMazes mazes, @Autowired PreviewPanel panel,
@@ -43,11 +42,10 @@ public final class AeroliteClient {
                           @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync, @Autowired SettingsJson json,
                           @Autowired ShaftSettingsHolder holder, @Autowired VoidPresetBiomes presetBiomes,
                           @Autowired ProviderText providerText, @Autowired IslandGenerators islandGenerators) {
-        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json, holder, providerText);
+        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json, holder, providerText, islandGenerators);
         this.cloudHeight = cloudHeight;
         this.cloudHeightSync = cloudHeightSync;
         this.presetBiomes = presetBiomes;
-        this.islandGenerators = islandGenerators;
     }
 
     @PostConstruct
@@ -64,7 +62,7 @@ public final class AeroliteClient {
     /** The Customize button of the world creation menu opens the Aerolite Void screen or the Aerolite Islands screen of the active preset. */
     private void registerPresetEditors(RegisterPresetEditorsEvent event) {
         event.register(AeroliteWorldgen.PRESET, (parent, context) -> new VoidPresetScreen(parent, context, this.tools, this.presetBiomes));
-        event.register(AeroliteWorldgen.ISLANDS_PRESET, (parent, context) -> new IslandsPresetScreen(parent, context, this.tools, this.presetBiomes, this.islandGenerators));
+        event.register(AeroliteWorldgen.ISLANDS_PRESET, (parent, context) -> new IslandsPresetScreen(parent, context, this.tools, this.presetBiomes));
     }
 
     /** The components of the screens of the world creation flow. */

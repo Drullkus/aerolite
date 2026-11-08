@@ -91,6 +91,8 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Island | The cell of the generating layer, scaled about its site by its fill fraction. |
 | Distortion | The simplex noise shift of the position before the island lattice lookup. The cell boundary distortion setting is its largest shift, in blocks. |
 | Surface floor | The positive band of the initial density at the bottom of an island dimension. It gives every column a preliminary surface level. |
+| Island settings | The fields of the island density function without its noise. The Islands screen and the islands preview edit them. `IslandSettings` holds them. |
+| Islands preview | The preview screen that the Islands screen opens. Its chunks hold the island terrain, and its panel edits the island settings. |
 | Island type | A composition of density functions in the editor. Planned for 0.6.0. |
 | Bridge | A walkable path between the islands of two neighbor cells. Planned for 0.6.0. |
 | Center structure | A vanilla structure whose start is at a cell center. Planned for 0.6.0. |
@@ -216,6 +218,7 @@ Rules:
 - While the preview is open, `WindowMixin` reports the window width without the panel width.
 - `WindowMixin` reduces `getWidth` in framebuffer pixels, `getScreenWidth` in screen coordinates and `getGuiScaledWidth` in GUI units.
 - A mixin gets no bean injection. `WindowMixin` calls `BeanContext.inject` after it finds an open preview screen.
+- `NoiseChunkAccessor` opens the cell sizes and the interpolated block state of a noise chunk. No API fills a chunk from noise without a structure manager.
 
 ## Package annotations
 
@@ -288,7 +291,7 @@ Data generation writes:
 - The Javadoc of `SettingsProbe` lists each captured state in sequence.
 - The probe saves one PNG of the window front buffer per state under `screenshots/` of the game directory. Then it stops the game.
 - With `-Pmute`, the PNG files land in `run-mute/screenshots/`.
-- The system property `aerolite.devtools.islandsProbe` turns on the islands probe, `IslandsProbe`. It saves the Islands screen, creates an Islands world and saves a side view and a top view of the first island.
+- The system property `aerolite.devtools.islandsProbe` turns on the islands probe, `IslandsProbe`. It saves the Islands screen and the islands preview, creates an Islands world and saves a side view and a top view of the first island.
 - Every run loads the test source set as part of the mod `aerolite`.
 - A stale test class in the IDE output breaks the mod load. After a branch change, run Build > Rebuild Project in IntelliJ IDEA.
 
@@ -364,10 +367,15 @@ The player sets the pillar settings in the World tab of the create world screen.
 | Setting | Scope | Default |
 |---|---|---|
 | Cell boundary distortion | Preset | 12 blocks |
-| Voronoi cell size | Preset | 256 blocks across, 128 blocks tall |
-| Island fill fraction, lower bound | Preset | 0.3 |
-| Island fill fraction, upper bound | Preset | 0.9 |
-| Island height band | Preset | Y 0 to 128 |
+| Cell size | Preset | 256 blocks |
+| Cell height | Preset | 128 blocks |
+| Island bottom | Preset | Y 0 |
+| Island jitter | Preset | 80% |
+| Island fill fraction, lower bound | Preset | 30% |
+| Island fill fraction, upper bound | Preset | 90% |
+| Empty chance | Preset | 10% |
+| Distortion scale | Preset | 64 blocks |
+| Distortion octaves | Preset | 3 |
 | Island type weights (landmass, biosphere, lake bowl, donut) | Preset | 8, 1, 1, 1 |
 | Bridge chance | Preset | 0.5 |
 | Allowed biome list | Preset | The vanilla biome list of the dimension |
@@ -405,7 +413,8 @@ The player sets the pillar settings in the World tab of the create world screen.
 | Trusses block | Variation | The interior block of the variation |
 
 - Each island picks its fill fraction at random between the two bounds.
-- The island height band is the Y range of the island centers in the generating layer.
+- The island bottom is the bottom of the row 0 of the island lattice. The row is one cell height tall.
+- `IslandSettings.DEFAULT` holds the shipped island settings. The slider bounds are constants of `IslandSettings` and `VoronoiIslands`.
 - The pillar spacing is the center distance of two neighbor horizontal pillars on one axis. It stays between the minimum and the maximum.
 - The maze decay scale is the size of one decay region along a pillar.
 - The pillar range of a placement is the field `min_y` and the exclusive field `max_y`.
@@ -439,7 +448,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 - A 0.1.0 save without a variation map loads the default dimensions with its top-level values.
 - A 0.1.0 save without a variation map reads the shipped lists, so it parses only with registry ops.
 - A variation with a decay threshold at or above its erosion threshold loads with the erosion threshold raised to the decay threshold plus 5%.
-- The cell boundary distortion and the cloud height have sliders. The other preset settings have no slider and no storage yet.
+- The island settings and the cloud height have sliders. The other preset settings have no slider and no storage yet.
 
 ### Settings holder
 
@@ -1248,7 +1257,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The vanilla surface rules lerp the preliminary surface level of the four 16-block grid corners around a block. A corner without a level has `Integer.MAX_VALUE`.
 - So without the floor, the island edge band gets no surface. With the floor, every corner has a level.
 - The island density function type is `aerolite:voronoi_islands`. `VoronoiIslands` is its class. `VoronoiLattice` holds the lattice math.
-- The fields are `noise`, `cell_size`, `cell_height`, `layer_min_y`, `jitter`, `fill_min`, `fill_max`, `empty_chance`, `distortion`, `distortion_scale` and `distortion_octaves`. `AeroliteIslandEntries` holds the shipped values.
+- The fields are `noise`, `cell_size`, `cell_height`, `layer_min_y`, `jitter`, `fill_min`, `fill_max`, `empty_chance`, `distortion`, `distortion_scale` and `distortion_octaves`. `IslandSettings.DEFAULT` holds the shipped values.
 - The lattice puts one site in each box of `cell_size` by `cell_height` by `cell_size` blocks. The row 0 of boxes starts at `layer_min_y`.
 - A cell is the 3D Voronoi polyhedron of its site. Only the row 0 holds islands. The rows above and below shape the cells of the row 0.
 - An island is its cell scaled about its site by the fill fraction of the cell. The fill fraction is a seeded value between `fill_min` and `fill_max`.
@@ -1264,13 +1273,25 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The sea level of each island dimension is at or below the lowest Y of lava. So no lava fills the void. `IslandGameTests` checks it.
 - The surface rules are the vanilla rules of each dimension. So an island top gets the vanilla surface of its biome.
 - The pillars coexist with the islands. The pillar step replaces island blocks.
-- The Islands preset has the customize screen "Aerolite Islands", `IslandsPresetScreen`. It is the Aerolite Void screen with the header Islands and the cell boundary distortion slider above the dimension rows.
+- The Islands preset has the customize screen "Aerolite Islands", `IslandsPresetScreen`. It is the Aerolite Void screen with the header Islands and the island settings sliders above the dimension rows.
+- The slider rows are: the distortion slider alone, then Cell Size and Cell Height, then Island Bottom and Jitter, then Fill Min and Fill Max, then Empty Chance and Distortion Scale, then Distortion Octaves in the left half.
 - The distortion slider runs from 0 to 32 blocks in steps of 2. `VoronoiIslands` holds the bounds.
-- The slider starts at the distortion of the island density function of the first preset dimension that has one.
-- Done writes the distortion through `IslandGenerators`. A dimension whose island density function has the distortion stays as it is.
+- The cell size slider runs from 64 to 1024 blocks in steps of 32. The cell height slider runs from 32 to 512 blocks in steps of 16.
+- The island bottom slider runs over the build height of every dimension in steps of 16.
+- The jitter, fill and empty chance sliders run from 0% to 100% in steps of 5%. A fill slider that passes the other pushes it along.
+- The distortion scale slider steps through the powers of two from 8 to 1024. The octaves slider runs from 1 to 8.
+- The sliders start at the island settings of the island density function of the first preset dimension that has one.
+- Done writes the island settings through `IslandGenerators`. A dimension whose island density function has the settings stays as it is.
 - Any other dimension with an island density function gets direct generator settings. Only its two terrain functions hold the new island density function. The other router functions keep their registry references.
 - The world saves the direct generator settings in `level.dat`.
-- The Islands screen has no preview.
+- The footer of the Islands screen holds Done, Preview and Cancel. The Preview button shows only when ImGui loaded.
+- Preview opens the islands preview with a copy of the island settings. Done in the preview sends the copy and the seed text back. Cancel drops them.
+- The islands preview is the preview screen with island settings. `PreviewScreen.islands` makes it.
+- Its panel shows the Preview section without the Copy, Paste and Defaults row, then the header Islands with the sliders of the Islands screen.
+- Its chunks hold the island terrain of the previewed dimension under the pillars of the holder settings. The preview does not edit the pillars.
+- A previewed dimension without an island density function shows its pillars alone.
+- `IslandTerrain` fills a chunk from the noise settings and builds its surface without a level. The fill is the vanilla noise fill without a structure manager, so the terrain adaptation of structures is absent.
+- The biome choices of the Islands screen reach the preview only after Done. The preview reads the generators of the world creation state.
 - Island types, inner cells, cell merging, island bridges and center structures are 0.6.0 work.
 - The island types of 0.6.0 are compositions of density functions in a node editor with a preview. The output node is the noise router with its 15 inputs.
 - `llm/handoffs/0.5.0-islands.md` on `claude/islands-handoff` holds the earlier island decisions. The scope reset of 2026-11-06 supersedes its island types, shapes and merge rules.
@@ -1316,7 +1337,8 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - The settings JUnit tests check the pattern settings JSON, the provider codec and comparison, and the variation JSON.
 - The client JUnit tests check the pattern edit rules, the provider drafts, the provider text and the panel tabs.
 - GameTests check the pattern bindings in the bean context and the blocks that the paint writes for each pattern.
-- `IslandGameTests` checks the Islands preset, the seed wiring of the island function, the surface floor, the distortion edit and the blocks of a generated island chunk.
+- `IslandGameTests` checks the Islands preset, the seed wiring of the island function, the surface floor, the island settings edit and the blocks of a generated island chunk.
+- `IslandGameTests` also checks that the terrain fill of the preview writes the blocks of the generator fill, and that its surface follows the biome.
 - The island JUnit tests check the lattice and the island density.
 - The shape GameTests check the cross sections, the trusses, the hole and the column web plane. They also check erosion and the one crossing of a horizontal Bridge pillar.
 

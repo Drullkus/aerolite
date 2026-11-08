@@ -6,6 +6,7 @@ import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
+import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.pattern.ChaosSettings;
 
@@ -29,6 +30,13 @@ public final class PresetSliders {
     public static final int CLOUD_HEIGHT_STEPS = (AeroliteSettings.MAX_CLOUD_HEIGHT - AeroliteSettings.MIN_CLOUD_HEIGHT) / CLOUD_HEIGHT_STEP;
     public static final int DISTORTION_STEP = 2;
     public static final int DISTORTION_STEPS = (VoronoiIslands.MAX_DISTORTION - VoronoiIslands.MIN_DISTORTION) / DISTORTION_STEP;
+    public static final int CELL_SIZE_STEPS = (IslandSettings.MAX_CELL_SIZE - IslandSettings.MIN_CELL_SIZE) / IslandSettings.CELL_SIZE_STEP;
+    public static final int CELL_HEIGHT_STEPS = (IslandSettings.MAX_CELL_HEIGHT - IslandSettings.MIN_CELL_HEIGHT) / IslandSettings.CELL_HEIGHT_STEP;
+    /** The island bottom slider spans the build height of every dimension. */
+    public static final int ISLAND_BOTTOM_STEPS = (ShaftPlacement.HIGHEST_Y - ShaftPlacement.LOWEST_Y) / IslandSettings.LAYER_STEP;
+    public static final int MIN_DISTORTION_SCALE_EXPONENT = Mth.log2(VoronoiIslands.MIN_DISTORTION_SCALE);
+    public static final int DISTORTION_SCALE_STEPS = Mth.log2(VoronoiIslands.MAX_DISTORTION_SCALE) - MIN_DISTORTION_SCALE_EXPONENT;
+    public static final int DISTORTION_OCTAVE_STEPS = VoronoiIslands.MAX_DISTORTION_OCTAVES - VoronoiIslands.MIN_DISTORTION_OCTAVES;
     /** Steps of 0.05 from the smallest to the largest maze bias. */
     public static final int BIAS_STEPS = Math.round((ShaftVariation.MAX_BIAS - ShaftVariation.MIN_BIAS) * FRACTION_STEPS);
     /** The bias step of a uniform maze. */
@@ -113,6 +121,47 @@ public final class PresetSliders {
 
     public int distortionStep(double distortion) {
         return (int) Math.round((distortion - VoronoiIslands.MIN_DISTORTION) / DISTORTION_STEP);
+    }
+
+    public int cellSize(int step) {
+        return IslandSettings.MIN_CELL_SIZE + IslandSettings.CELL_SIZE_STEP * step;
+    }
+
+    public int cellSizeStep(int cellSize) {
+        return Math.round((cellSize - IslandSettings.MIN_CELL_SIZE) / (float) IslandSettings.CELL_SIZE_STEP);
+    }
+
+    public int cellHeight(int step) {
+        return IslandSettings.MIN_CELL_HEIGHT + IslandSettings.CELL_HEIGHT_STEP * step;
+    }
+
+    public int cellHeightStep(int cellHeight) {
+        return Math.round((cellHeight - IslandSettings.MIN_CELL_HEIGHT) / (float) IslandSettings.CELL_HEIGHT_STEP);
+    }
+
+    public int islandBottom(int step) {
+        return ShaftPlacement.LOWEST_Y + IslandSettings.LAYER_STEP * step;
+    }
+
+    public int islandBottomStep(int layerMinY) {
+        return Math.round((layerMinY - ShaftPlacement.LOWEST_Y) / (float) IslandSettings.LAYER_STEP);
+    }
+
+    /** The distortion scale steps through the powers of two. */
+    public int distortionScale(int step) {
+        return 1 << (MIN_DISTORTION_SCALE_EXPONENT + step);
+    }
+
+    public int distortionScaleStep(int scale) {
+        return Mth.log2(scale) - MIN_DISTORTION_SCALE_EXPONENT;
+    }
+
+    public int distortionOctaves(int step) {
+        return VoronoiIslands.MIN_DISTORTION_OCTAVES + step;
+    }
+
+    public int distortionOctavesStep(int octaves) {
+        return octaves - VoronoiIslands.MIN_DISTORTION_OCTAVES;
     }
 
     public float bias(int step) {
