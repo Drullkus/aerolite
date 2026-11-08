@@ -96,6 +96,13 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Island type | A composition of density functions in the editor. Planned for 0.6.0. |
 | Bridge | A walkable path between the islands of two neighbor cells. Planned for 0.6.0. |
 | Center structure | A vanilla structure whose start is at a cell center. Planned for 0.6.0. |
+| Function node | One box of a function graph or a router graph. It is one density function of the JSON tree. |
+| Function graph | A graph of function nodes with one output. It maps to one density function JSON tree. |
+| Router graph | A graph of function nodes with one output per noise router field. It maps to a `noise_router` object. |
+| Reference node | A function node leaf that names a density function entry. |
+| Sidecar | The JSON file next to a density function JSON that holds the canvas positions by path. |
+| Path | The field names from the graph output to a function node, joined by `/`. |
+| Dimension default | The state of a router output that keeps the field of the shipped noise settings of the dimension. |
 
 ## Project identity
 
@@ -1305,6 +1312,27 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - `llm/handoffs/0.5.0-islands.md` on `claude/islands-handoff` holds the earlier island decisions. The scope reset of 2026-11-06 supersedes its island types, shapes and merge rules.
 - The owner designs the island shapes in the editor. A session builds the tools and proposes no shape.
 - The prototypes under `prototypes/` of the island shapes stay as reference.
+
+### Function node model
+
+- The package `us.drullk.aerolite.world.island.graph` holds the function node model. It is pure logic.
+- `FunctionNodeTypes` describes each vanilla density function type and `aerolite:voronoi_islands`.
+- Each field description follows the vanilla codec sequence, with its kind, its range and its choices.
+- A JUnit test fails when the type registry holds an id without a field description.
+- A bare number is a constant function node. A bare string is a reference node.
+- The type `minecraft:spline` has one spline field. Each spline coordinate is an input pin.
+- The input of `minecraft:clamp` takes no reference node. Vanilla reads it without the registry.
+- A type without a field description loads as an unknown leaf. The save keeps its JSON.
+- The output of a function node feeds at most one input. The graph refuses a second link and a loop.
+- A save writes only the trees under the graph outputs, in the vanilla field sequence.
+- A router output without a link holds a constant or dimension default. A link hides that value.
+- Dimension default saves a copy of the field of the shipped router. The caller gives the shipped router.
+- A router load gives dimension default to each output whose JSON equals the field of the shipped router.
+- The path of a router root is its field name. The path of a function graph root is the empty string.
+- A load keeps a value out of range. `GraphValidator` reports it with its path.
+- `GraphValidator` reports each function node outside the trees at its id, because the save drops it.
+- A load refuses a key that the type of the function node does not have.
+- The sidecar does not change the density function JSON. A function node without a sidecar position gets none.
 
 ## Config
 

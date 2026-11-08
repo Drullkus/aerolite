@@ -20,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
  * Each further octave halves the amplitude and the wavelength.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
 public final class VoronoiIslands implements DensityFunction.SimpleFunction {
 
@@ -30,11 +31,14 @@ public final class VoronoiIslands implements DensityFunction.SimpleFunction {
     public static final int MAX_DISTORTION_SCALE = 1024;
     public static final int MIN_DISTORTION_OCTAVES = 1;
     public static final int MAX_DISTORTION_OCTAVES = 8;
+    /** The codec bounds of the cell size and the cell height, in blocks. */
+    public static final int MIN_CELL = 16;
+    public static final int MAX_CELL = 4096;
 
     public static final MapCodec<VoronoiIslands> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             DensityFunction.NoiseHolder.CODEC.fieldOf("noise").forGetter(VoronoiIslands::noise),
-            Codec.intRange(16, 4096).fieldOf("cell_size").forGetter(VoronoiIslands::cellSize),
-            Codec.intRange(16, 4096).fieldOf("cell_height").forGetter(VoronoiIslands::cellHeight),
+            Codec.intRange(MIN_CELL, MAX_CELL).fieldOf("cell_size").forGetter(VoronoiIslands::cellSize),
+            Codec.intRange(MIN_CELL, MAX_CELL).fieldOf("cell_height").forGetter(VoronoiIslands::cellHeight),
             Codec.INT.fieldOf("layer_min_y").forGetter(VoronoiIslands::layerMinY),
             Codec.doubleRange(0.0, 1.0).fieldOf("jitter").forGetter(VoronoiIslands::jitter),
             Codec.doubleRange(0.0, 1.0).fieldOf("fill_min").forGetter(VoronoiIslands::fillMin),
