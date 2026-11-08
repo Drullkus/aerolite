@@ -23,6 +23,7 @@ import us.drullk.aerolite.world.VariationList;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-00_10881e45-2016-40f4-83b8-2c27043cd0f4.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -240,6 +241,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.preview.center", "Center");
         this.add("createWorld.customize.aerolite.preview.reset_center", "Reset");
         this.add("aerolite.configuration.panelWidth", "Preview Panel Width");
+        this.add("aerolite.configuration.fieldsWidth", "Island Editor Field Width");
         this.add("aerolite.configuration.applyDefaultPillars", "Apply Default Pillars");
     }
 

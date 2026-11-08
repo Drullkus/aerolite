@@ -27,8 +27,25 @@ import java.util.function.Supplier;
  * Each graph edit starts a terrain build through the change action.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public final class IslandEditor {
+
+    /** One area of the canvas window in the last drawn frame, in window coordinates. */
+    public record Area(float x, float y, float width, float height) {
+
+        public static final Area NONE = new Area(0, 0, 0, 0);
+
+        public float centerX() {
+            return this.x + this.width / 2;
+        }
+
+        public float centerY() {
+            return this.y + this.height / 2;
+        }
+
+    }
+
 
     private final IslandGraphs graphs;
     private final IslandGraphs.EntryLoader loader;
@@ -50,8 +67,13 @@ public final class IslandEditor {
     private Sidecar.Position panRequest;
     @Nullable
     private Float zoomRequest;
-    /** The size of the canvas in the last drawn frame, in screen units. */
-    private Sidecar.Position canvasSize = new Sidecar.Position(0, 0);
+    private Area canvasArea = Area.NONE;
+    private Area fieldsArea = Area.NONE;
+    /** The scroll of the field editor in the last drawn frame, and its largest value. */
+    private float fieldsScroll;
+    private float fieldsScrollMax;
+    /** The zoom of the shown graph in the last drawn frame. */
+    private float zoom = 1;
     @Nullable
     private String openError;
     @Nullable
@@ -232,11 +254,44 @@ public final class IslandEditor {
 
     /** The size of the canvas in the last drawn frame, in screen units. */
     public Sidecar.Position canvasSize() {
-        return this.canvasSize;
+        return new Sidecar.Position(this.canvasArea.width(), this.canvasArea.height());
     }
 
-    public void setCanvasSize(float width, float height) {
-        this.canvasSize = new Sidecar.Position(width, height);
+    /** The canvas in the last drawn frame. */
+    public Area canvasArea() {
+        return this.canvasArea;
+    }
+
+    public void setCanvasArea(Area canvasArea) {
+        this.canvasArea = canvasArea;
+    }
+
+    /** The field editor in the last drawn frame. */
+    public Area fieldsArea() {
+        return this.fieldsArea;
+    }
+
+    public float fieldsScroll() {
+        return this.fieldsScroll;
+    }
+
+    public float fieldsScrollMax() {
+        return this.fieldsScrollMax;
+    }
+
+    public void setFieldsView(Area fieldsArea, float scroll, float scrollMax) {
+        this.fieldsArea = fieldsArea;
+        this.fieldsScroll = scroll;
+        this.fieldsScrollMax = scrollMax;
+    }
+
+    /** The zoom of the shown graph in the last drawn frame. */
+    public float zoom() {
+        return this.zoom;
+    }
+
+    public void setZoom(float zoom) {
+        this.zoom = zoom;
     }
 
     /** True when the last drawn frame showed the palette. */

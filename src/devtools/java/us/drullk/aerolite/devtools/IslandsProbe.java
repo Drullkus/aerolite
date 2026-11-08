@@ -63,6 +63,8 @@ import java.util.stream.Stream;
  * Then it pans the router graph to the final density chain and saves it.
  * Then it zooms the router graph out until the whole graph fits the canvas, or to the lowest zoom, and saves it.
  * At the lowest zoom, the capture centers the router box vertically.
+ * Then it turns the wheel through the GLFW callbacks over the canvas, the game view and the field editor of the island function node.
+ * Each wheel check states its result. Then it drags the splitter left of the field editor and checks the config width.
  * Done in the preview and in the Islands screen write the island pack and reload the world creation context.
  * Then it creates a creative world of that preset with the seed {@value #SEED} and commands on.
  * It accepts the experimental features warning.
@@ -72,6 +74,7 @@ import java.util.stream.Stream;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public final class IslandsProbe {
 
@@ -107,6 +110,14 @@ public final class IslandsProbe {
     private static final float PAN_MARGIN = 40;
     /** A constant outside the vanilla range of a router output. */
     private static final double OUT_OF_RANGE = 2000000;
+    /** The wheel notches of each wheel check. */
+    private static final int WHEEL_NOTCHES = 3;
+    private static final float ZOOM_TOLERANCE = 0.001F;
+    /** A window point of the game view, clear of the editor window and the view gizmo. */
+    private static final double GAME_VIEW_POINT = 40;
+    /** The half width of the splitter left of the field editor, and the distance of the splitter drag. */
+    private static final float SPLITTER_HALF = 3;
+    private static final float SPLITTER_DRAG = 120;
 
     /** The files that the island pack of the probe holds. */
     private static final List<String> PACK_FILES = List.of(
@@ -439,6 +450,183 @@ public final class IslandsProbe {
             }
             if (Minecraft.getInstance().screen instanceof PreviewScreen screen) {
                 screen.camera().setPitch(pitch[0]);
+            }
+            return true;
+        });
+        this.queueWheel();
+    }
+
+    /** The probe screen of the open islands preview, or null. */
+    @Nullable
+    private static PreviewScreen previewScreen() {
+        return Minecraft.getInstance().screen instanceof PreviewScreen screen ? screen : null;
+    }
+
+    /** Drives the wheel through the GLFW callbacks over the canvas, the game view and the field editor. */
+    private void queueWheel() {
+        float[] before = new float[2];
+        this.step("wheel canvas cursor", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            PreviewScreen screen = previewScreen();
+            if (editor == null || screen == null || editor.canvasArea().width() <= 0 || editor.zoom() != 1) {
+                return false;
+            }
+            before[0] = editor.zoom();
+            before[1] = screen.camera().distance();
+            GlfwInput.cursor(editor.canvasArea().centerX(), editor.canvasArea().centerY());
+            return true;
+        });
+        this.step("wheel canvas", 2, () -> {
+            GlfwInput.scroll(0, WHEEL_NOTCHES);
+            return true;
+        });
+        this.step("grab wheel canvas", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            PreviewScreen screen = previewScreen();
+            if (editor == null || screen == null) {
+                return false;
+            }
+            SettingsProbe.grabFront("islands-11-wheel-canvas.png");
+            float expected = CanvasZoom.wheel(before[0], WHEEL_NOTCHES);
+            LOGGER.info("Islands probe: the wheel over the canvas gives the zoom {} (from {}, expected {}) and the camera distance {} (from {})",
+                    editor.zoom(), before[0], expected, screen.camera().distance(), before[1]);
+            boolean zoomed = Math.abs(editor.zoom() - expected) < ZOOM_TOLERANCE;
+            boolean cameraKept = screen.camera().distance() == before[1];
+            editor.requestZoom(1);
+            if (!zoomed || !cameraKept) {
+                throw new IllegalStateException("Wheel check (canvas) failed: zoom " + zoomed + ", camera kept " + cameraKept);
+            }
+            LOGGER.info("Islands probe: wheel check (canvas) passed");
+            return true;
+        });
+        this.step("wheel game view cursor", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            PreviewScreen screen = previewScreen();
+            if (editor == null || screen == null || editor.zoom() != 1) {
+                return false;
+            }
+            before[0] = editor.zoom();
+            before[1] = screen.camera().distance();
+            // The editor window covers the low half of the game view, so the top left corner shows the game view.
+            GlfwInput.cursor(GAME_VIEW_POINT, GAME_VIEW_POINT);
+            return true;
+        });
+        this.step("wheel game view", 2, () -> {
+            GlfwInput.scroll(0, WHEEL_NOTCHES);
+            return true;
+        });
+        this.step("check wheel game view", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            PreviewScreen screen = previewScreen();
+            if (editor == null || screen == null) {
+                return false;
+            }
+            LOGGER.info("Islands probe: the wheel over the game view gives the camera distance {} (from {}) and the zoom {} (from {})",
+                    screen.camera().distance(), before[1], editor.zoom(), before[0]);
+            boolean cameraZoomed = screen.camera().distance() != before[1];
+            boolean zoomKept = editor.zoom() == before[0];
+            if (!cameraZoomed || !zoomKept) {
+                throw new IllegalStateException("Wheel check (game view) failed: camera zoomed " + cameraZoomed + ", zoom kept " + zoomKept);
+            }
+            LOGGER.info("Islands probe: wheel check (game view) passed");
+            return true;
+        });
+        this.step("wheel fields select", 1, () -> {
+            IslandEditor editor = editor();
+            if (editor == null) {
+                return false;
+            }
+            if (editor.openEntry() == null) {
+                editor.openReference(OVERWORLD_ISLANDS);
+                return false;
+            }
+            Integer functionNode = islandsFunctionNode(editor);
+            if (functionNode == null) {
+                return false;
+            }
+            editor.requestSelect(functionNode);
+            return true;
+        });
+        this.step("wheel fields cursor", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            if (editor == null || editor.fieldsArea().width() <= 0) {
+                return false;
+            }
+            LOGGER.info("Islands probe: the field editor is {} with the scroll {} of {}", editor.fieldsArea(), editor.fieldsScroll(), editor.fieldsScrollMax());
+            before[0] = editor.fieldsScroll();
+            GlfwInput.cursor(editor.fieldsArea().centerX(), editor.fieldsArea().centerY());
+            return true;
+        });
+        this.step("wheel fields", 2, () -> {
+            GlfwInput.scroll(0, -WHEEL_NOTCHES);
+            return true;
+        });
+        this.step("grab wheel fields", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            if (editor == null) {
+                return false;
+            }
+            SettingsProbe.grabFront("islands-12-wheel-fields.png");
+            LOGGER.info("Islands probe: the wheel over the field editor gives the scroll {} of {} (from {})",
+                    editor.fieldsScroll(), editor.fieldsScrollMax(), before[0]);
+            if (editor.fieldsScrollMax() <= 0) {
+                throw new IllegalStateException("Wheel check (field editor) failed: the fields fit the field editor, so it cannot scroll");
+            }
+            if (editor.fieldsScroll() <= before[0]) {
+                throw new IllegalStateException("Wheel check (field editor) failed: the scroll did not change");
+            }
+            LOGGER.info("Islands probe: wheel check (field editor) passed");
+            return true;
+        });
+        int[] width = new int[1];
+        this.step("splitter cursor", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            PreviewScreen screen = previewScreen();
+            if (editor == null || screen == null || editor.fieldsArea().width() <= 0) {
+                return false;
+            }
+            width[0] = screen.tools().config().fieldsWidth();
+            before[0] = editor.fieldsArea().width();
+            GlfwInput.cursor(editor.fieldsArea().x() - SPLITTER_HALF, editor.fieldsArea().centerY());
+            return true;
+        });
+        this.step("splitter press", 2, () -> {
+            GlfwInput.leftButton(true);
+            return true;
+        });
+        this.step("splitter drag", 2, () -> {
+            IslandEditor editor = editor();
+            if (editor == null) {
+                return false;
+            }
+            GlfwInput.cursor(editor.fieldsArea().x() - SPLITTER_HALF - SPLITTER_DRAG, editor.fieldsArea().centerY());
+            return true;
+        });
+        this.step("splitter release", 2, () -> {
+            GlfwInput.leftButton(false);
+            return true;
+        });
+        this.step("grab splitter", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            PreviewScreen screen = previewScreen();
+            if (editor == null || screen == null) {
+                return false;
+            }
+            SettingsProbe.grabFront("islands-13-splitter.png");
+            int stored = screen.tools().config().fieldsWidth();
+            LOGGER.info("Islands probe: the splitter drag of {} gives the field editor width {} (from {}) and the config width {} (from {})",
+                    SPLITTER_DRAG, editor.fieldsArea().width(), before[0], stored, width[0]);
+            screen.tools().config().setFieldsWidth(width[0]);
+            if (Math.abs(stored - (before[0] + SPLITTER_DRAG)) > 1 || Math.abs(editor.fieldsArea().width() - stored) > 1) {
+                throw new IllegalStateException("Splitter check failed: the config width is " + stored);
+            }
+            LOGGER.info("Islands probe: splitter check passed");
+            return true;
+        });
+        this.step("wheel done", 1, () -> {
+            IslandEditor editor = editor();
+            if (editor != null) {
+                editor.back();
             }
             return true;
         });

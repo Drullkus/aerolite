@@ -6,6 +6,7 @@ import imgui.ImFont;
 import imgui.ImGui;
 import imgui.ImGuiStyle;
 import imgui.ImGuiViewport;
+import imgui.ImVec4;
 import imgui.extension.imnodes.ImNodes;
 import imgui.extension.imnodes.ImNodesContext;
 import imgui.extension.imnodes.ImNodesEditorContext;
@@ -16,8 +17,10 @@ import imgui.flag.ImGuiChildFlags;
 import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiFocusedFlags;
+import imgui.flag.ImGuiHoveredFlags;
 import imgui.flag.ImGuiKey;
 import imgui.flag.ImGuiMouseButton;
+import imgui.flag.ImGuiMouseCursor;
 import imgui.flag.ImGuiSelectableFlags;
 import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiWindowFlags;
@@ -28,7 +31,9 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
+import us.drullk.aerolite.client.AeroliteClientConfig;
 import us.drullk.aerolite.client.preview.CanvasZoom;
+import us.drullk.aerolite.client.preview.FieldsWidth;
 import us.drullk.aerolite.client.preview.IslandEditor;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.island.graph.FieldKind;
@@ -64,12 +69,14 @@ import java.util.Set;
  * An input pin of a box without a link shows its constant or the switch Dimension default.
  * Each function node shows its type path, its input pins and its output pin. A reference node also shows its entry id and the button Open.
  * The field editor right of the canvas edits the selected function node, then lists the validator problems and the build error in red.
+ * A splitter between the canvas and the field editor sets the field editor width. The release writes it to the client config.
  * The scroll wheel zooms the canvas around the cursor. imnodes has no zoom, so the canvas scales the positions, the imnodes style, the item spacing and the font.
  * The stored positions stay unscaled, so the sidecar holds no zoom.
  * A right click on empty canvas opens the palette. Delete removes the selected links and function nodes.
  * The canvas owns the imnodes context. imgui-mc creates no imnodes context.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 final class ImGuiNodeCanvas {
 
@@ -77,10 +84,9 @@ final class ImGuiNodeCanvas {
     private static final float MARGIN = 8;
     /** The share of the game view height that the window takes when it appears. */
     private static final float HEIGHT_SHARE = 0.45F;
-    /** The share of the window content width that the field editor takes. */
-    private static final float FIELDS_WIDTH_SHARE = 0.3F;
-    /** The least width of the field editor, in text line heights. */
-    private static final float FIELDS_MIN_LINES = 12;
+    /** The width of the splitter between the canvas and the field editor. */
+    private static final float SPLITTER_WIDTH = 6;
+    private static final float SPLITTER_LINE = 2;
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoDocking
             | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
     /** The wheel over the canvas zooms, so the canvas region never scrolls. */
@@ -127,6 +133,9 @@ final class ImGuiNodeCanvas {
     private ImNodesContext context;
     /** The zoom of the graph that draws now. */
     private float drawZoom = 1;
+    /** The field editor width, from the client config, or from the cursor during a splitter drag. */
+    private float fieldsWidth = AeroliteClientConfig.DEFAULT_FIELDS_WIDTH;
+    private boolean fieldsDragging;
 
     /** Creates the imnodes context after imgui-mc loads ImGui. */
     void register() {
@@ -182,6 +191,7 @@ final class ImGuiNodeCanvas {
             this.zooms.clear();
             this.placedZooms.clear();
             this.paletteAt = null;
+            this.fieldsDragging = false;
             // The editor contexts of a closed screen live until the next screen draws.
             this.editorContexts.values().forEach(ImNodes::editorContextFree);
             this.editorContexts.clear();
@@ -197,10 +207,13 @@ final class ImGuiNodeCanvas {
         ImGui.setNextWindowViewport(viewport.getID());
         ImGui.setNextWindowPos(viewport.getPosX() + MARGIN, viewport.getPosY() + bottom - height, ImGuiCond.Appearing);
         ImGui.setNextWindowSize(gameWidth - 2 * MARGIN, height, ImGuiCond.Appearing);
+        // A narrower window shows the field editor below its least width.
+        float leastWidth = FieldsWidth.leastContentWidth() + 2 * ImGui.getStyle().getWindowPaddingX();
+        ImGui.setNextWindowSizeConstraints(Math.min(leastWidth, Math.max(1, gameWidth - 2 * MARGIN)), 0, Float.MAX_VALUE, Float.MAX_VALUE);
         boolean open = ImGui.begin("Island editor##aerolite_node_canvas", WINDOW_FLAGS);
         try {
             if (open) {
-                this.drawWindow(editor, font, fontSize);
+                this.drawWindow(screen, editor, font, fontSize);
             }
         } finally {
             ImGui.end();
@@ -210,7 +223,7 @@ final class ImGuiNodeCanvas {
         work.forEach(Runnable::run);
     }
 
-    private void drawWindow(IslandEditor editor, ImFont font, float fontSize) {
+    private void drawWindow(PreviewScreen screen, IslandEditor editor, ImFont font, float fontSize) {
         ResourceLocation entry = editor.openEntry();
         if (entry != null) {
             ImGui.alignTextToFramePadding();
@@ -234,9 +247,13 @@ final class ImGuiNodeCanvas {
             return;
         }
         float available = ImGui.getContentRegionAvailX();
-        float spacing = ImGui.getStyle().getItemSpacingX();
-        float fieldsWidth = Math.min(available / 2, Math.max(ImGui.getTextLineHeight() * FIELDS_MIN_LINES, available * FIELDS_WIDTH_SHARE));
-        boolean canvas = ImGui.beginChild("##canvas", Math.max(1, available - fieldsWidth - spacing), 0, ImGuiChildFlags.None, CANVAS_FLAGS);
+        float height = ImGui.getContentRegionAvailY();
+        float right = ImGui.getCursorScreenPosX() + available;
+        if (!this.fieldsDragging) {
+            this.fieldsWidth = screen.tools().config().fieldsWidth();
+        }
+        float fieldsWidth = FieldsWidth.shown(this.fieldsWidth, available);
+        boolean canvas = ImGui.beginChild("##canvas", Math.max(1, available - fieldsWidth - SPLITTER_WIDTH), 0, ImGuiChildFlags.None, CANVAS_FLAGS);
         try {
             if (canvas) {
                 this.drawCanvas(editor, graph, graphId, font, fontSize);
@@ -244,14 +261,43 @@ final class ImGuiNodeCanvas {
         } finally {
             ImGui.endChild();
         }
-        ImGui.sameLine();
+        ImGui.sameLine(0, 0);
+        this.drawSplitter(screen, right, height, available);
+        ImGui.sameLine(0, 0);
         boolean fields = ImGui.beginChild("##fields", 0, 0, ImGuiChildFlags.Borders);
         try {
             if (fields) {
+                ImGuiViewport viewport = ImGui.getMainViewport();
+                editor.setFieldsView(new IslandEditor.Area(ImGui.getWindowPosX() - viewport.getPosX(), ImGui.getWindowPosY() - viewport.getPosY(),
+                        ImGui.getWindowWidth(), ImGui.getWindowHeight()), ImGui.getScrollY(), ImGui.getScrollMaxY());
                 this.drawFields(editor, graph);
             }
         } finally {
             ImGui.endChild();
+        }
+    }
+
+    /** An invisible button between the canvas and the field editor. A drag moves it. The release saves the width. */
+    private void drawSplitter(PreviewScreen screen, float right, float height, float available) {
+        float left = ImGui.getCursorScreenPosX();
+        float top = ImGui.getCursorScreenPosY();
+        ImGui.invisibleButton("##fields_splitter", SPLITTER_WIDTH, Math.max(1, height));
+        boolean hovered = ImGui.isItemHovered();
+        boolean active = ImGui.isItemActive();
+        if (hovered || active) {
+            ImGui.setMouseCursor(ImGuiMouseCursor.ResizeEW);
+        }
+        if (active) {
+            this.fieldsDragging = true;
+            this.fieldsWidth = FieldsWidth.dragged(right, ImGui.getIO().getMousePosX(), SPLITTER_WIDTH, available);
+        }
+        ImVec4 color = ImGui.getStyle().getColor(hovered || active ? ImGuiCol.SeparatorActive : ImGuiCol.Separator);
+        float lineLeft = left + (SPLITTER_WIDTH - SPLITTER_LINE) / 2;
+        ImGui.getWindowDrawList().addRectFilled(lineLeft, top, lineLeft + SPLITTER_LINE, top + height,
+                ImGui.colorConvertFloat4ToU32(color.x, color.y, color.z, color.w));
+        if (ImGui.isItemDeactivated()) {
+            this.fieldsDragging = false;
+            screen.tools().config().setFieldsWidth(Math.round(this.fieldsWidth));
         }
     }
 
@@ -267,7 +313,9 @@ final class ImGuiNodeCanvas {
         ImNodes.editorContextSet(this.editorContext(graphId));
         float originX = ImGui.getCursorScreenPosX();
         float originY = ImGui.getCursorScreenPosY();
-        editor.setCanvasSize(ImGui.getContentRegionAvailX(), ImGui.getContentRegionAvailY());
+        ImGuiViewport viewport = ImGui.getMainViewport();
+        editor.setCanvasArea(new IslandEditor.Area(originX - viewport.getPosX(), originY - viewport.getPosY(),
+                ImGui.getContentRegionAvailX(), ImGui.getContentRegionAvailY()));
         float zoom = this.zooms.getOrDefault(graphId, 1F);
         Float zoomRequest = editor.takeZoomRequest();
         if (zoomRequest != null) {
@@ -291,12 +339,16 @@ final class ImGuiNodeCanvas {
         Set<Integer> placedBefore = Set.copyOf(placedIds);
         this.drawZoom = zoom;
         this.drawEditor(editor, graph, positions, placedIds, font, fontSize * zoom);
+        // imnodes reads its hover state against the current window, which is the canvas child after the node editor ends.
+        // The palette popup belongs to the canvas child in the popup hierarchy, so the check skips that hierarchy.
+        boolean hovered = ImGui.isWindowHovered(ImGuiHoveredFlags.ChildWindows | ImGuiHoveredFlags.NoPopupHierarchy);
         this.readPositions(graph, positions, placedBefore, zoom);
         this.applySelection(editor, placedBefore);
         this.applyLinks(editor, graph);
         this.applyDelete(editor, graph, graphId, positions, placedIds);
-        this.applyWheel(graphId, zoom, originX, originY);
-        this.drawPalette(editor, originX, originY, zoom);
+        this.applyWheel(graphId, zoom, originX, originY, hovered);
+        editor.setZoom(this.zooms.getOrDefault(graphId, 1F));
+        this.drawPalette(editor, originX, originY, zoom, hovered);
     }
 
     /** The node editor with the imnodes style, the item spacing and the font scaled by the zoom. */
@@ -367,10 +419,14 @@ final class ImGuiNodeCanvas {
         }
     }
 
-    /** The wheel over the canvas zooms around the cursor. */
-    private void applyWheel(IslandGraphs.GraphId graphId, float zoom, float originX, float originY) {
+    /**
+     * The wheel over the canvas zooms around the cursor.
+     *
+     * @param hovered true when the mouse is over the canvas child or one of its children
+     */
+    private void applyWheel(IslandGraphs.GraphId graphId, float zoom, float originX, float originY, boolean hovered) {
         float notches = ImGui.getIO().getMouseWheel();
-        if (notches == 0 || !ImNodes.isEditorHovered()) {
+        if (notches == 0 || !hovered) {
             return;
         }
         float next = CanvasZoom.wheel(zoom, notches);
@@ -642,11 +698,11 @@ final class ImGuiNodeCanvas {
     }
 
     /** A right click on empty canvas, or a request of the probe, opens the palette at that canvas point. The point is unscaled. */
-    private void drawPalette(IslandEditor editor, float originX, float originY, float zoom) {
+    private void drawPalette(IslandEditor editor, float originX, float originY, float zoom, boolean hovered) {
         float panX = ImNodes.editorContextGetPanningX();
         float panY = ImNodes.editorContextGetPanningY();
         boolean overItem = ImNodes.isNodeHovered(this.hovered) || ImNodes.isLinkHovered(this.hovered);
-        if (ImNodes.isEditorHovered() && !overItem && ImGui.isMouseClicked(ImGuiMouseButton.Right)) {
+        if (hovered && !overItem && ImGui.isMouseClicked(ImGuiMouseButton.Right)) {
             this.paletteAt = new Sidecar.Position(CanvasZoom.toStored(ImGui.getMousePosX() - originX - panX, zoom),
                     CanvasZoom.toStored(ImGui.getMousePosY() - originY - panY, zoom));
             this.openPalette(ImGui.getMousePosX(), ImGui.getMousePosY());

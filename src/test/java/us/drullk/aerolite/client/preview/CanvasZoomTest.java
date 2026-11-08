@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the zoom math of the node canvas: the bounds, the wheel step, the position scale and the panning around the cursor.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 class CanvasZoomTest {
 
@@ -20,6 +21,15 @@ class CanvasZoomTest {
         assertEquals(CanvasZoom.MIN, CanvasZoom.wheel(1, -1000));
         assertEquals(CanvasZoom.STEP, CanvasZoom.wheel(1, 1), EPSILON);
         assertEquals(1 / CanvasZoom.STEP, CanvasZoom.wheel(1, -1), EPSILON);
+    }
+
+    @Test
+    void fractionalWheelChangesTheZoom() {
+        // A trackpad gives fractional notches, often below 0.1 per event.
+        float next = CanvasZoom.wheel(1, 0.05F);
+        assertTrue(next > 1);
+        assertEquals((float) Math.pow(CanvasZoom.STEP, 0.05F), next, 1.0E-6F);
+        assertTrue(CanvasZoom.wheel(1, -0.05F) < 1);
     }
 
     @Test

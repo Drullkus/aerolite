@@ -1357,7 +1357,10 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - An entry without an edit loads from the density function registry of the creation context.
 - The first edit of an opened entry makes it an edited function graph.
 - The field editor right of the canvas edits the selected function node. The range of the field clamps the input.
-- `FIELDS_WIDTH_SHARE` in `ImGuiNodeCanvas` sets the share of the window width that the field editor takes.
+- A splitter between the canvas and the field editor sets the field editor width. Half the window caps it.
+- The splitter writes the field editor width to the client config on release. `AeroliteClientConfig` holds its bounds.
+- The editor window is never narrower than two least field editor widths, unless the game view is narrower.
+- The wheel over the palette does not zoom the canvas.
 - A field label wider than the label column takes its own line. Its field starts the next line.
 - The scroll wheel over the canvas zooms the canvas around the cursor.
 - Each graph view keeps its own zoom. It starts at 1.
@@ -1422,7 +1425,7 @@ Use three config files:
 - Common config: `applyDefaultPillars`. See [Default pillars](#default-pillars).
 - Server config (synced to clients): one switch per structure set that turns center placement on or off.
 - Client config: the ImGui panel (visible on start, panel width) and the tree block render (hue saturation, hue brightness, a switch for the Veil render path).
-- The client config holds only the panel width now. The other client values come with their features.
+- The client config holds only the panel width and the field editor width now. The other client values come with their features.
 - The panel width is in ImGui units, from 240 to 600. The default is 360.
 - The splitter of the preview panel writes the panel width on release.
 
