@@ -22,6 +22,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import us.drullk.aerolite.client.IslandsPresetScreen;
+import us.drullk.aerolite.client.preview.CanvasZoom;
 import us.drullk.aerolite.client.preview.IslandEditor;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
 import us.drullk.aerolite.client.preview.PreviewScreen;
@@ -60,6 +61,8 @@ import java.util.stream.Stream;
  * the palette, the field editor of the selected island function node after a field edit, and the red error of a router constant out of range.
  * It keeps the cell size {@value #PROBE_CELL_SIZE} of the field edit and links the final density output to its function nodes again.
  * Then it pans the router graph to the final density chain and saves it.
+ * Then it zooms the router graph out until the whole graph fits the canvas, or to the lowest zoom, and saves it.
+ * At the lowest zoom, the capture centers the router box vertically.
  * Done in the preview and in the Islands screen write the island pack and reload the world creation context.
  * Then it creates a creative world of that preset with the seed {@value #SEED} and commands on.
  * It accepts the experimental features warning.
@@ -388,6 +391,52 @@ public final class IslandsProbe {
         });
         this.step("grab router panned", EDITOR_WAIT, () -> {
             SettingsProbe.grabFront("islands-09-router-panned.png");
+            return true;
+        });
+        this.step("zoom out router", 1, () -> {
+            IslandEditor editor = editor();
+            RouterGraph router = editor == null ? null : router(editor);
+            if (router == null) {
+                return false;
+            }
+            Map<Integer, Sidecar.Position> positions = routerPositions(editor);
+            float left = Float.POSITIVE_INFINITY;
+            float top = Float.POSITIVE_INFINITY;
+            float right = Float.NEGATIVE_INFINITY;
+            float bottom = Float.NEGATIVE_INFINITY;
+            for (Map.Entry<Integer, Sidecar.Position> entry : positions.entrySet()) {
+                Sidecar.Position position = entry.getValue();
+                int pins = router.functionNodes().containsKey(entry.getKey()) ? router.functionNode(entry.getKey()).inputPins().size() : 0;
+                float height = entry.getKey() == GraphLayout.BOX ? GraphLayout.boxHeight(router) : GraphLayout.ROW_HEIGHT + GraphLayout.PIN_HEIGHT * pins;
+                left = Math.min(left, position.x());
+                top = Math.min(top, position.y());
+                right = Math.max(right, position.x() + GraphLayout.COLUMN_WIDTH);
+                bottom = Math.max(bottom, position.y() + height);
+            }
+            Sidecar.Position canvas = editor.canvasSize();
+            if (left == Float.POSITIVE_INFINITY || canvas.x() <= 0 || canvas.y() <= 0) {
+                return false;
+            }
+            float fit = Math.min((canvas.x() - 2 * PAN_MARGIN) / (right - left), (canvas.y() - 2 * PAN_MARGIN) / (bottom - top));
+            float zoom = CanvasZoom.clamp(fit);
+            LOGGER.info("Islands probe: the router graph spans {} by {} canvas units, the fit zoom is {}, the zoom is {}{}",
+                    right - left, bottom - top, fit, zoom, fit < CanvasZoom.MIN ? " (the lowest zoom)" : " (the whole graph)");
+            editor.requestZoom(zoom);
+            Sidecar.Position box = positions.get(GraphLayout.BOX);
+            if (fit >= CanvasZoom.MIN || box == null) {
+                editor.requestPan(PAN_MARGIN - left * zoom, PAN_MARGIN - top * zoom);
+            } else {
+                float boxMiddle = box.y() + GraphLayout.boxHeight(router) / 2;
+                editor.requestPan(PAN_MARGIN - left * zoom, canvas.y() / 2 - boxMiddle * zoom);
+            }
+            return true;
+        });
+        this.step("grab router zoomed out", EDITOR_WAIT, () -> {
+            SettingsProbe.grabFront("islands-10-router-zoomed-out.png");
+            IslandEditor editor = editor();
+            if (editor != null) {
+                editor.requestZoom(1);
+            }
             if (Minecraft.getInstance().screen instanceof PreviewScreen screen) {
                 screen.camera().setPitch(pitch[0]);
             }

@@ -49,6 +49,10 @@ public final class IslandEditor {
     @Nullable
     private Sidecar.Position panRequest;
     @Nullable
+    private Float zoomRequest;
+    /** The size of the canvas in the last drawn frame, in screen units. */
+    private Sidecar.Position canvasSize = new Sidecar.Position(0, 0);
+    @Nullable
     private String openError;
     @Nullable
     private String buildError;
@@ -200,7 +204,7 @@ public final class IslandEditor {
         return request;
     }
 
-    /** Asks the canvas to pan the shown graph, in canvas units. */
+    /** Asks the canvas to pan the shown graph, in screen units. At zoom 1 a screen unit is a canvas unit. */
     public void requestPan(float x, float y) {
         this.panRequest = new Sidecar.Position(x, y);
     }
@@ -211,6 +215,28 @@ public final class IslandEditor {
         Sidecar.Position request = this.panRequest;
         this.panRequest = null;
         return request;
+    }
+
+    /** Asks the canvas to zoom the shown graph. The canvas clamps the zoom to the bounds of {@link CanvasZoom}. */
+    public void requestZoom(float zoom) {
+        this.zoomRequest = zoom;
+    }
+
+    /** The zoom that the canvas must take, once. The canvas takes it before a pan request. */
+    @Nullable
+    public Float takeZoomRequest() {
+        Float request = this.zoomRequest;
+        this.zoomRequest = null;
+        return request;
+    }
+
+    /** The size of the canvas in the last drawn frame, in screen units. */
+    public Sidecar.Position canvasSize() {
+        return this.canvasSize;
+    }
+
+    public void setCanvasSize(float width, float height) {
+        this.canvasSize = new Sidecar.Position(width, height);
     }
 
     /** True when the last drawn frame showed the palette. */

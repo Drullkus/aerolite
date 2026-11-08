@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Checks the left to right layout of a graph: each function node gets a distinct position, and each child sits one column left of its parent.
  * Each tree, detached roots too, takes its own band, so no two function nodes of one column overlap.
+ * The vertical center of the box sits at the average Y of the function nodes, right of the deepest column. The bands follow the pin sequence of the box.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
@@ -53,7 +54,7 @@ class GraphLayoutTest {
                 assertEquals(positions.get(parent).x() - GraphLayout.COLUMN_WIDTH, positions.get(id).x(), "A child is not one column left of its parent");
             } else if (target instanceof FunctionNodeGraph.Target.Output) {
                 assertEquals(1, depths.get(id), "A root is not at depth 1");
-                assertEquals(box - GraphLayout.COLUMN_WIDTH, positions.get(id).x(), "A root is not one column left of the box");
+                assertEquals(box - GraphLayout.COLUMN_WIDTH - GraphLayout.BOX_GAP, positions.get(id).x(), "A root is not one column and the box gap left of the box");
             }
         }
     }
@@ -112,6 +113,47 @@ class GraphLayoutTest {
             assertTrue(y > lastY.getOrDefault(depth, Float.NEGATIVE_INFINITY), "A column does not stack in path sequence");
             lastY.put(depth, y);
         }
+    }
+
+    @Test
+    void boxCenterSitsAtTheAverageYRightOfTheDeepestColumn() {
+        RouterGraph graph = router();
+        graph.add(FunctionNode.Typed.bareConstant(0));
+        Map<Integer, Sidecar.Position> positions = GraphLayout.layout(graph);
+        double sum = 0;
+        float right = Float.NEGATIVE_INFINITY;
+        for (int id : graph.functionNodes().keySet()) {
+            sum += positions.get(id).y();
+            right = Math.max(right, positions.get(id).x());
+        }
+        Sidecar.Position box = positions.get(GraphLayout.BOX);
+        float center = box.y() + GraphLayout.boxHeight(graph) / 2;
+        assertEquals(sum / graph.functionNodes().size(), center, 1.0E-2, "The box center is not at the average Y of the function nodes");
+        assertEquals(right + GraphLayout.COLUMN_WIDTH + GraphLayout.BOX_GAP, box.x(), "The box is not one column and the box gap right of the depth 1 column");
+        int deepest = GraphLayout.depths(graph).values().stream().mapToInt(Integer::intValue).max().orElseThrow();
+        assertEquals(deepest * GraphLayout.COLUMN_WIDTH + GraphLayout.BOX_GAP, box.x(), "The box is not right of the deepest column");
+    }
+
+    @Test
+    void bandsFollowThePinSequence() {
+        RouterGraph graph = router();
+        int abs = graph.add(new FunctionNode.Typed(FunctionNodeTypes.get(ResourceLocation.withDefaultNamespace("abs")), Map.of()));
+        graph.link(graph.add(FunctionNode.Typed.bareConstant(1)), new FunctionNodeGraph.Pin(abs, "argument"));
+        Map<Integer, Sidecar.Position> positions = GraphLayout.layout(graph);
+        float last = Float.NEGATIVE_INFINITY;
+        int linked = 0;
+        for (String output : graph.outputs()) {
+            Integer root = graph.outputSource(output);
+            if (root == null) {
+                continue;
+            }
+            float y = positions.get(root).y();
+            assertTrue(y > last, "The root of " + output + " does not sit below the root of the pin above it");
+            last = y;
+            linked++;
+        }
+        assertTrue(linked > 1, "The router links fewer than two outputs");
+        assertTrue(positions.get(abs).y() > last, "The detached root does not sit below the linked roots");
     }
 
 }

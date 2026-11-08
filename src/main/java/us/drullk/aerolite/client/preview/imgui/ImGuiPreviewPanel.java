@@ -286,7 +286,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         this.gizmo.draw(screen.camera(), this.width);
         IslandEditor editor = screen.islandEditor();
         if (editor != null) {
-            this.nodeCanvas.draw(screen, editor, this.width);
+            this.nodeCanvas.draw(screen, editor, this.width, this.font.get(), FONT_SIZE);
         }
     }
 

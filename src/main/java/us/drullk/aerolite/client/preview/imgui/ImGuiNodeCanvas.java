@@ -2,12 +2,16 @@ package us.drullk.aerolite.client.preview.imgui;
 
 import com.mojang.logging.LogUtils;
 import foundry.imgui.api.ImGuiMCEvents;
+import imgui.ImFont;
 import imgui.ImGui;
+import imgui.ImGuiStyle;
 import imgui.ImGuiViewport;
 import imgui.extension.imnodes.ImNodes;
 import imgui.extension.imnodes.ImNodesContext;
 import imgui.extension.imnodes.ImNodesEditorContext;
+import imgui.extension.imnodes.ImNodesStyle;
 import imgui.extension.imnodes.flag.ImNodesMiniMapLocation;
+import imgui.extension.imnodes.flag.ImNodesStyleVar;
 import imgui.flag.ImGuiChildFlags;
 import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
@@ -15,6 +19,7 @@ import imgui.flag.ImGuiFocusedFlags;
 import imgui.flag.ImGuiKey;
 import imgui.flag.ImGuiMouseButton;
 import imgui.flag.ImGuiSelectableFlags;
+import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiWindowFlags;
 import imgui.type.ImDouble;
 import imgui.type.ImInt;
@@ -23,6 +28,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
+import us.drullk.aerolite.client.preview.CanvasZoom;
 import us.drullk.aerolite.client.preview.IslandEditor;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.island.graph.FieldKind;
@@ -57,7 +63,9 @@ import java.util.Set;
  * The router graph view holds one router box with one input pin per router field. The function graph view holds one output box.
  * An input pin of a box without a link shows its constant or the switch Dimension default.
  * Each function node shows its type path, its input pins and its output pin. A reference node also shows its entry id and the button Open.
- * The field editor under the canvas edits the selected function node, then lists the validator problems and the build error in red.
+ * The field editor right of the canvas edits the selected function node, then lists the validator problems and the build error in red.
+ * The scroll wheel zooms the canvas around the cursor. imnodes has no zoom, so the canvas scales the positions, the imnodes style, the item spacing and the font.
+ * The stored positions stay unscaled, so the sidecar holds no zoom.
  * A right click on empty canvas opens the palette. Delete removes the selected links and function nodes.
  * The canvas owns the imnodes context. imgui-mc creates no imnodes context.
  *
@@ -69,20 +77,27 @@ final class ImGuiNodeCanvas {
     private static final float MARGIN = 8;
     /** The share of the game view height that the window takes when it appears. */
     private static final float HEIGHT_SHARE = 0.45F;
-    /** The share of the window content height that the field editor takes. */
-    private static final float FIELDS_SHARE = 0.35F;
+    /** The share of the window content width that the field editor takes. */
+    private static final float FIELDS_WIDTH_SHARE = 0.3F;
+    /** The least width of the field editor, in text line heights. */
+    private static final float FIELDS_MIN_LINES = 12;
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoDocking
             | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+    /** The wheel over the canvas zooms, so the canvas region never scrolls. */
+    private static final int CANVAS_FLAGS = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
     private static final float MINI_MAP_SIZE = 0.2F;
     /** The attribute ids of one function node. Slot 0 is the output pin, slot 1 and up the input pins. */
     private static final int SLOTS = 1024;
     /** The imnodes node id of the router box or the output box. */
     private static final int BOX_NODE = 0;
     private static final float CONSTANT_WIDTH = 110;
-    private static final float LABEL_SHARE = 0.35F;
+    /** The share of the field editor width that the label column takes at most. */
+    private static final float LABEL_SHARE = 0.5F;
     private static final float PALETTE_WIDTH = 260;
     private static final int PALETTE_ROWS = 12;
     private static final int TEXT_CAPACITY = 256;
+    /** The end mark of a clipped type id. */
+    private static final String ELLIPSIS = "...";
     private static final String PALETTE = "##aerolite_palette";
     private static final float[] ERROR_COLOR = {1, 0.4F, 0.4F, 1};
     private static final float INVALID_RED = 0.55F;
@@ -91,6 +106,10 @@ final class ImGuiNodeCanvas {
     private final Map<IslandGraphs.GraphId, ImNodesEditorContext> editorContexts = new HashMap<>();
     /** The function nodes whose canvas position imnodes holds, per graph. The box has the key {@link GraphLayout#BOX}. */
     private final Map<IslandGraphs.GraphId, Set<Integer>> placed = new HashMap<>();
+    /** The zoom of each graph view. A graph view without an entry has zoom 1. */
+    private final Map<IslandGraphs.GraphId, Float> zooms = new HashMap<>();
+    /** The zoom at which imnodes took the positions of {@link #placed}, per graph. */
+    private final Map<IslandGraphs.GraphId, Float> placedZooms = new HashMap<>();
     private final ImInt start = new ImInt();
     private final ImInt end = new ImInt();
     private final ImInt hovered = new ImInt();
@@ -106,6 +125,8 @@ final class ImGuiNodeCanvas {
     private boolean referenceOpen;
     @Nullable
     private ImNodesContext context;
+    /** The zoom of the graph that draws now. */
+    private float drawZoom = 1;
 
     /** Creates the imnodes context after imgui-mc loads ImGui. */
     void register() {
@@ -142,8 +163,13 @@ final class ImGuiNodeCanvas {
         return attribute >= SLOTS && attribute % SLOTS == 0;
     }
 
-    /** Draws the window once per ImGui frame, inside the font bracket of the panel. */
-    void draw(PreviewScreen screen, IslandEditor editor, float panelWidth) {
+    /**
+     * Draws the window once per ImGui frame, inside the font bracket of the panel.
+     *
+     * @param font     the panel font
+     * @param fontSize the size of the panel font at zoom 1
+     */
+    void draw(PreviewScreen screen, IslandEditor editor, float panelWidth, ImFont font, float fontSize) {
         if (this.context == null) {
             this.createContext("first draw");
         }
@@ -153,6 +179,8 @@ final class ImGuiNodeCanvas {
             // A new screen holds new graph copies, so each function node takes its stored position again.
             this.drawnScreen = screen;
             this.placed.clear();
+            this.zooms.clear();
+            this.placedZooms.clear();
             this.paletteAt = null;
             // The editor contexts of a closed screen live until the next screen draws.
             this.editorContexts.values().forEach(ImNodes::editorContextFree);
@@ -172,7 +200,7 @@ final class ImGuiNodeCanvas {
         boolean open = ImGui.begin("Island editor##aerolite_node_canvas", WINDOW_FLAGS);
         try {
             if (open) {
-                this.drawWindow(editor);
+                this.drawWindow(editor, font, fontSize);
             }
         } finally {
             ImGui.end();
@@ -182,7 +210,7 @@ final class ImGuiNodeCanvas {
         work.forEach(Runnable::run);
     }
 
-    private void drawWindow(IslandEditor editor) {
+    private void drawWindow(IslandEditor editor, ImFont font, float fontSize) {
         ResourceLocation entry = editor.openEntry();
         if (entry != null) {
             ImGui.alignTextToFramePadding();
@@ -205,16 +233,18 @@ final class ImGuiNodeCanvas {
             ImGui.textWrapped("The previewed dimension has no router graph.");
             return;
         }
-        float available = ImGui.getContentRegionAvailY();
-        float fieldsHeight = Math.max(ImGui.getFrameHeightWithSpacing() * 3, available * FIELDS_SHARE);
-        boolean canvas = ImGui.beginChild("##canvas", 0, Math.max(1, available - fieldsHeight - ImGui.getStyle().getItemSpacingY()), ImGuiChildFlags.None);
+        float available = ImGui.getContentRegionAvailX();
+        float spacing = ImGui.getStyle().getItemSpacingX();
+        float fieldsWidth = Math.min(available / 2, Math.max(ImGui.getTextLineHeight() * FIELDS_MIN_LINES, available * FIELDS_WIDTH_SHARE));
+        boolean canvas = ImGui.beginChild("##canvas", Math.max(1, available - fieldsWidth - spacing), 0, ImGuiChildFlags.None, CANVAS_FLAGS);
         try {
             if (canvas) {
-                this.drawCanvas(editor, graph, graphId);
+                this.drawCanvas(editor, graph, graphId, font, fontSize);
             }
         } finally {
             ImGui.endChild();
         }
+        ImGui.sameLine();
         boolean fields = ImGui.beginChild("##fields", 0, 0, ImGuiChildFlags.Borders);
         try {
             if (fields) {
@@ -229,60 +259,153 @@ final class ImGuiNodeCanvas {
         return this.editorContexts.computeIfAbsent(graphId, ignored -> ImNodes.editorContextCreate());
     }
 
-    private void drawCanvas(IslandEditor editor, FunctionNodeGraph graph, IslandGraphs.GraphId graphId) {
+    private void drawCanvas(IslandEditor editor, FunctionNodeGraph graph, IslandGraphs.GraphId graphId, ImFont font, float fontSize) {
         Map<Integer, Sidecar.Position> positions = editor.graphs().positions(graphId);
         if (!positions.containsKey(GraphLayout.BOX) || !positions.keySet().containsAll(graph.functionNodes().keySet())) {
             GraphLayout.layout(graph).forEach(positions::putIfAbsent);
         }
-        Set<Integer> placedIds = this.placed.computeIfAbsent(graphId, ignored -> new HashSet<>());
-        Set<Integer> placedBefore = Set.copyOf(placedIds);
         ImNodes.editorContextSet(this.editorContext(graphId));
+        float originX = ImGui.getCursorScreenPosX();
+        float originY = ImGui.getCursorScreenPosY();
+        editor.setCanvasSize(ImGui.getContentRegionAvailX(), ImGui.getContentRegionAvailY());
+        float zoom = this.zooms.getOrDefault(graphId, 1F);
+        Float zoomRequest = editor.takeZoomRequest();
+        if (zoomRequest != null) {
+            // A requested zoom keeps the canvas point at the canvas origin in place.
+            float requested = CanvasZoom.clamp(zoomRequest);
+            ImNodes.editorContextResetPanning(CanvasZoom.panAround(ImNodes.editorContextGetPanningX(), 0, zoom, requested),
+                    CanvasZoom.panAround(ImNodes.editorContextGetPanningY(), 0, zoom, requested));
+            zoom = requested;
+            this.zooms.put(graphId, zoom);
+        }
         Sidecar.Position pan = editor.takePanRequest();
         if (pan != null) {
             ImNodes.editorContextResetPanning(pan.x(), pan.y());
         }
-        float originX = ImGui.getCursorScreenPosX();
-        float originY = ImGui.getCursorScreenPosY();
-        ImNodes.beginNodeEditor();
-        try {
-            this.place(GraphLayout.BOX, BOX_NODE, positions, placedIds);
-            this.drawBox(editor, graph);
-            for (Map.Entry<Integer, FunctionNode> functionNode : graph.functionNodes().entrySet()) {
-                this.place(functionNode.getKey(), nodeId(functionNode.getKey()), positions, placedIds);
-                this.drawFunctionNode(editor, graph, functionNode.getKey(), functionNode.getValue());
-            }
-            this.drawLinks(graph);
-            ImNodes.miniMap(MINI_MAP_SIZE, ImNodesMiniMapLocation.BottomRight);
-        } finally {
-            ImNodes.endNodeEditor();
+        Set<Integer> placedIds = this.placed.computeIfAbsent(graphId, ignored -> new HashSet<>());
+        Float placedZoom = this.placedZooms.put(graphId, zoom);
+        if (placedZoom != null && placedZoom != zoom) {
+            // imnodes holds grid positions of the old zoom, so each function node takes its position again.
+            placedIds.clear();
         }
-        this.readPositions(graph, positions, placedBefore);
+        Set<Integer> placedBefore = Set.copyOf(placedIds);
+        this.drawZoom = zoom;
+        this.drawEditor(editor, graph, positions, placedIds, font, fontSize * zoom);
+        this.readPositions(graph, positions, placedBefore, zoom);
         this.applySelection(editor, placedBefore);
         this.applyLinks(editor, graph);
         this.applyDelete(editor, graph, graphId, positions, placedIds);
-        this.drawPalette(editor, originX, originY);
+        this.applyWheel(graphId, zoom, originX, originY);
+        this.drawPalette(editor, originX, originY, zoom);
     }
 
-    /** Gives imnodes the stored position of a function node once per screen. */
-    private void place(int key, int node, Map<Integer, Sidecar.Position> positions, Set<Integer> placedIds) {
-        if (placedIds.add(key)) {
-            Sidecar.Position position = positions.get(key);
-            if (position != null) {
-                ImNodes.setNodeGridSpacePos(node, position.x(), position.y());
+    /** The node editor with the imnodes style, the item spacing and the font scaled by the zoom. */
+    private void drawEditor(IslandEditor editor, FunctionNodeGraph graph, Map<Integer, Sidecar.Position> positions, Set<Integer> placedIds,
+                            ImFont font, float fontSize) {
+        float zoom = this.drawZoom;
+        ImNodesStyle nodes = ImNodes.getStyle();
+        ImGuiStyle style = ImGui.getStyle();
+        int nodePushes = 0;
+        int stylePushes = 0;
+        boolean fontPushed = false;
+        try {
+            ImNodes.pushStyleVar(ImNodesStyleVar.GridSpacing, nodes.getGridSpacing() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.NodeCornerRounding, nodes.getNodeCornerRounding() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.NodePadding, nodes.getNodePaddingX() * zoom, nodes.getNodePaddingY() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.NodeBorderThickness, nodes.getNodeBorderThickness() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.LinkThickness, nodes.getLinkThickness() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.LinkHoverDistance, nodes.getLinkHoverDistance() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.PinCircleRadius, nodes.getPinCircleRadius() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.PinQuadSideLength, nodes.getPinQuadSideLength() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.PinTriangleSideLength, nodes.getPinTriangleSideLength() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.PinLineThickness, nodes.getPinLineThickness() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.PinHoverRadius, nodes.getPinHoverRadius() * zoom);
+            nodePushes++;
+            ImNodes.pushStyleVar(ImNodesStyleVar.PinOffset, nodes.getPinOffset() * zoom);
+            nodePushes++;
+            ImGui.pushStyleVar(ImGuiStyleVar.FramePadding, style.getFramePaddingX() * zoom, style.getFramePaddingY() * zoom);
+            stylePushes++;
+            ImGui.pushStyleVar(ImGuiStyleVar.ItemSpacing, style.getItemSpacingX() * zoom, style.getItemSpacingY() * zoom);
+            stylePushes++;
+            ImGui.pushStyleVar(ImGuiStyleVar.ItemInnerSpacing, style.getItemInnerSpacingX() * zoom, style.getItemInnerSpacingY() * zoom);
+            stylePushes++;
+            ImGui.pushFont(font, fontSize);
+            fontPushed = true;
+            ImNodes.beginNodeEditor();
+            try {
+                this.place(GraphLayout.BOX, BOX_NODE, positions, placedIds, zoom);
+                this.drawBox(editor, graph);
+                for (Map.Entry<Integer, FunctionNode> functionNode : graph.functionNodes().entrySet()) {
+                    this.place(functionNode.getKey(), nodeId(functionNode.getKey()), positions, placedIds, zoom);
+                    this.drawFunctionNode(editor, graph, functionNode.getKey(), functionNode.getValue());
+                }
+                this.drawLinks(graph);
+                ImNodes.miniMap(MINI_MAP_SIZE, ImNodesMiniMapLocation.BottomRight);
+            } finally {
+                ImNodes.endNodeEditor();
+            }
+        } finally {
+            if (fontPushed) {
+                ImGui.popFont();
+            }
+            if (stylePushes > 0) {
+                ImGui.popStyleVar(stylePushes);
+            }
+            for (int pop = 0; pop < nodePushes; pop++) {
+                ImNodes.popStyleVar();
             }
         }
     }
 
-    /** A drag moves a function node in imnodes. The stored positions follow it. */
-    private void readPositions(FunctionNodeGraph graph, Map<Integer, Sidecar.Position> positions, Set<Integer> placedBefore) {
+    /** The wheel over the canvas zooms around the cursor. */
+    private void applyWheel(IslandGraphs.GraphId graphId, float zoom, float originX, float originY) {
+        float notches = ImGui.getIO().getMouseWheel();
+        if (notches == 0 || !ImNodes.isEditorHovered()) {
+            return;
+        }
+        float next = CanvasZoom.wheel(zoom, notches);
+        if (next == zoom) {
+            return;
+        }
+        float cursorX = ImGui.getMousePosX() - originX;
+        float cursorY = ImGui.getMousePosY() - originY;
+        ImNodes.editorContextResetPanning(CanvasZoom.panAround(ImNodes.editorContextGetPanningX(), cursorX, zoom, next),
+                CanvasZoom.panAround(ImNodes.editorContextGetPanningY(), cursorY, zoom, next));
+        this.zooms.put(graphId, next);
+    }
+
+    /** Gives imnodes the stored position of a function node, scaled by the zoom, once per screen and zoom. */
+    private void place(int key, int node, Map<Integer, Sidecar.Position> positions, Set<Integer> placedIds, float zoom) {
+        if (placedIds.add(key)) {
+            Sidecar.Position position = positions.get(key);
+            if (position != null) {
+                ImNodes.setNodeGridSpacePos(node, CanvasZoom.toGrid(position.x(), zoom), CanvasZoom.toGrid(position.y(), zoom));
+            }
+        }
+    }
+
+    /** A drag moves a function node in imnodes. The stored positions follow it, unscaled. */
+    private void readPositions(FunctionNodeGraph graph, Map<Integer, Sidecar.Position> positions, Set<Integer> placedBefore, float zoom) {
         for (int key : placedBefore) {
             if (key != GraphLayout.BOX && !graph.functionNodes().containsKey(key)) {
                 continue;
             }
             int node = key == GraphLayout.BOX ? BOX_NODE : nodeId(key);
-            Sidecar.Position now = new Sidecar.Position(ImNodes.getNodeGridSpacePosX(node), ImNodes.getNodeGridSpacePosY(node));
-            if (!now.equals(positions.get(key))) {
-                positions.put(key, now);
+            float gridX = ImNodes.getNodeGridSpacePosX(node);
+            float gridY = ImNodes.getNodeGridSpacePosY(node);
+            Sidecar.Position stored = positions.get(key);
+            if (stored == null || !CanvasZoom.shows(gridX, stored.x(), zoom) || !CanvasZoom.shows(gridY, stored.y(), zoom)) {
+                positions.put(key, new Sidecar.Position(CanvasZoom.toStored(gridX, zoom), CanvasZoom.toStored(gridY, zoom)));
             }
         }
     }
@@ -328,7 +451,7 @@ final class ImGuiNodeCanvas {
         }
         if (value instanceof RouterGraph.Constant constant) {
             ImGui.sameLine();
-            ImGui.setNextItemWidth(CONSTANT_WIDTH);
+            ImGui.setNextItemWidth(CONSTANT_WIDTH * this.drawZoom);
             ImDouble number = new ImDouble(constant.value());
             if (ImGui.inputDouble("##constant_" + output, number, 0, 0, "%.8g") && number.get() != constant.value()) {
                 router.set(output, new RouterGraph.Constant(number.get()));
@@ -518,19 +641,20 @@ final class ImGuiNodeCanvas {
         }
     }
 
-    /** A right click on empty canvas, or a request of the probe, opens the palette at that canvas point. */
-    private void drawPalette(IslandEditor editor, float originX, float originY) {
+    /** A right click on empty canvas, or a request of the probe, opens the palette at that canvas point. The point is unscaled. */
+    private void drawPalette(IslandEditor editor, float originX, float originY, float zoom) {
         float panX = ImNodes.editorContextGetPanningX();
         float panY = ImNodes.editorContextGetPanningY();
         boolean overItem = ImNodes.isNodeHovered(this.hovered) || ImNodes.isLinkHovered(this.hovered);
         if (ImNodes.isEditorHovered() && !overItem && ImGui.isMouseClicked(ImGuiMouseButton.Right)) {
-            this.paletteAt = new Sidecar.Position(ImGui.getMousePosX() - originX - panX, ImGui.getMousePosY() - originY - panY);
+            this.paletteAt = new Sidecar.Position(CanvasZoom.toStored(ImGui.getMousePosX() - originX - panX, zoom),
+                    CanvasZoom.toStored(ImGui.getMousePosY() - originY - panY, zoom));
             this.openPalette(ImGui.getMousePosX(), ImGui.getMousePosY());
         }
         Sidecar.Position request = editor.takePaletteRequest();
         if (request != null) {
             this.paletteAt = request;
-            this.openPalette(originX + panX + request.x(), originY + panY + request.y());
+            this.openPalette(originX + panX + CanvasZoom.toGrid(request.x(), zoom), originY + panY + CanvasZoom.toGrid(request.y(), zoom));
         }
         boolean close = editor.takeClosePaletteRequest();
         boolean shown = ImGui.beginPopup(PALETTE);
@@ -612,8 +736,17 @@ final class ImGuiNodeCanvas {
         }
     }
 
-    /** The fields of the selected function node, then the validator problems and the build error. */
+    /** The fields of the selected function node, then the validator problems and the build error. The text wraps to the region width. */
     private void drawFields(IslandEditor editor, FunctionNodeGraph graph) {
+        ImGui.pushTextWrapPos(0);
+        try {
+            this.drawFieldRows(editor, graph);
+        } finally {
+            ImGui.popTextWrapPos();
+        }
+    }
+
+    private void drawFieldRows(IslandEditor editor, FunctionNodeGraph graph) {
         Integer selected = editor.selected();
         if (selected == null) {
             ImGui.textDisabled("Select a function node to edit its fields.");
@@ -623,10 +756,17 @@ final class ImGuiNodeCanvas {
             try {
                 switch (functionNode) {
                     case FunctionNode.Typed typed -> {
-                        ImGui.textUnformatted(typed.type().id().toString());
+                        idText(typed.type().id().toString());
+                        float widest = 0;
                         for (FieldSpec field : typed.type().fields()) {
                             if (field.kind() != FieldKind.FUNCTION) {
-                                this.drawField(editor, selected, typed, field);
+                                widest = Math.max(widest, ImGui.calcTextSizeX(field.name()));
+                            }
+                        }
+                        float column = Math.min(ImGui.getContentRegionAvailX() * LABEL_SHARE, widest + ImGui.getStyle().getItemSpacingX());
+                        for (FieldSpec field : typed.type().fields()) {
+                            if (field.kind() != FieldKind.FUNCTION) {
+                                this.drawField(editor, selected, typed, field, column);
                             }
                         }
                     }
@@ -639,7 +779,7 @@ final class ImGuiNodeCanvas {
                         }
                     }
                     case FunctionNode.Unknown unknown -> {
-                        ImGui.textUnformatted(unknown.typeId().toString());
+                        idText(unknown.typeId().toString());
                         ImGui.textDisabled("No function node type describes this type, so it has no field editor.");
                     }
                 }
@@ -656,11 +796,31 @@ final class ImGuiNodeCanvas {
         }
     }
 
-    private void drawField(IslandEditor editor, int id, FunctionNode.Typed typed, FieldSpec field) {
+    /** A type id clips with an ellipsis and never wraps inside a word. Its tooltip holds the full id. */
+    private static void idText(String id) {
+        float width = ImGui.getContentRegionAvailX();
+        if (ImGui.calcTextSizeX(id) <= width) {
+            ImGui.textUnformatted(id);
+            return;
+        }
+        int end = id.length();
+        while (end > 0 && ImGui.calcTextSizeX(id.substring(0, end) + ELLIPSIS) > width) {
+            end--;
+        }
+        ImGui.textUnformatted(id.substring(0, end) + ELLIPSIS);
+        if (ImGui.isItemHovered()) {
+            ImGui.setTooltip(id);
+        }
+    }
+
+    /** A label wider than the label column takes its own line, and its field starts the next line. */
+    private void drawField(IslandEditor editor, int id, FunctionNode.Typed typed, FieldSpec field, float column) {
         FieldValue value = typed.values().get(field.name());
         ImGui.alignTextToFramePadding();
         ImGui.textUnformatted(field.name());
-        ImGui.sameLine(ImGui.getContentRegionAvailX() * LABEL_SHARE);
+        if (ImGui.calcTextSizeX(field.name()) + ImGui.getStyle().getItemSpacingX() <= column) {
+            ImGui.sameLine(column);
+        }
         ImGui.setNextItemWidth(-1);
         String widget = "##field_" + field.name();
         switch (field.kind()) {
