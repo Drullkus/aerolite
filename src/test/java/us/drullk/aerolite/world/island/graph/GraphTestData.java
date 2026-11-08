@@ -95,7 +95,15 @@ final class GraphTestData {
 
     /** The generated noise settings of the Islands preset for one dimension. */
     static JsonObject islandNoiseSettings(String dimension) {
-        String path = "data/aerolite/worldgen/noise_settings/islands/" + dimension + ".json";
+        return generated("data/aerolite/worldgen/noise_settings/islands/" + dimension + ".json");
+    }
+
+    /** The generated island density function entry of the Islands preset for one dimension. */
+    static JsonObject islandFunction(String dimension) {
+        return generated("data/aerolite/worldgen/density_function/islands/" + dimension + ".json");
+    }
+
+    private static JsonObject generated(String path) {
         try (InputStream stream = GraphTestData.class.getClassLoader().getResourceAsStream(path)) {
             if (stream == null) {
                 throw new IllegalStateException("The generated resource " + path + " does not exist");

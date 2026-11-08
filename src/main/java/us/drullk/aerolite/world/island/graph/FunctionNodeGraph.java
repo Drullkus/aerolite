@@ -45,6 +45,18 @@ public abstract sealed class FunctionNodeGraph permits FunctionGraph, RouterGrap
         this.outputs = List.copyOf(outputs);
     }
 
+    /** Copies the function nodes, the links and the next id of the source into this empty graph. */
+    protected void copyFrom(FunctionNodeGraph source) {
+        if (!this.outputs.equals(source.outputs) || !this.functionNodes.isEmpty()) {
+            throw new IllegalStateException("A copy needs an empty graph with the same outputs");
+        }
+        this.functionNodes.putAll(source.functionNodes);
+        this.inputLinks.putAll(source.inputLinks);
+        this.outputLinks.putAll(source.outputLinks);
+        this.targets.putAll(source.targets);
+        this.nextId = source.nextId;
+    }
+
     /** The graph output names. Each is the path of the function node that feeds it. */
     public List<String> outputs() {
         return this.outputs;

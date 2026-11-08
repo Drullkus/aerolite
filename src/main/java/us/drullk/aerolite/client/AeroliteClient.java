@@ -13,6 +13,7 @@ import us.drullk.aerolite.client.preview.PreviewViewport;
 import us.drullk.aerolite.network.CloudHeightSync;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.VoidPresetBiomes;
+import us.drullk.aerolite.world.island.GraphSettings;
 import us.drullk.aerolite.world.island.IslandGenerators;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
@@ -27,6 +28,7 @@ import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class AeroliteClient {
@@ -41,8 +43,10 @@ public final class AeroliteClient {
                           @Autowired PreviewViewport viewport, @Autowired AeroliteClientConfig config, @Autowired ItemIconAtlas icons,
                           @Autowired CloudHeightHolder cloudHeight, @Autowired CloudHeightSync cloudHeightSync, @Autowired SettingsJson json,
                           @Autowired ShaftSettingsHolder holder, @Autowired VoidPresetBiomes presetBiomes,
-                          @Autowired ProviderText providerText, @Autowired IslandGenerators islandGenerators) {
-        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json, holder, providerText, islandGenerators);
+                          @Autowired ProviderText providerText, @Autowired IslandGenerators islandGenerators,
+                          @Autowired IslandGraphHolder graphHolder, @Autowired GraphSettings graphSettings) {
+        this.tools = new PresetTools(sliders, edits, blocks, painter, mazes, panel, viewport, config, icons, json, holder, providerText, islandGenerators,
+                graphHolder, graphSettings);
         this.cloudHeight = cloudHeight;
         this.cloudHeightSync = cloudHeightSync;
         this.presetBiomes = presetBiomes;

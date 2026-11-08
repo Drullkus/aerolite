@@ -17,6 +17,13 @@ public final class FunctionGraph extends FunctionNodeGraph {
         super(List.of(OUTPUT));
     }
 
+    /** A copy with the same function node ids. Function nodes are immutable, so the copy shares them. */
+    public FunctionGraph copy() {
+        FunctionGraph copy = new FunctionGraph();
+        copy.copyFrom(this);
+        return copy;
+    }
+
     /** Links a function node to the output, with the rules of {@link #link(int, Pin)}. */
     public boolean setOutput(int source) {
         return this.linkOutput(source, OUTPUT);

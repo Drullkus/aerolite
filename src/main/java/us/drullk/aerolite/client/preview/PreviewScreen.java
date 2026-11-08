@@ -1,5 +1,6 @@
 package us.drullk.aerolite.client.preview;
 
+import com.google.gson.JsonObject;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.Util;
@@ -13,6 +14,7 @@ import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -21,6 +23,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import org.joml.Matrix4f;
@@ -28,10 +31,14 @@ import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.PresetTools;
 import us.drullk.aerolite.client.YLimits;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.island.GraphSettings;
 import us.drullk.aerolite.world.island.IslandSettings;
+import us.drullk.aerolite.world.island.graph.IslandGraphs;
 
 import javax.annotation.Nullable;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.BiConsumer;
@@ -41,8 +48,9 @@ import java.util.function.BiConsumer;
  * The ImGui panel on the right edits a copy of the settings. Done sends the copy back. Cancel drops it.
  * A previewed dimension without variations shows the empty region: sky, grid and outline.
  * The movement keys and a middle drag move the region center. A move across a chunk border shifts the region.
- * The islands preview, from the Islands screen, holds island settings. Its panel edits them, and its chunks hold the island terrain.
- * Its Done sends the island settings back. Its pillars come from the holder settings and stay as they are.
+ * The islands preview, from the Islands screen, holds the graphs of the island editor. Its node canvas and its panel sliders edit them.
+ * Its chunks hold the terrain of the router graph of the previewed dimension. A graph that does not build keeps the last good terrain.
+ * Its Done sends the graphs back. Its pillars come from the holder settings and stay as they are.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -52,6 +60,7 @@ import java.util.function.BiConsumer;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-03_21-30_59c3cf2d-0f5c-441f-8955-6758c09560e0.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -65,9 +74,24 @@ public class PreviewScreen extends Screen {
     private final BiConsumer<AeroliteSettings, String> onDone;
     /** The Done action of the islands preview, or null for the pillars preview. */
     @Nullable
-    private final BiConsumer<IslandSettings, String> onIslandsDone;
+    private final BiConsumer<IslandGraphs, String> onIslandsDone;
+    /** The graphs of the islands preview, or null for the pillars preview. */
     @Nullable
-    private IslandSettings islands;
+    private final IslandGraphs graphs;
+    @Nullable
+    private final IslandEditor editor;
+    private final RegistryAccess registries;
+    /** The last terrain that built, per dimension. */
+    private final Map<ResourceKey<Level>, NoiseGeneratorSettings> goodTerrain = new HashMap<>();
+    private final Map<ResourceKey<Level>, JsonObject> goodRouter = new HashMap<>();
+    private int builtVersion = -1;
+    @Nullable
+    private ResourceKey<Level> builtDimension;
+    private int slidersVersion = -1;
+    @Nullable
+    private ResourceKey<Level> slidersDimension;
+    @Nullable
+    private IslandSettings sliders;
     private final List<PreviewDimension> dimensions;
     private final List<ResourceKey<Level>> levels;
     private final Registry<Biome> biomes;
@@ -105,24 +129,29 @@ public class PreviewScreen extends Screen {
     }
 
     /**
-     * The islands preview. The panel edits the island settings, and the chunks hold the island terrain.
+     * The islands preview. The node canvas and the panel edit the graphs, and the chunks hold the terrain of the graphs.
      *
      * @param settings the pillar settings of the holder; the preview paints their pillars and does not edit them
-     * @param onDone   takes the island settings and the seed text when the user clicks Done
+     * @param graphs   the graphs that the preview edits in place
+     * @param onDone   takes the graphs and the seed text when the user clicks Done
      */
-    public static PreviewScreen islands(Screen parent, WorldCreationContext context, PresetTools tools, AeroliteSettings settings, IslandSettings islands,
-                                        String seedText, BiConsumer<IslandSettings, String> onDone) {
-        return new PreviewScreen(parent, context, tools, settings, seedText, (ignored, seed) -> { }, islands, onDone);
+    public static PreviewScreen islands(Screen parent, WorldCreationContext context, PresetTools tools, AeroliteSettings settings, IslandGraphs graphs,
+                                        String seedText, BiConsumer<IslandGraphs, String> onDone) {
+        return new PreviewScreen(parent, context, tools, settings, seedText, (ignored, seed) -> { }, graphs, onDone);
     }
 
     private PreviewScreen(Screen parent, WorldCreationContext context, PresetTools tools, AeroliteSettings settings, String seedText,
-                          BiConsumer<AeroliteSettings, String> onDone, @Nullable IslandSettings islands, @Nullable BiConsumer<IslandSettings, String> onIslandsDone) {
+                          BiConsumer<AeroliteSettings, String> onDone, @Nullable IslandGraphs graphs, @Nullable BiConsumer<IslandGraphs, String> onIslandsDone) {
         super(Component.translatable("createWorld.customize.aerolite.preview.title"));
         this.parent = parent;
         this.tools = tools;
         this.onDone = onDone;
-        this.islands = islands;
+        this.graphs = graphs;
         this.onIslandsDone = onIslandsDone;
+        this.registries = context.worldgenLoadContext();
+        GraphSettings graphSettings = tools.graphSettings();
+        this.editor = graphs == null ? null
+                : new IslandEditor(graphs, graphSettings.loader(this.registries), graphSettings.noises(this.registries), this::dimensionKey, this::graphChanged);
         this.settings = settings;
         OptionalLong parsed = WorldOptions.parseSeed(seedText);
         if (parsed.isPresent()) {
@@ -167,17 +196,43 @@ public class PreviewScreen extends Screen {
         }
     }
 
-    /** The island settings of the islands preview, or null in the pillars preview. */
-    @Nullable
-    public IslandSettings islands() {
-        return this.islands;
+    /** True for the islands preview. */
+    public boolean islandsMode() {
+        return this.editor != null;
     }
 
-    /** Edits the island settings. The pillars preview ignores the call. */
-    public void setIslands(IslandSettings islands) {
-        if (this.islands != null && !islands.equals(this.islands)) {
-            this.islands = islands;
-            this.requestBuild();
+    /** The node canvas state of the islands preview, or null in the pillars preview. */
+    @Nullable
+    public IslandEditor islandEditor() {
+        return this.editor;
+    }
+
+    /**
+     * The island settings of the first {@code aerolite:voronoi_islands} function node of the router graph of the previewed dimension.
+     * Null in the pillars preview and for a router graph without one.
+     */
+    @Nullable
+    public IslandSettings islandSliders() {
+        IslandEditor editor = this.editor;
+        ResourceKey<Level> dimension = this.dimensionKey();
+        if (editor == null || dimension == null) {
+            return null;
+        }
+        if (this.slidersVersion != editor.version() || !dimension.equals(this.slidersDimension)) {
+            this.slidersVersion = editor.version();
+            this.slidersDimension = dimension;
+            this.sliders = editor.graphs().islands(dimension, editor.loader()).orElse(null);
+        }
+        return this.sliders;
+    }
+
+    /** Writes the island settings into the island function node of the previewed dimension. */
+    public void setIslandSliders(IslandSettings settings) {
+        IslandEditor editor = this.editor;
+        ResourceKey<Level> dimension = this.dimensionKey();
+        if (editor != null && dimension != null && !settings.equals(this.islandSliders())
+                && editor.graphs().setIslands(dimension, settings, editor.loader())) {
+            editor.changed();
         }
     }
 
@@ -361,7 +416,50 @@ public class PreviewScreen extends Screen {
         boolean constantAmbientLight = DimensionSpecialEffects.forType(dimension.type()).constantAmbientLight();
         ChunkPos center = new ChunkPos(this.pan.chunkX(), this.pan.chunkZ());
         this.requestedCenter = center;
-        this.builder.request(new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise, center, this.islands));
+        NoiseGeneratorSettings terrain = null;
+        if (this.editor != null) {
+            this.buildTerrain(dimension);
+            terrain = this.goodTerrain.get(dimension.key());
+        }
+        this.builder.request(new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise, center, terrain));
+    }
+
+    /**
+     * Builds the terrain of the router graph of the dimension once per graph edit. A good build replaces the last good terrain.
+     * A failed build keeps it and gives the editor the error.
+     */
+    private void buildTerrain(PreviewDimension dimension) {
+        IslandEditor editor = this.editor;
+        if (editor == null || this.graphs == null || (this.builtVersion == editor.version() && dimension.key().equals(this.builtDimension))) {
+            return;
+        }
+        this.builtVersion = editor.version();
+        this.builtDimension = dimension.key();
+        if (this.graphs.router(dimension.key()) == null) {
+            editor.setBuildError(null);
+            return;
+        }
+        this.tools.graphSettings().build(this.graphs, dimension.key(), dimension.noiseSettings().value(), this.registries, editor.noises())
+                .ifSuccess(built -> {
+                    editor.setBuildError(null);
+                    if (!built.router().equals(this.goodRouter.get(dimension.key()))) {
+                        this.goodRouter.put(dimension.key(), built.router());
+                        this.goodTerrain.put(dimension.key(), built.settings());
+                    }
+                })
+                .ifError(error -> editor.setBuildError(error.message()));
+    }
+
+    /** A graph edit builds the terrain. Only a good build starts a preview build. */
+    private void graphChanged() {
+        PreviewDimension dimension = this.dimension();
+        if (dimension == null || this.builder == null) {
+            return;
+        }
+        this.buildTerrain(dimension);
+        if (this.editor != null && this.editor.buildError() == null) {
+            this.requestBuild();
+        }
     }
 
     /** The movement keys and the middle drag work only while no widget and no panel field takes the keyboard. */
@@ -427,20 +525,25 @@ public class PreviewScreen extends Screen {
         this.tools.viewport().activate(this.tools.config().panelWidth());
         if (this.builder == null) {
             Minecraft minecraft = Minecraft.getInstance();
-            this.builder = new PreviewBuilder(this.tools.painter(), this.tools.mazes(), this.tools.islands(), minecraft.getBlockRenderer());
+            this.builder = new PreviewBuilder(this.tools.painter(), this.tools.mazes(), minecraft.getBlockRenderer());
             this.renderer = new PreviewRenderer();
             this.frameCamera();
             this.requestBuild();
         }
     }
 
+    /** The top edge of the footer buttons, in GUI units. */
+    public int footerTop() {
+        return this.height - 20 - MARGIN;
+    }
+
     @Override
     protected void init() {
-        int y = this.height - 20 - MARGIN;
+        int y = this.footerTop();
         int x = this.width / 2 - BUTTON_WIDTH - MARGIN / 2;
         this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> {
-            if (this.onIslandsDone != null && this.islands != null) {
-                this.onIslandsDone.accept(this.islands, this.chosenSeedText());
+            if (this.onIslandsDone != null && this.graphs != null) {
+                this.onIslandsDone.accept(this.graphs, this.chosenSeedText());
             } else {
                 this.onDone.accept(this.settings, this.chosenSeedText());
             }

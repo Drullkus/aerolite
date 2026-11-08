@@ -38,8 +38,6 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteSettings;
-import us.drullk.aerolite.world.island.IslandGenerators;
-import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.IslandTerrain;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
@@ -49,7 +47,6 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
@@ -69,13 +66,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  * The bake pool bakes the sections of a chunk in parallel.
  * The chunks go to the render thread in spiral sequence, each one when it and every earlier chunk are baked.
  * A newer request stops an older generation at the next chunk and drops its pending bakes.
- * A request with island settings fills each chunk with the island terrain of the dimension before the pillars.
+ * A request with terrain settings fills each chunk with their terrain before the pillars.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
 public final class PreviewBuilder implements AutoCloseable {
 
@@ -90,16 +88,16 @@ public final class PreviewBuilder implements AutoCloseable {
      * The input of one generation.
      *
      * @param center  the chunk that holds the region center
-     * @param islands the island settings of the terrain, or null for a preview without terrain
+     * @param terrain the noise generator settings of the terrain, or null for a preview without terrain; the screen gives a new object only for a new terrain
      */
     public record Request(AeroliteSettings settings, long seed, PreviewDimension dimension, int radius, boolean constantAmbientLight,
-                          Registry<Biome> biomes, HolderGetter<NormalNoise.NoiseParameters> noise, ChunkPos center, @Nullable IslandSettings islands) {
+                          Registry<Biome> biomes, HolderGetter<NormalNoise.NoiseParameters> noise, ChunkPos center, @Nullable NoiseGeneratorSettings terrain) {
 
         /** True when the two requests differ in the center at most. */
         public boolean sameScene(Request other) {
             return this.settings.equals(other.settings) && this.seed == other.seed && this.dimension.equals(other.dimension)
                     && this.radius == other.radius && this.constantAmbientLight == other.constantAmbientLight
-                    && Objects.equals(this.islands, other.islands);
+                    && this.terrain == other.terrain;
         }
     }
 
@@ -199,21 +197,18 @@ public final class PreviewBuilder implements AutoCloseable {
         final PreviewBiomes biomes;
         @Nullable
         final ShaftLayout layout;
-        /** The island terrain of the dimension, or null for a preview without terrain or a dimension without an island density function. */
+        /** The terrain of the request, or null for a preview without terrain. */
         @Nullable
         final IslandTerrain terrain;
         final Long2ObjectMap<ProtoChunk> painted = new Long2ObjectOpenHashMap<>();
 
-        Scene(Request request, long number, ShaftMazes mazes, IslandGenerators islands) {
+        Scene(Request request, long number, ShaftMazes mazes) {
             this.request = request;
             this.number = number;
             PreviewDimension dimension = request.dimension();
             this.heightAccessor = LevelHeightAccessor.create(dimension.minY(), dimension.maxY() - dimension.minY());
-            NoiseGeneratorSettings generatorSettings = dimension.noiseSettings().value();
-            boolean terrain = request.islands() != null && islands.islands(generatorSettings).isPresent();
-            if (terrain) {
-                generatorSettings = islands.withSettings(generatorSettings, request.islands());
-            }
+            boolean terrain = request.terrain() != null;
+            NoiseGeneratorSettings generatorSettings = terrain ? request.terrain() : dimension.noiseSettings().value();
             RandomState randomState = RandomState.create(generatorSettings, request.noise(), request.seed());
             this.biomes = new PreviewBiomes(dimension.biomeSource(), randomState.sampler(), request.biomes());
             this.terrain = terrain
@@ -227,7 +222,6 @@ public final class PreviewBuilder implements AutoCloseable {
 
     private final ShaftPainter painter;
     private final ShaftMazes mazes;
-    private final IslandGenerators islands;
     private final BlockRenderDispatcher blockRenderer;
     private final Thread thread;
     private final ExecutorService bakers;
@@ -250,10 +244,9 @@ public final class PreviewBuilder implements AutoCloseable {
     private Scene scene;
     private long sceneCount;
 
-    public PreviewBuilder(ShaftPainter painter, ShaftMazes mazes, IslandGenerators islands, BlockRenderDispatcher blockRenderer) {
+    public PreviewBuilder(ShaftPainter painter, ShaftMazes mazes, BlockRenderDispatcher blockRenderer) {
         this.painter = painter;
         this.mazes = mazes;
-        this.islands = islands;
         this.blockRenderer = blockRenderer;
         AtomicInteger bakerCount = new AtomicInteger();
         this.bakers = Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() - 1), runnable -> {
@@ -345,7 +338,7 @@ public final class PreviewBuilder implements AutoCloseable {
     private Scene scene(Request request) {
         Scene scene = this.scene;
         if (scene == null || !scene.request.sameScene(request)) {
-            scene = new Scene(request, ++this.sceneCount, this.mazes, this.islands);
+            scene = new Scene(request, ++this.sceneCount, this.mazes);
             this.scene = scene;
             synchronized (this.lock) {
                 this.delivered.clear();

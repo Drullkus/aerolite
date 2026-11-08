@@ -48,6 +48,14 @@ public final class RouterGraph extends FunctionNodeGraph {
         }
     }
 
+    /** A copy with the same function node ids and the same unlinked values. */
+    public RouterGraph copy() {
+        RouterGraph copy = new RouterGraph(new DimensionDefault());
+        copy.copyFrom(this);
+        copy.unlinked.putAll(this.unlinked);
+        return copy;
+    }
+
     public boolean link(int source, String field) {
         return this.linkOutput(source, field);
     }

@@ -92,7 +92,7 @@ The global rules in `~/.claude/CLAUDE.md` apply. This file adds the rules for Ae
 | Distortion | The simplex noise shift of the position before the island lattice lookup. The cell boundary distortion setting is its largest shift, in blocks. |
 | Surface floor | The positive band of the initial density at the bottom of an island dimension. It gives every column a preliminary surface level. |
 | Island settings | The fields of the island density function without its noise. The Islands screen and the islands preview edit them. `IslandSettings` holds them. |
-| Islands preview | The preview screen that the Islands screen opens. Its chunks hold the island terrain, and its panel edits the island settings. |
+| Islands preview | The preview screen that the Islands screen opens. Its chunks hold the terrain of the graphs, and its node canvas edits the graphs. |
 | Island type | A composition of density functions in the editor. Planned for 0.6.0. |
 | Bridge | A walkable path between the islands of two neighbor cells. Planned for 0.6.0. |
 | Center structure | A vanilla structure whose start is at a cell center. Planned for 0.6.0. |
@@ -299,6 +299,7 @@ Data generation writes:
 - The probe saves one PNG of the window front buffer per state under `screenshots/` of the game directory. Then it stops the game.
 - With `-Pmute`, the PNG files land in `run-mute/screenshots/`.
 - The system property `aerolite.devtools.islandsProbe` turns on the islands probe, `IslandsProbe`. It saves the Islands screen and the islands preview, creates an Islands world and saves a side view and a top view of the first island.
+- The islands probe also saves the island editor states. The Javadoc of `IslandsProbe` lists them.
 - Every run loads the test source set as part of the mod `aerolite`.
 - A stale test class in the IDE output breaks the mod load. After a branch change, run Build > Rebuild Project in IntelliJ IDEA.
 
@@ -878,8 +879,7 @@ The player sets the pillar settings in the World tab of the create world screen.
 - `ImGuiPanelFont` adds the panel font on each font event of imgui-mc.
 - Each popup icon renders at the framebuffer pixel size of its row, rounded up to a multiple of 16.
 - A change of that pixel size renders the icon atlas again.
-- The islands preview shows the node canvas window over the game view, left of the panel.
-- The node canvas holds placeholder nodes and links. It evaluates nothing and saves nothing.
+- The islands preview shows the node canvas window over the game view, left of the panel. See [Island editor](#island-editor).
 - `ImGuiNodeCanvas` owns the imnodes context. It creates the context on the ImGui post load event of imgui-mc.
 - imgui-mc creates no imnodes context.
 - imnodes has no canvas zoom.
@@ -1295,16 +1295,17 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The island bottom slider runs over the build height of every dimension in steps of 16.
 - The jitter, fill and empty chance sliders run from 0% to 100% in steps of 5%. A fill slider that passes the other pushes it along.
 - The distortion scale slider steps through the powers of two from 8 to 1024. The octaves slider runs from 1 to 8.
-- The sliders start at the island settings of the island density function of the first preset dimension that has one.
-- Done writes the island settings through `IslandGenerators`. A dimension whose island density function has the settings stays as it is.
+- The sliders edit the island function node of the first router graph that reaches one. See [Island editor](#island-editor).
+- Without such a function node, the sliders start at the first island density function of the preset dimensions.
+- Done writes the graphs to the graph holder and the island settings through `IslandGenerators`. A dimension whose island density function has the settings stays as it is.
 - Any other dimension with an island density function gets direct generator settings. Only its two terrain functions hold the new island density function. The other router functions keep their registry references.
 - The world saves the direct generator settings in `level.dat`.
 - The footer of the Islands screen holds Done, Preview and Cancel. The Preview button shows only when ImGui loaded.
-- Preview opens the islands preview with a copy of the island settings. Done in the preview sends the copy and the seed text back. Cancel drops them.
-- The islands preview is the preview screen with island settings. `PreviewScreen.islands` makes it.
+- Preview opens the islands preview with a copy of the graphs. Done in the preview sends the copy and the seed text back. Cancel drops them.
+- The islands preview is the preview screen with the graphs. `PreviewScreen.islands` makes it.
 - Its panel shows the Preview section without the Copy, Paste and Defaults row, then the header Islands with the sliders of the Islands screen.
-- Its chunks hold the island terrain of the previewed dimension under the pillars of the holder settings. The preview does not edit the pillars.
-- A previewed dimension without an island density function shows its pillars alone.
+- Its chunks hold the terrain of the router graph of the previewed dimension under the pillars of the holder settings. The preview does not edit the pillars.
+- A previewed dimension without a router graph shows its pillars alone.
 - `IslandTerrain` fills a chunk from the noise settings and builds its surface without a level. The fill is the vanilla noise fill without a structure manager, so the terrain adaptation of structures is absent.
 - The biome choices of the Islands screen reach the preview only after Done. The preview reads the generators of the world creation state.
 - Island types, inner cells, cell merging, island bridges and center structures are 0.6.0 work.
@@ -1333,6 +1334,33 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - `GraphValidator` reports each function node outside the trees at its id, because the save drops it.
 - A load refuses a key that the type of the function node does not have.
 - The sidecar does not change the density function JSON. A function node without a sidecar position gets none.
+
+### Island editor
+
+- The node canvas of the islands preview is the island editor. It opens only in the world creation flow.
+- `IslandGraphHolder` keeps the graphs of the open flow. It resets with the flow, like the settings holder.
+- No writer reads the graphs of the holder yet.
+- Each preset dimension with a noise generator has one router graph. Its outputs start on dimension default.
+- The previewed dimension picks the shown router graph.
+- The editor window first shows above the footer buttons of the preview. The footer buttons draw over ImGui.
+- The router box holds one input pin per router field. An unlinked pin shows Dimension default or its constant.
+- Open on a reference node shows the function graph of its entry. Back returns to the router graph.
+- An entry without an edit loads from the density function registry of the creation context.
+- The first edit of an opened entry makes it an edited function graph.
+- The field editor under the canvas edits the selected function node. The range of the field clamps the input.
+- A noise field outside the noise registry has a red frame. A spline shows its point counts and takes no edit.
+- A right click on empty canvas opens the palette: Constant, Reference... and every function node type by id path.
+- A new function node takes zero, or the bound nearest zero. A noise field takes the first noise id.
+- Delete removes the selected links and function nodes. The children of a removed function node stay detached.
+- A function node without a position gets one from the layout of `GraphLayout`.
+- Positions live in memory by function node id. A detached function node has no path, so its sidecar drops it.
+- The panel sliders edit the first `voronoi_islands` function node under the router outputs of the previewed dimension.
+- That search follows reference nodes and the saved JSON of dimension default outputs.
+- A router graph that reaches no such function node shows the sliders off.
+- The screen builds the noise settings on each graph edit. `GraphSettings` holds the build.
+- The build puts the JSON of each edited entry in the place of its references. This inline serves the preview only.
+- A validator problem or a decode error fails the build. The terrain then keeps the last good build.
+- The field editor shows the validator problems and the build error in red.
 
 ## Config
 
@@ -1377,6 +1405,9 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - `IslandGameTests` checks the Islands preset, the seed wiring of the island function, the surface floor, the island settings edit and the blocks of a generated island chunk.
 - `IslandGameTests` also checks that the terrain fill of the preview writes the blocks of the generator fill, and that its surface follows the biome.
 - The island JUnit tests check the lattice and the island density.
+- The graph JUnit tests also check the inline step, the slider map, the graph layout and the new field values.
+- `IslandGameTests` checks that a router graph on dimension default fills a chunk like the shipped noise settings.
+- `IslandGameTests` checks that a slider write reaches the built router.
 - The shape GameTests check the cross sections, the trusses, the hole and the column web plane. They also check erosion and the one crossing of a horizontal Bridge pillar.
 
 ## AI attribution procedure
@@ -1405,4 +1436,5 @@ The repository owner cites AI-generated work, so every session Claude works in m
 When a new question appears, add it here and ask the user before you implement it.
 
 - The capacity of `PatternCache` and of `ChaosScenes`. The owner has not picked the cache sizes.
+- The sliders of the Islands screen edit the island function node of the first router graph only. Done applies them to every dimension. The owner has not picked the rule for the other router graphs.
 - The patch area of the patterns on a Bridge ring. Chaos paints no patch area there. Bricks paints only the outer columns there. The owner has not picked the rule.

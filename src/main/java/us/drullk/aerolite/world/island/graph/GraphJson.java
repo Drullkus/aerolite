@@ -71,6 +71,18 @@ public final class GraphJson {
         return DataResult.success(graph);
     }
 
+    /**
+     * Loads one density function JSON tree into a graph that exists, without a link to a graph output. Gives the id of its root function node.
+     * A failed load can leave function nodes of the tree in the graph.
+     */
+    public static DataResult<Integer> readInto(FunctionNodeGraph graph, JsonElement json, String path) {
+        try {
+            return DataResult.success(read(graph, json, path));
+        } catch (GraphJsonException exception) {
+            return DataResult.error(exception::getMessage);
+        }
+    }
+
     /** Saves a function graph as one density function JSON tree. */
     public static DataResult<JsonElement> write(FunctionGraph graph) {
         Integer root = graph.output();

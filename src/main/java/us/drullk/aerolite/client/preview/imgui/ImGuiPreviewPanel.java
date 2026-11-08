@@ -29,6 +29,7 @@ import us.drullk.aerolite.client.PresetEdits;
 import us.drullk.aerolite.client.PresetSliders;
 import us.drullk.aerolite.client.PresetTools;
 import us.drullk.aerolite.client.YLimits;
+import us.drullk.aerolite.client.preview.IslandEditor;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
 import us.drullk.aerolite.client.preview.PreviewDimension;
 import us.drullk.aerolite.client.preview.PreviewPanel;
@@ -66,7 +67,7 @@ import java.util.function.UnaryOperator;
  * A radio left of each dimension name and the dimension combo of the Preview section select the previewed dimension.
  * The pattern widgets of a variation sit at a half indent under the combo Pattern.
  * The block fields of a variation sit in a tab bar. The tab Blocks holds the fields. Each opened field has a tab with its provider editor.
- * The islands preview also shows the node canvas window over the game view.
+ * The islands preview also shows the node canvas window over the game view. Its island sliders edit the island function node of the router graph.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -283,8 +284,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             ImGui.end();
         }
         this.gizmo.draw(screen.camera(), this.width);
-        if (screen.islands() != null) {
-            this.nodeCanvas.draw(this.width);
+        IslandEditor editor = screen.islandEditor();
+        if (editor != null) {
+            this.nodeCanvas.draw(screen, editor, this.width);
         }
     }
 
@@ -345,12 +347,19 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
             this.drawPreview(screen);
         }
 
-        IslandSettings islands = screen.islands();
-        if (islands != null) {
+        if (screen.islandsMode()) {
             if (ImGui.collapsingHeader(text("islands"), ImGuiTreeNodeFlags.DefaultOpen)) {
-                IslandSettings edited = this.drawIslands(islands);
-                if (!edited.equals(islands)) {
-                    screen.setIslands(edited);
+                IslandSettings islands = screen.islandSliders();
+                // A router graph without an island function node shows the sliders off.
+                ImGui.beginDisabled(islands == null);
+                try {
+                    IslandSettings shown = islands != null ? islands : IslandSettings.DEFAULT;
+                    IslandSettings edited = this.drawIslands(shown);
+                    if (islands != null && !edited.equals(islands)) {
+                        screen.setIslandSliders(edited);
+                    }
+                } finally {
+                    ImGui.endDisabled();
                 }
             }
             return;
@@ -1009,7 +1018,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         }
 
         // The clipboard buttons move the pillar settings, which the islands preview does not edit.
-        if (screen.islands() == null) {
+        if (!screen.islandsMode()) {
             if (ImGui.button(text("copy") + "##copy")) {
                 this.tools().json().copy(screen.settings(), this.tools().edits().registries());
             }
@@ -1051,7 +1060,7 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         float fraction = progress.phase() == PreviewBuilder.Phase.DONE ? 1 : progress.fraction();
         ImGui.progressBar(fraction, -1, 0, label);
         ResourceKey<Level> previewed = screen.dimensionKey();
-        if (previewed != null && screen.settings().variations(previewed).isEmpty() && screen.islands() == null) {
+        if (previewed != null && screen.settings().variations(previewed).isEmpty() && !screen.islandsMode()) {
             ImGui.textWrapped(text("preview.no_shafts"));
         }
 

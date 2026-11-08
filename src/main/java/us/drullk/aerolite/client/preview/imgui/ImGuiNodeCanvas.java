@@ -6,21 +6,59 @@ import imgui.ImGui;
 import imgui.ImGuiViewport;
 import imgui.extension.imnodes.ImNodes;
 import imgui.extension.imnodes.ImNodesContext;
+import imgui.extension.imnodes.ImNodesEditorContext;
 import imgui.extension.imnodes.flag.ImNodesMiniMapLocation;
+import imgui.flag.ImGuiChildFlags;
+import imgui.flag.ImGuiCol;
 import imgui.flag.ImGuiCond;
 import imgui.flag.ImGuiFocusedFlags;
 import imgui.flag.ImGuiKey;
+import imgui.flag.ImGuiMouseButton;
+import imgui.flag.ImGuiSelectableFlags;
 import imgui.flag.ImGuiWindowFlags;
+import imgui.type.ImDouble;
 import imgui.type.ImInt;
+import imgui.type.ImString;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
 import org.slf4j.Logger;
+import us.drullk.aerolite.client.preview.IslandEditor;
+import us.drullk.aerolite.client.preview.PreviewScreen;
+import us.drullk.aerolite.world.island.graph.FieldKind;
+import us.drullk.aerolite.world.island.graph.FieldSpec;
+import us.drullk.aerolite.world.island.graph.FieldValue;
+import us.drullk.aerolite.world.island.graph.FunctionGraph;
+import us.drullk.aerolite.world.island.graph.FunctionNode;
+import us.drullk.aerolite.world.island.graph.FunctionNodeDefaults;
+import us.drullk.aerolite.world.island.graph.FunctionNodeGraph;
+import us.drullk.aerolite.world.island.graph.FunctionNodeType;
+import us.drullk.aerolite.world.island.graph.FunctionNodeTypes;
+import us.drullk.aerolite.world.island.graph.GraphLayout;
+import us.drullk.aerolite.world.island.graph.GraphProblem;
+import us.drullk.aerolite.world.island.graph.IslandGraphs;
+import us.drullk.aerolite.world.island.graph.RouterGraph;
+import us.drullk.aerolite.world.island.graph.Sidecar;
+import us.drullk.aerolite.world.island.graph.SplineValue;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * The node canvas window over the game view of the islands preview, left of the panel.
- * It draws a fixed set of placeholder nodes with imnodes. It evaluates nothing and saves nothing.
+ * The node canvas window over the game view of the islands preview, left of the panel. It edits the graphs of the island editor with imnodes.
+ * The window first shows above the footer buttons of the screen, because they draw over ImGui.
+ * The router graph view holds one router box with one input pin per router field. The function graph view holds one output box.
+ * An input pin of a box without a link shows its constant or the switch Dimension default.
+ * Each function node shows its type path, its input pins and its output pin. A reference node also shows its entry id and the button Open.
+ * The field editor under the canvas edits the selected function node, then lists the validator problems and the build error in red.
+ * A right click on empty canvas opens the palette. Delete removes the selected links and function nodes.
  * The canvas owns the imnodes context. imgui-mc creates no imnodes context.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
@@ -31,56 +69,43 @@ final class ImGuiNodeCanvas {
     private static final float MARGIN = 8;
     /** The share of the game view height that the window takes when it appears. */
     private static final float HEIGHT_SHARE = 0.45F;
+    /** The share of the window content height that the field editor takes. */
+    private static final float FIELDS_SHARE = 0.35F;
     private static final int WINDOW_FLAGS = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoDocking
             | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
     private static final float MINI_MAP_SIZE = 0.2F;
+    /** The attribute ids of one function node. Slot 0 is the output pin, slot 1 and up the input pins. */
+    private static final int SLOTS = 1024;
+    /** The imnodes node id of the router box or the output box. */
+    private static final int BOX_NODE = 0;
+    private static final float CONSTANT_WIDTH = 110;
+    private static final float LABEL_SHARE = 0.35F;
+    private static final float PALETTE_WIDTH = 260;
+    private static final int PALETTE_ROWS = 12;
+    private static final int TEXT_CAPACITY = 256;
+    private static final String PALETTE = "##aerolite_palette";
+    private static final float[] ERROR_COLOR = {1, 0.4F, 0.4F, 1};
+    private static final float INVALID_RED = 0.55F;
 
-    private record Pin(int id, String label) {
-    }
-
-    private record Node(int id, String title, List<Pin> inputs, List<Pin> outputs, float x, float y) {
-    }
-
-    private record Link(int id, int start, int end) {
-    }
-
-    private final List<Node> nodes = new ArrayList<>();
-    private final List<Link> links = new ArrayList<>();
+    /** One imnodes editor context per graph of the drawn screen. */
+    private final Map<IslandGraphs.GraphId, ImNodesEditorContext> editorContexts = new HashMap<>();
+    /** The function nodes whose canvas position imnodes holds, per graph. The box has the key {@link GraphLayout#BOX}. */
+    private final Map<IslandGraphs.GraphId, Set<Integer>> placed = new HashMap<>();
     private final ImInt start = new ImInt();
     private final ImInt end = new ImInt();
-    private final ImInt destroyed = new ImInt();
-    private int nextId = 1;
-    /** True until the first frame places the nodes on the grid. */
-    private boolean place = true;
+    private final ImInt hovered = new ImInt();
+    private final ImString filter = new ImString(TEXT_CAPACITY);
+    private final ImString reference = new ImString(TEXT_CAPACITY);
+    /** The work that changes the shown graph or the view. It runs after the node editor ends. */
+    private final List<Runnable> deferred = new ArrayList<>();
+    @Nullable
+    private PreviewScreen drawnScreen;
+    /** The canvas point of the open palette. */
+    @Nullable
+    private Sidecar.Position paletteAt;
+    private boolean referenceOpen;
     @Nullable
     private ImNodesContext context;
-
-    ImGuiNodeCanvas() {
-        Node noise = this.node("noise", List.of(), List.of("out"), 0, 0);
-        Node constant = this.node("constant", List.of(), List.of("out"), 0, 120);
-        Node add = this.node("add", List.of("argument1", "argument2"), List.of("out"), 180, 40);
-        Node mul = this.node("mul", List.of("argument1", "argument2"), List.of("out"), 360, 60);
-        Node interpolated = this.node("interpolated", List.of("argument"), List.of("out"), 540, 60);
-        Node finalDensity = this.node("final density", List.of("argument"), List.of(), 720, 60);
-        this.link(noise.outputs().getFirst(), add.inputs().get(0));
-        this.link(constant.outputs().getFirst(), add.inputs().get(1));
-        this.link(add.outputs().getFirst(), mul.inputs().get(0));
-        this.link(mul.outputs().getFirst(), interpolated.inputs().getFirst());
-        this.link(interpolated.outputs().getFirst(), finalDensity.inputs().getFirst());
-    }
-
-    private Node node(String title, List<String> inputs, List<String> outputs, float x, float y) {
-        int id = this.nextId++;
-        List<Pin> in = inputs.stream().map(label -> new Pin(this.nextId++, label)).toList();
-        List<Pin> out = outputs.stream().map(label -> new Pin(this.nextId++, label)).toList();
-        Node node = new Node(id, title, in, out, x, y);
-        this.nodes.add(node);
-        return node;
-    }
-
-    private void link(Pin start, Pin end) {
-        this.links.add(new Link(this.nextId++, start.id(), end.id()));
-    }
 
     /** Creates the imnodes context after imgui-mc loads ImGui. */
     void register() {
@@ -97,102 +122,647 @@ final class ImGuiNodeCanvas {
         LOGGER.info("The imnodes context of the node canvas exists, created on the {}", source);
     }
 
+    private static int nodeId(int functionNode) {
+        return functionNode + 1;
+    }
+
+    private static int outputAttribute(int functionNode) {
+        return nodeId(functionNode) * SLOTS;
+    }
+
+    private static int inputAttribute(int functionNode, int pinIndex) {
+        return nodeId(functionNode) * SLOTS + 1 + pinIndex;
+    }
+
+    private static int boxAttribute(int outputIndex) {
+        return 1 + outputIndex;
+    }
+
+    private static boolean isOutputAttribute(int attribute) {
+        return attribute >= SLOTS && attribute % SLOTS == 0;
+    }
+
     /** Draws the window once per ImGui frame, inside the font bracket of the panel. */
-    void draw(float panelWidth) {
+    void draw(PreviewScreen screen, IslandEditor editor, float panelWidth) {
         if (this.context == null) {
             this.createContext("first draw");
         }
         ImNodes.setCurrentContext(this.context);
         ImNodes.setImGuiContext(ImGui.getCurrentContext());
+        if (screen != this.drawnScreen) {
+            // A new screen holds new graph copies, so each function node takes its stored position again.
+            this.drawnScreen = screen;
+            this.placed.clear();
+            this.paletteAt = null;
+            // The editor contexts of a closed screen live until the next screen draws.
+            this.editorContexts.values().forEach(ImNodes::editorContextFree);
+            this.editorContexts.clear();
+        }
 
         // With multiple viewports, ImGui positions are desktop coordinates. The main viewport is the game window.
         ImGuiViewport viewport = ImGui.getMainViewport();
         float gameWidth = viewport.getSizeX() - panelWidth;
-        float height = viewport.getSizeY() * HEIGHT_SHARE;
+        // The footer buttons draw over ImGui, so the window starts above them.
+        float unitsPerGui = viewport.getSizeY() / Math.max(1, screen.height);
+        float bottom = screen.footerTop() * unitsPerGui - MARGIN;
+        float height = Math.max(1, Math.min(viewport.getSizeY() * HEIGHT_SHARE, bottom - MARGIN));
         ImGui.setNextWindowViewport(viewport.getID());
-        ImGui.setNextWindowPos(viewport.getPosX() + MARGIN, viewport.getPosY() + viewport.getSizeY() - height - MARGIN, ImGuiCond.Appearing);
+        ImGui.setNextWindowPos(viewport.getPosX() + MARGIN, viewport.getPosY() + bottom - height, ImGuiCond.Appearing);
         ImGui.setNextWindowSize(gameWidth - 2 * MARGIN, height, ImGuiCond.Appearing);
-        boolean open = ImGui.begin("Node canvas##aerolite_node_canvas", WINDOW_FLAGS);
+        boolean open = ImGui.begin("Island editor##aerolite_node_canvas", WINDOW_FLAGS);
         try {
             if (open) {
-                this.drawEditor();
-                this.applyEdits();
+                this.drawWindow(editor);
             }
         } finally {
             ImGui.end();
         }
+        List<Runnable> work = List.copyOf(this.deferred);
+        this.deferred.clear();
+        work.forEach(Runnable::run);
     }
 
-    private void drawEditor() {
+    private void drawWindow(IslandEditor editor) {
+        ResourceLocation entry = editor.openEntry();
+        if (entry != null) {
+            ImGui.alignTextToFramePadding();
+            ImGui.textUnformatted(entry.toString());
+            ImGui.sameLine();
+            if (ImGui.button("Back##back")) {
+                this.deferred.add(editor::back);
+            }
+        } else {
+            ResourceKey<Level> dimension = editor.dimension();
+            ImGui.alignTextToFramePadding();
+            ImGui.textUnformatted("Router graph of " + (dimension == null ? "no dimension" : dimension.location().toString()));
+        }
+        if (editor.openError() != null) {
+            errorText(editor.openError());
+        }
+        FunctionNodeGraph graph = editor.graph();
+        IslandGraphs.GraphId graphId = editor.graphId();
+        if (graph == null || graphId == null) {
+            ImGui.textWrapped("The previewed dimension has no router graph.");
+            return;
+        }
+        float available = ImGui.getContentRegionAvailY();
+        float fieldsHeight = Math.max(ImGui.getFrameHeightWithSpacing() * 3, available * FIELDS_SHARE);
+        boolean canvas = ImGui.beginChild("##canvas", 0, Math.max(1, available - fieldsHeight - ImGui.getStyle().getItemSpacingY()), ImGuiChildFlags.None);
+        try {
+            if (canvas) {
+                this.drawCanvas(editor, graph, graphId);
+            }
+        } finally {
+            ImGui.endChild();
+        }
+        boolean fields = ImGui.beginChild("##fields", 0, 0, ImGuiChildFlags.Borders);
+        try {
+            if (fields) {
+                this.drawFields(editor, graph);
+            }
+        } finally {
+            ImGui.endChild();
+        }
+    }
+
+    private ImNodesEditorContext editorContext(IslandGraphs.GraphId graphId) {
+        return this.editorContexts.computeIfAbsent(graphId, ignored -> ImNodes.editorContextCreate());
+    }
+
+    private void drawCanvas(IslandEditor editor, FunctionNodeGraph graph, IslandGraphs.GraphId graphId) {
+        Map<Integer, Sidecar.Position> positions = editor.graphs().positions(graphId);
+        if (!positions.containsKey(GraphLayout.BOX) || !positions.keySet().containsAll(graph.functionNodes().keySet())) {
+            GraphLayout.layout(graph).forEach(positions::putIfAbsent);
+        }
+        Set<Integer> placedIds = this.placed.computeIfAbsent(graphId, ignored -> new HashSet<>());
+        Set<Integer> placedBefore = Set.copyOf(placedIds);
+        ImNodes.editorContextSet(this.editorContext(graphId));
+        Sidecar.Position pan = editor.takePanRequest();
+        if (pan != null) {
+            ImNodes.editorContextResetPanning(pan.x(), pan.y());
+        }
+        float originX = ImGui.getCursorScreenPosX();
+        float originY = ImGui.getCursorScreenPosY();
         ImNodes.beginNodeEditor();
         try {
-            if (this.place) {
-                this.place = false;
-                for (Node node : this.nodes) {
-                    ImNodes.setNodeGridSpacePos(node.id(), node.x(), node.y());
-                }
+            this.place(GraphLayout.BOX, BOX_NODE, positions, placedIds);
+            this.drawBox(editor, graph);
+            for (Map.Entry<Integer, FunctionNode> functionNode : graph.functionNodes().entrySet()) {
+                this.place(functionNode.getKey(), nodeId(functionNode.getKey()), positions, placedIds);
+                this.drawFunctionNode(editor, graph, functionNode.getKey(), functionNode.getValue());
             }
-            for (Node node : this.nodes) {
-                this.drawNode(node);
-            }
-            for (Link link : this.links) {
-                ImNodes.link(link.id(), link.start(), link.end());
-            }
+            this.drawLinks(graph);
             ImNodes.miniMap(MINI_MAP_SIZE, ImNodesMiniMapLocation.BottomRight);
         } finally {
             ImNodes.endNodeEditor();
         }
+        this.readPositions(graph, positions, placedBefore);
+        this.applySelection(editor, placedBefore);
+        this.applyLinks(editor, graph);
+        this.applyDelete(editor, graph, graphId, positions, placedIds);
+        this.drawPalette(editor, originX, originY);
     }
 
-    private void drawNode(Node node) {
-        ImNodes.beginNode(node.id());
+    /** Gives imnodes the stored position of a function node once per screen. */
+    private void place(int key, int node, Map<Integer, Sidecar.Position> positions, Set<Integer> placedIds) {
+        if (placedIds.add(key)) {
+            Sidecar.Position position = positions.get(key);
+            if (position != null) {
+                ImNodes.setNodeGridSpacePos(node, position.x(), position.y());
+            }
+        }
+    }
+
+    /** A drag moves a function node in imnodes. The stored positions follow it. */
+    private void readPositions(FunctionNodeGraph graph, Map<Integer, Sidecar.Position> positions, Set<Integer> placedBefore) {
+        for (int key : placedBefore) {
+            if (key != GraphLayout.BOX && !graph.functionNodes().containsKey(key)) {
+                continue;
+            }
+            int node = key == GraphLayout.BOX ? BOX_NODE : nodeId(key);
+            Sidecar.Position now = new Sidecar.Position(ImNodes.getNodeGridSpacePosX(node), ImNodes.getNodeGridSpacePosY(node));
+            if (!now.equals(positions.get(key))) {
+                positions.put(key, now);
+            }
+        }
+    }
+
+    /** The router box, or the output box of a function graph. */
+    private void drawBox(IslandEditor editor, FunctionNodeGraph graph) {
+        ImNodes.beginNode(BOX_NODE);
+        ImGui.pushID("box");
         try {
             ImNodes.beginNodeTitleBar();
             try {
-                ImGui.textUnformatted(node.title());
+                ImGui.textUnformatted(graph instanceof RouterGraph ? "noise_router" : "output");
             } finally {
                 ImNodes.endNodeTitleBar();
             }
-            for (Pin pin : node.inputs()) {
-                ImNodes.beginInputAttribute(pin.id());
+            List<String> outputs = graph.outputs();
+            for (int index = 0; index < outputs.size(); index++) {
+                String output = outputs.get(index);
+                ImNodes.beginInputAttribute(boxAttribute(index));
                 try {
-                    ImGui.textUnformatted(pin.label());
+                    ImGui.textUnformatted(graph instanceof RouterGraph ? output : "density function");
+                    if (graph instanceof RouterGraph router && router.linked(output) == null) {
+                        this.drawUnlinked(editor, router, output);
+                    }
                 } finally {
                     ImNodes.endInputAttribute();
                 }
             }
-            for (Pin pin : node.outputs()) {
-                ImNodes.beginOutputAttribute(pin.id());
-                try {
-                    ImGui.textUnformatted(pin.label());
-                } finally {
-                    ImNodes.endOutputAttribute();
-                }
-            }
         } finally {
+            ImGui.popID();
             ImNodes.endNode();
         }
     }
 
-    /** imnodes reports new and removed links after the editor ends. An input holds one link. */
-    private void applyEdits() {
+    /** The switch Dimension default and, for a constant, its number field. */
+    private void drawUnlinked(IslandEditor editor, RouterGraph router, String output) {
+        RouterGraph.Unlinked value = router.unlinkedValue(output);
+        ImGui.sameLine();
+        boolean dimensionDefault = value instanceof RouterGraph.DimensionDefault;
+        if (ImGui.checkbox("Dimension default##default_" + output, dimensionDefault)) {
+            router.set(output, dimensionDefault ? new RouterGraph.Constant(0) : new RouterGraph.DimensionDefault());
+            editor.edited();
+        }
+        if (value instanceof RouterGraph.Constant constant) {
+            ImGui.sameLine();
+            ImGui.setNextItemWidth(CONSTANT_WIDTH);
+            ImDouble number = new ImDouble(constant.value());
+            if (ImGui.inputDouble("##constant_" + output, number, 0, 0, "%.8g") && number.get() != constant.value()) {
+                router.set(output, new RouterGraph.Constant(number.get()));
+                editor.edited();
+            }
+        }
+    }
+
+    private static String title(FunctionNode functionNode) {
+        return switch (functionNode) {
+            case FunctionNode.Typed typed -> typed.type().id().getPath();
+            case FunctionNode.Reference ignored -> "reference";
+            case FunctionNode.Unknown unknown -> unknown.typeId().toString();
+        };
+    }
+
+    private void drawFunctionNode(IslandEditor editor, FunctionNodeGraph graph, int id, FunctionNode functionNode) {
+        ImNodes.beginNode(nodeId(id));
+        ImGui.pushID(nodeId(id));
+        try {
+            ImNodes.beginNodeTitleBar();
+            try {
+                ImGui.textUnformatted(title(functionNode));
+            } finally {
+                ImNodes.endNodeTitleBar();
+            }
+            if (functionNode instanceof FunctionNode.Reference referenceNode) {
+                ImGui.textUnformatted(referenceNode.entry().toString());
+                if (ImGui.button("Open##open")) {
+                    this.deferred.add(() -> editor.openReference(referenceNode.entry()));
+                }
+            }
+            List<String> pins = functionNode.inputPins();
+            for (int index = 0; index < pins.size(); index++) {
+                ImNodes.beginInputAttribute(inputAttribute(id, index));
+                try {
+                    ImGui.textUnformatted(pins.get(index));
+                } finally {
+                    ImNodes.endInputAttribute();
+                }
+            }
+            ImNodes.beginOutputAttribute(outputAttribute(id));
+            try {
+                ImGui.textUnformatted("out");
+            } finally {
+                ImNodes.endOutputAttribute();
+            }
+        } finally {
+            ImGui.popID();
+            ImNodes.endNode();
+        }
+    }
+
+    /** A link into a pin has the id of the pin attribute. */
+    private void drawLinks(FunctionNodeGraph graph) {
+        for (int id : graph.functionNodes().keySet()) {
+            FunctionNodeGraph.Target target = graph.target(id);
+            if (target instanceof FunctionNodeGraph.Target.Input input) {
+                int index = graph.functionNode(input.pin().functionNode()).inputPins().indexOf(input.pin().name());
+                int attribute = inputAttribute(input.pin().functionNode(), index);
+                ImNodes.link(attribute, outputAttribute(id), attribute);
+            } else if (target instanceof FunctionNodeGraph.Target.Output output) {
+                int attribute = boxAttribute(graph.outputs().indexOf(output.output()));
+                ImNodes.link(attribute, outputAttribute(id), attribute);
+            }
+        }
+    }
+
+    /** A request of the probe selects a function node that imnodes already holds. The imnodes selection then gives the selected function node. */
+    private void applySelection(IslandEditor editor, Set<Integer> placedBefore) {
+        Integer request = editor.takeSelectRequest();
+        if (request != null) {
+            if (placedBefore.contains(request)) {
+                ImNodes.clearNodeSelection();
+                ImNodes.selectNode(nodeId(request));
+            } else {
+                editor.requestSelect(request);
+            }
+            return;
+        }
+        int count = ImNodes.numSelectedNodes();
+        Integer selected = null;
+        if (count > 0) {
+            int[] ids = new int[count];
+            ImNodes.getSelectedNodes(ids);
+            for (int node : ids) {
+                if (node != BOX_NODE) {
+                    selected = node - 1;
+                }
+            }
+        }
+        editor.select(selected);
+    }
+
+    /** The graph refuses a second link from one output and a loop. A refusal shows nothing. */
+    private void applyLinks(IslandEditor editor, FunctionNodeGraph graph) {
         if (ImNodes.isLinkCreated(this.start, this.end)) {
-            int input = this.end.get();
-            this.links.removeIf(link -> link.end() == input);
-            this.links.add(new Link(this.nextId++, this.start.get(), input));
+            int from = this.start.get();
+            int to = this.end.get();
+            if (!isOutputAttribute(from)) {
+                int swap = from;
+                from = to;
+                to = swap;
+            }
+            if (isOutputAttribute(from) && !isOutputAttribute(to) && this.connect(graph, from / SLOTS - 1, to)) {
+                editor.edited();
+            }
         }
-        if (ImNodes.isLinkDestroyed(this.destroyed)) {
-            int id = this.destroyed.get();
-            this.links.removeIf(link -> link.id() == id);
+        if (ImNodes.isLinkDestroyed(this.hovered) && this.disconnect(graph, this.hovered.get())) {
+            editor.edited();
         }
-        int selected = ImNodes.numSelectedLinks();
-        if (selected > 0 && ImGui.isWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.isKeyPressed(ImGuiKey.Delete, false)) {
-            int[] ids = new int[selected];
+    }
+
+    private boolean connect(FunctionNodeGraph graph, int source, int attribute) {
+        if (!graph.functionNodes().containsKey(source)) {
+            return false;
+        }
+        if (attribute < SLOTS) {
+            String output = graph.outputs().get(attribute - 1);
+            return graph instanceof RouterGraph router ? router.link(source, output) : ((FunctionGraph) graph).setOutput(source);
+        }
+        FunctionNodeGraph.Pin pin = pin(graph, attribute);
+        return pin != null && graph.link(source, pin);
+    }
+
+    /** The pin of an input attribute, or null when the function node or the pin is gone. */
+    @Nullable
+    private static FunctionNodeGraph.Pin pin(FunctionNodeGraph graph, int attribute) {
+        int functionNode = attribute / SLOTS - 1;
+        if (!graph.functionNodes().containsKey(functionNode)) {
+            return null;
+        }
+        List<String> pins = graph.functionNode(functionNode).inputPins();
+        int index = attribute % SLOTS - 1;
+        return index >= 0 && index < pins.size() ? new FunctionNodeGraph.Pin(functionNode, pins.get(index)) : null;
+    }
+
+    private boolean disconnect(FunctionNodeGraph graph, int link) {
+        Integer source;
+        if (link < SLOTS) {
+            source = link - 1 < graph.outputs().size() ? graph.outputSource(graph.outputs().get(link - 1)) : null;
+        } else {
+            FunctionNodeGraph.Pin pin = pin(graph, link);
+            source = pin == null ? null : graph.source(pin);
+        }
+        if (source == null) {
+            return false;
+        }
+        graph.unlink(source);
+        return true;
+    }
+
+    /** Delete removes the selected links, then the selected function nodes. Their children stay without a link. */
+    private void applyDelete(IslandEditor editor, FunctionNodeGraph graph, IslandGraphs.GraphId graphId, Map<Integer, Sidecar.Position> positions,
+                             Set<Integer> placedIds) {
+        if (!ImGui.isWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) || ImGui.getIO().getWantTextInput() || !ImGui.isKeyPressed(ImGuiKey.Delete, false)) {
+            return;
+        }
+        boolean changed = false;
+        int links = ImNodes.numSelectedLinks();
+        if (links > 0) {
+            int[] ids = new int[links];
             ImNodes.getSelectedLinks(ids);
             ImNodes.clearLinkSelection();
-            for (int id : ids) {
-                this.links.removeIf(link -> link.id() == id);
+            for (int link : ids) {
+                changed |= this.disconnect(graph, link);
             }
+        }
+        int nodes = ImNodes.numSelectedNodes();
+        if (nodes > 0) {
+            int[] ids = new int[nodes];
+            ImNodes.getSelectedNodes(ids);
+            ImNodes.clearNodeSelection();
+            for (int node : ids) {
+                int functionNode = node - 1;
+                if (node != BOX_NODE && graph.functionNodes().containsKey(functionNode)) {
+                    graph.remove(functionNode);
+                    positions.remove(functionNode);
+                    placedIds.remove(functionNode);
+                    changed = true;
+                }
+            }
+            editor.select(null);
+        }
+        if (changed) {
+            editor.edited();
+        }
+    }
+
+    /** A right click on empty canvas, or a request of the probe, opens the palette at that canvas point. */
+    private void drawPalette(IslandEditor editor, float originX, float originY) {
+        float panX = ImNodes.editorContextGetPanningX();
+        float panY = ImNodes.editorContextGetPanningY();
+        boolean overItem = ImNodes.isNodeHovered(this.hovered) || ImNodes.isLinkHovered(this.hovered);
+        if (ImNodes.isEditorHovered() && !overItem && ImGui.isMouseClicked(ImGuiMouseButton.Right)) {
+            this.paletteAt = new Sidecar.Position(ImGui.getMousePosX() - originX - panX, ImGui.getMousePosY() - originY - panY);
+            this.openPalette(ImGui.getMousePosX(), ImGui.getMousePosY());
+        }
+        Sidecar.Position request = editor.takePaletteRequest();
+        if (request != null) {
+            this.paletteAt = request;
+            this.openPalette(originX + panX + request.x(), originY + panY + request.y());
+        }
+        boolean close = editor.takeClosePaletteRequest();
+        boolean shown = ImGui.beginPopup(PALETTE);
+        if (shown) {
+            try {
+                if (close) {
+                    ImGui.closeCurrentPopup();
+                } else {
+                    this.drawPaletteEntries(editor);
+                }
+            } finally {
+                ImGui.endPopup();
+            }
+        }
+        editor.setPaletteShown(shown && !close);
+    }
+
+    /** Opens the palette at a screen point, moved to fit the game window. A popup outside it becomes a window of its own. */
+    private void openPalette(float x, float y) {
+        this.filter.set("");
+        this.referenceOpen = false;
+        ImGui.openPopup(PALETTE);
+        ImGuiViewport viewport = ImGui.getMainViewport();
+        float padding = 2 * ImGui.getStyle().getWindowPaddingY();
+        float height = ImGui.getTextLineHeightWithSpacing() * PALETTE_ROWS + ImGui.getFrameHeightWithSpacing() * 4 + padding;
+        float width = PALETTE_WIDTH + 2 * ImGui.getStyle().getWindowPaddingX();
+        float fitX = Math.max(viewport.getPosX(), Math.min(x, viewport.getPosX() + viewport.getSizeX() - width));
+        float fitY = Math.max(viewport.getPosY(), Math.min(y, viewport.getPosY() + viewport.getSizeY() - height));
+        ImGui.setNextWindowPos(fitX, fitY);
+    }
+
+    private void drawPaletteEntries(IslandEditor editor) {
+        Sidecar.Position at = this.paletteAt != null ? this.paletteAt : new Sidecar.Position(0, 0);
+        ImGui.setNextItemWidth(PALETTE_WIDTH);
+        if (ImGui.isWindowAppearing()) {
+            ImGui.setKeyboardFocusHere();
+        }
+        ImGui.inputTextWithHint("##filter", "Filter", this.filter);
+        if (ImGui.selectable("Constant")) {
+            editor.add(FunctionNode.Typed.bareConstant(0), at);
+            ImGui.closeCurrentPopup();
+        }
+        if (ImGui.selectable("Reference...", this.referenceOpen, ImGuiSelectableFlags.NoAutoClosePopups)) {
+            this.referenceOpen = !this.referenceOpen;
+        }
+        if (this.referenceOpen) {
+            ImGui.setNextItemWidth(PALETTE_WIDTH - ImGui.calcTextSizeX("Add") - 2 * ImGui.getStyle().getFramePaddingX() - ImGui.getStyle().getItemSpacingX());
+            ImGui.inputTextWithHint("##reference", "Entry id", this.reference);
+            ImGui.sameLine();
+            ResourceLocation entry = ResourceLocation.tryParse(this.reference.get().trim());
+            ImGui.beginDisabled(entry == null || this.reference.get().isBlank());
+            try {
+                if (ImGui.button("Add##add_reference") && entry != null) {
+                    editor.add(new FunctionNode.Reference(entry), at);
+                    ImGui.closeCurrentPopup();
+                }
+            } finally {
+                ImGui.endDisabled();
+            }
+        }
+        ImGui.separator();
+        String needle = this.filter.get().trim().toLowerCase(Locale.ROOT);
+        List<FunctionNodeType> types = FunctionNodeTypes.all().stream()
+                .filter(type -> type.id().getPath().contains(needle))
+                .sorted(Comparator.comparing((FunctionNodeType type) -> type.id().getPath()).thenComparing(type -> type.id().toString()))
+                .toList();
+        boolean list = ImGui.beginChild("##types", PALETTE_WIDTH, ImGui.getTextLineHeightWithSpacing() * PALETTE_ROWS, ImGuiChildFlags.None);
+        try {
+            if (list) {
+                for (FunctionNodeType type : types) {
+                    if (ImGui.selectable(type.id().getPath() + "##" + type.id())) {
+                        editor.add(FunctionNodeDefaults.create(type, editor.defaultNoise()), at);
+                        ImGui.closeCurrentPopup();
+                    }
+                }
+            }
+        } finally {
+            ImGui.endChild();
+        }
+    }
+
+    /** The fields of the selected function node, then the validator problems and the build error. */
+    private void drawFields(IslandEditor editor, FunctionNodeGraph graph) {
+        Integer selected = editor.selected();
+        if (selected == null) {
+            ImGui.textDisabled("Select a function node to edit its fields.");
+        } else {
+            FunctionNode functionNode = graph.functionNode(selected);
+            ImGui.pushID(nodeId(selected));
+            try {
+                switch (functionNode) {
+                    case FunctionNode.Typed typed -> {
+                        ImGui.textUnformatted(typed.type().id().toString());
+                        for (FieldSpec field : typed.type().fields()) {
+                            if (field.kind() != FieldKind.FUNCTION) {
+                                this.drawField(editor, selected, typed, field);
+                            }
+                        }
+                    }
+                    case FunctionNode.Reference referenceNode -> {
+                        ImGui.alignTextToFramePadding();
+                        ImGui.textUnformatted("Reference to " + referenceNode.entry());
+                        ImGui.sameLine();
+                        if (ImGui.button("Open##open_selected")) {
+                            this.deferred.add(() -> editor.openReference(referenceNode.entry()));
+                        }
+                    }
+                    case FunctionNode.Unknown unknown -> {
+                        ImGui.textUnformatted(unknown.typeId().toString());
+                        ImGui.textDisabled("No function node type describes this type, so it has no field editor.");
+                    }
+                }
+            } finally {
+                ImGui.popID();
+            }
+        }
+        for (GraphProblem problem : editor.problems()) {
+            errorText(problemText(graph, problem));
+        }
+        String buildError = editor.buildError();
+        if (buildError != null) {
+            errorText("The terrain keeps the last good build: " + buildError);
+        }
+    }
+
+    private void drawField(IslandEditor editor, int id, FunctionNode.Typed typed, FieldSpec field) {
+        FieldValue value = typed.values().get(field.name());
+        ImGui.alignTextToFramePadding();
+        ImGui.textUnformatted(field.name());
+        ImGui.sameLine(ImGui.getContentRegionAvailX() * LABEL_SHARE);
+        ImGui.setNextItemWidth(-1);
+        String widget = "##field_" + field.name();
+        switch (field.kind()) {
+            case NUMBER -> {
+                ImDouble number = new ImDouble(value instanceof FieldValue.Number current ? current.value() : FunctionNodeDefaults.nearestZero(field));
+                if (ImGui.inputDouble(widget, number, 0, 0, "%.8g")) {
+                    editor.setField(id, field.name(), new FieldValue.Number(Math.clamp(number.get(), field.min(), field.max())));
+                }
+            }
+            case INTEGER -> {
+                ImInt number = new ImInt(value instanceof FieldValue.Int current ? current.value() : (int) FunctionNodeDefaults.nearestZero(field));
+                if (ImGui.inputInt(widget, number, 0, 0)) {
+                    editor.setField(id, field.name(), new FieldValue.Int((int) Math.clamp(number.get(), field.min(), field.max())));
+                }
+            }
+            case ENUM -> {
+                String current = value instanceof FieldValue.Choice choice ? choice.value() : "";
+                if (ImGui.beginCombo(widget, current)) {
+                    try {
+                        for (String choice : field.choices()) {
+                            if (ImGui.selectable(choice, choice.equals(current))) {
+                                editor.setField(id, field.name(), new FieldValue.Choice(choice));
+                            }
+                        }
+                    } finally {
+                        ImGui.endCombo();
+                    }
+                }
+            }
+            case NOISE -> this.drawNoise(editor, id, field, value, widget);
+            case SPLINE -> ImGui.textDisabled(value instanceof FieldValue.Spline spline ? splineSummary(spline.value()) : "No spline");
+            case FUNCTION -> {
+            }
+        }
+    }
+
+    /** A text field for the noise id. An id outside the noise registry gives the field a red frame. */
+    private void drawNoise(IslandEditor editor, int id, FieldSpec field, @Nullable FieldValue value, String widget) {
+        if (!(value instanceof FieldValue.Noise noise) || noise.id() == null) {
+            ImGui.textDisabled("An inline noise object. The editor keeps it as it is.");
+            return;
+        }
+        boolean unknown = !editor.noises().contains(noise.id());
+        if (unknown) {
+            ImGui.pushStyleColor(ImGuiCol.FrameBg, INVALID_RED, 0.1F, 0.1F, 1);
+        }
+        try {
+            ImString text = new ImString(noise.id().toString(), TEXT_CAPACITY);
+            if (ImGui.inputText(widget, text)) {
+                ResourceLocation parsed = ResourceLocation.tryParse(text.get().trim());
+                if (parsed != null) {
+                    editor.setField(id, field.name(), FieldValue.Noise.of(parsed));
+                }
+            }
+        } finally {
+            if (unknown) {
+                ImGui.popStyleColor();
+            }
+        }
+    }
+
+    /** The point count of each multipoint level, in the sequence of the coordinate pins. Spline edits come in a later step. */
+    private static String splineSummary(SplineValue spline) {
+        if (spline instanceof SplineValue.Constant constant) {
+            return "Constant spline " + constant.value() + ", read only";
+        }
+        List<Integer> counts = new ArrayList<>();
+        countPoints(spline, counts);
+        return "Points per level: " + String.join(" / ", counts.stream().map(String::valueOf).toList()) + ", read only";
+    }
+
+    private static void countPoints(SplineValue spline, List<Integer> counts) {
+        if (spline instanceof SplineValue.Multipoint multipoint) {
+            counts.add(multipoint.points().size());
+            for (SplineValue.Point point : multipoint.points()) {
+                countPoints(point.value(), counts);
+            }
+        }
+    }
+
+    /** A problem at a function node id also names the type, because the canvas shows no id. */
+    private static String problemText(FunctionNodeGraph graph, GraphProblem problem) {
+        String path = problem.path();
+        if (path.startsWith("#")) {
+            try {
+                int id = Integer.parseInt(path.substring(1));
+                if (graph.functionNodes().containsKey(id)) {
+                    return GraphProblem.format(title(graph.functionNode(id)) + " " + path, problem.message());
+                }
+            } catch (NumberFormatException ignored) {
+                // A path that holds no id shows as it is.
+            }
+        }
+        return problem.toString();
+    }
+
+    private static void errorText(String text) {
+        ImGui.pushStyleColor(ImGuiCol.Text, ERROR_COLOR[0], ERROR_COLOR[1], ERROR_COLOR[2], ERROR_COLOR[3]);
+        try {
+            ImGui.textWrapped(text.replace("%", "%%"));
+        } finally {
+            ImGui.popStyleColor();
         }
     }
 

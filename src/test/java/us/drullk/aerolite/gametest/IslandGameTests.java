@@ -12,6 +12,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.WorldPresetTags;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.FixedBiomeSource;
@@ -35,11 +36,14 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import tamaized.beanification.Autowired;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.island.GraphSettings;
 import us.drullk.aerolite.world.island.IslandGenerators;
 import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.IslandTerrain;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.island.VoronoiLattice;
+import us.drullk.aerolite.world.island.graph.IslandGraphs;
+import us.drullk.aerolite.world.island.graph.RouterGraph;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,9 +52,10 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Checks the Islands preset: its dimensions, the wired island density function, the surface floor, the island settings edit,
- * the blocks of a generated chunk and the terrain fill of the preview.
+ * the blocks of a generated chunk and the terrain fill of the preview. It also checks the terrain build from the graphs of the island editor.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -66,6 +71,8 @@ public final class IslandGameTests {
     // GameTest methods are static. Beanification fills this field.
     @Autowired
     private static IslandGenerators generators;
+    @Autowired
+    private static GraphSettings graphSettings;
 
     private IslandGameTests() {
     }
@@ -352,6 +359,93 @@ public final class IslandGameTests {
         for (LevelChunkSection section : chunk.getSections()) {
             helper.assertFalse(section.maybeHas(state -> state.is(Blocks.LAVA)), "A section of the chunk holds lava");
         }
+    }
+
+    /** The settings that the router graph of the Overworld builds. */
+    private static NoiseGeneratorSettings built(ServerLevel level, IslandGraphs graphs, NoiseBasedChunkGenerator generator) {
+        return graphSettings.build(graphs, Level.OVERWORLD, generator.generatorSettings().value(), level.registryAccess(), graphSettings.noises(level.registryAccess()))
+                .getOrThrow(message -> new IllegalStateException("The router graph does not build: " + message)).settings();
+    }
+
+    /** A router graph with every output on dimension default fills a chunk like the shipped noise settings. */
+    @GameTest(template = "empty")
+    public static void defaultRouterGraphBuildsTheShippedTerrain(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        IslandGraphs graphs = graphSettings.start(presetDimensions(level), level.registryAccess());
+        helper.assertTrue(graphs.dimensions().size() == 3, "The preset gave " + graphs.dimensions().size() + " router graphs, not 3");
+        RouterGraph router = graphs.router(Level.OVERWORLD);
+        helper.assertTrue(router != null && router.paths().isEmpty(), "An output of the start router graph is not on dimension default");
+        helper.assertTrue(graphs.islands(Level.OVERWORLD, graphSettings.loader(level.registryAccess())).orElseThrow().equals(IslandSettings.DEFAULT),
+                "The sliders of the start graphs do not read the shipped island settings");
+        NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
+        NoiseBasedChunkGenerator built = new NoiseBasedChunkGenerator(shipped.getBiomeSource(), Holder.direct(built(level, graphs, shipped)));
+        RandomState shippedState = randomState(level, shipped);
+        RandomState builtState = randomState(level, built);
+        VoronoiLattice.Cell cell = firstIsland(helper, islands(helper, shippedState));
+        ChunkPos pos = new ChunkPos(BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ()));
+        ProtoChunk expected = protoChunk(level, pos);
+        terrain(level, shipped, shippedState).fill(expected);
+        ProtoChunk actual = protoChunk(level, pos);
+        terrain(level, built, builtState).fill(actual);
+        int differences = 0;
+        int solids = 0;
+        BlockPos.MutableBlockPos block = new BlockPos.MutableBlockPos();
+        for (int y = expected.getMinBuildHeight(); y < expected.getMaxBuildHeight(); y++) {
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    block.set(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
+                    if (!expected.getBlockState(block).isAir()) {
+                        solids++;
+                    }
+                    if (expected.getBlockState(block) != actual.getBlockState(block)) {
+                        differences++;
+                    }
+                }
+            }
+        }
+        helper.assertTrue(solids > 0, "The shipped fill placed no block");
+        helper.assertTrue(differences == 0, differences + " blocks of the graph fill differ from the shipped fill");
+        helper.succeed();
+    }
+
+    /** A slider write reaches the built router. A second write changes the same function node. */
+    @GameTest(template = "empty")
+    public static void sliderWriteReachesTheBuiltRouter(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        IslandGraphs graphs = graphSettings.start(presetDimensions(level), level.registryAccess());
+        IslandGraphs.EntryLoader loader = graphSettings.loader(level.registryAccess());
+        NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
+        IslandSettings first = IslandSettings.DEFAULT.withCellSize(384).withJitter(0.5);
+        IslandSettings second = first.withCellHeight(192);
+        for (IslandSettings written : List.of(first, second)) {
+            helper.assertTrue(graphs.setIslands(Level.OVERWORLD, written, loader), "The Overworld router graph reaches no island function node");
+            helper.assertTrue(graphs.edited().size() == 1, "The write edited " + graphs.edited().size() + " entries, not 1");
+            RouterGraph router = graphs.router(Level.OVERWORLD);
+            helper.assertTrue(router != null && router.functionNodes().isEmpty(), "The write added function nodes to the router graph");
+            IslandSettings built = generators.islands(built(level, graphs, shipped)).map(IslandSettings::of)
+                    .orElseThrow(() -> new IllegalStateException("The built final density holds no island density function"));
+            helper.assertTrue(built.equals(written), "The built router holds " + built + ", not " + written);
+        }
+        helper.succeed();
+    }
+
+    /** A constant final density builds a router with that constant. A constant out of range does not build. */
+    @GameTest(template = "empty")
+    public static void constantFinalDensityBuildsThatConstant(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        IslandGraphs graphs = graphSettings.start(presetDimensions(level), level.registryAccess());
+        RouterGraph router = graphs.router(Level.OVERWORLD);
+        helper.assertTrue(router != null, "The Overworld has no router graph");
+        double constant = -0.25;
+        router.set("final_density", new RouterGraph.Constant(constant));
+        NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
+        DensityFunction finalDensity = built(level, graphs, shipped).noiseRouter().finalDensity();
+        helper.assertTrue(finalDensity.minValue() == constant && finalDensity.maxValue() == constant, "The final density is not the constant " + constant);
+        helper.assertTrue(finalDensity.compute(new DensityFunction.SinglePointContext(0, 0, 0)) == constant, "The final density does not compute the constant");
+        router.set("final_density", new RouterGraph.Constant(2000000));
+        helper.assertTrue(graphSettings.build(graphs, Level.OVERWORLD, shipped.generatorSettings().value(), level.registryAccess(),
+                graphSettings.noises(level.registryAccess())).error().isPresent(), "A constant out of range built");
+        helper.succeed();
     }
 
 }
