@@ -12,8 +12,10 @@ import java.util.Set;
  * Reports why a graph does not build: an output or an input pin without a function node, a value out of its vanilla range,
  * an unknown type id, an unknown noise id, a reference where vanilla reads no registry, or a spline without points.
  * A null noise id set skips the noise id check. Each function node outside the trees gives one problem, because the save drops it.
+ * Each problem names the function node that holds it. A problem of a graph output without a function node names none.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public final class GraphValidator {
 
@@ -27,7 +29,7 @@ public final class GraphValidator {
             problems.add(new GraphProblem(FunctionGraph.OUTPUT, "The output has no function node"));
         } else {
             if (graph.functionNode(root) instanceof FunctionNode.Reference) {
-                problems.add(new GraphProblem(FunctionGraph.OUTPUT, "A density function entry is not a reference"));
+                problems.add(new GraphProblem(FunctionGraph.OUTPUT, "A density function entry is not a reference", root));
             }
             check(graph, root, FunctionGraph.OUTPUT, noises, problems);
         }
@@ -43,7 +45,7 @@ public final class GraphValidator {
             if (output instanceof RouterGraph.Output.Linked linked) {
                 check(graph, linked.functionNode(), field, noises, problems);
             } else if (output instanceof RouterGraph.Constant constant) {
-                range(field, constant.value(), -FieldSpec.NOISE_VALUE_LIMIT, FieldSpec.NOISE_VALUE_LIMIT, problems);
+                range(field, null, constant.value(), -FieldSpec.NOISE_VALUE_LIMIT, FieldSpec.NOISE_VALUE_LIMIT, problems);
             } else if (shipped == null || !shipped.has(field)) {
                 problems.add(new GraphProblem(field, "The output is on dimension default, and the shipped router has no value for it"));
             }
@@ -61,7 +63,7 @@ public final class GraphValidator {
     private static void check(FunctionNodeGraph graph, int id, String path, @Nullable Set<ResourceLocation> noises, List<GraphProblem> problems) {
         FunctionNode functionNode = graph.functionNode(id);
         if (functionNode instanceof FunctionNode.Unknown unknown) {
-            problems.add(new GraphProblem(path, "The type " + unknown.typeId() + " is unknown"));
+            problems.add(new GraphProblem(path, "The type " + unknown.typeId() + " is unknown", id));
             return;
         }
         if (!(functionNode instanceof FunctionNode.Typed typed)) {
@@ -74,45 +76,45 @@ public final class GraphValidator {
                 case FUNCTION -> {
                     Integer child = graph.source(new FunctionNodeGraph.Pin(id, field.name()));
                     if (child == null) {
-                        problems.add(new GraphProblem(fieldPath, "The input has no function node"));
+                        problems.add(new GraphProblem(fieldPath, "The input has no function node", id));
                     } else {
                         if (!field.acceptsReference() && graph.functionNode(child) instanceof FunctionNode.Reference) {
-                            problems.add(new GraphProblem(fieldPath, "This input does not take a reference"));
+                            problems.add(new GraphProblem(fieldPath, "This input does not take a reference", child));
                         }
                         check(graph, child, fieldPath, noises, problems);
                     }
                 }
                 case NUMBER -> {
                     if (value instanceof FieldValue.Number number) {
-                        range(typed.bare() ? path : fieldPath, number.value(), field.min(), field.max(), problems);
+                        range(typed.bare() ? path : fieldPath, id, number.value(), field.min(), field.max(), problems);
                     } else {
-                        problems.add(new GraphProblem(fieldPath, "The field has no number"));
+                        problems.add(new GraphProblem(fieldPath, "The field has no number", id));
                     }
                 }
                 case INTEGER -> {
                     if (value instanceof FieldValue.Int integer) {
-                        range(fieldPath, integer.value(), field.min(), field.max(), problems);
+                        range(fieldPath, id, integer.value(), field.min(), field.max(), problems);
                     } else {
-                        problems.add(new GraphProblem(fieldPath, "The field has no int"));
+                        problems.add(new GraphProblem(fieldPath, "The field has no int", id));
                     }
                 }
                 case ENUM -> {
                     if (!(value instanceof FieldValue.Choice choice) || !field.choices().contains(choice.value())) {
-                        problems.add(new GraphProblem(fieldPath, "The field takes one of " + String.join(", ", field.choices())));
+                        problems.add(new GraphProblem(fieldPath, "The field takes one of " + String.join(", ", field.choices()), id));
                     }
                 }
                 case NOISE -> {
                     if (!(value instanceof FieldValue.Noise noise)) {
-                        problems.add(new GraphProblem(fieldPath, "The field has no noise"));
+                        problems.add(new GraphProblem(fieldPath, "The field has no noise", id));
                     } else if (noise.id() != null && noises != null && !noises.contains(noise.id())) {
-                        problems.add(new GraphProblem(fieldPath, "The noise " + noise.id() + " is unknown"));
+                        problems.add(new GraphProblem(fieldPath, "The noise " + noise.id() + " is unknown", id));
                     }
                 }
                 case SPLINE -> {
                     if (value instanceof FieldValue.Spline spline) {
                         spline(graph, id, spline.value(), field.name(), fieldPath, noises, problems);
                     } else {
-                        problems.add(new GraphProblem(fieldPath, "The field has no spline"));
+                        problems.add(new GraphProblem(fieldPath, "The field has no spline", id));
                     }
                 }
             }
@@ -127,21 +129,21 @@ public final class GraphValidator {
         String coordinatePath = FunctionNodeGraph.childPath(path, SplineValue.COORDINATE);
         Integer coordinate = graph.source(new FunctionNodeGraph.Pin(id, pin + "/" + SplineValue.COORDINATE));
         if (coordinate == null) {
-            problems.add(new GraphProblem(coordinatePath, "The input has no function node"));
+            problems.add(new GraphProblem(coordinatePath, "The input has no function node", id));
         } else {
             check(graph, coordinate, coordinatePath, noises, problems);
         }
         if (multipoint.points().isEmpty()) {
-            problems.add(new GraphProblem(path, "The spline has no points"));
+            problems.add(new GraphProblem(path, "The spline has no points", id));
         }
         for (int index = 0; index < multipoint.points().size(); index++) {
             spline(graph, id, multipoint.points().get(index).value(), pin + "/points/" + index + "/value", path + "/points/" + index + "/value", noises, problems);
         }
     }
 
-    private static void range(String path, double value, double min, double max, List<GraphProblem> problems) {
+    private static void range(String path, @Nullable Integer functionNode, double value, double min, double max, List<GraphProblem> problems) {
         if (!(value >= min && value <= max)) {
-            problems.add(new GraphProblem(path, "The value " + value + " is outside " + min + " to " + max));
+            problems.add(new GraphProblem(path, "The value " + value + " is outside " + min + " to " + max, functionNode));
         }
     }
 

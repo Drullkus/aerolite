@@ -36,6 +36,7 @@ import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,8 @@ import java.util.function.BiConsumer;
  * The islands preview, from the Islands screen, holds the graphs of the island editor. Its node canvas and its panel sliders edit them.
  * Its chunks hold the terrain of the router graph of the previewed dimension. A graph that does not build keeps the last good terrain.
  * Its Done sends the graphs back. Its pillars come from the holder settings and stay as they are.
+ * While the node editor is open, the screen takes no mouse input and no key input, and its footer buttons hide.
+ * Escape then closes the node editor. The next Escape closes the screen.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -61,6 +64,7 @@ import java.util.function.BiConsumer;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -98,6 +102,7 @@ public class PreviewScreen extends Screen {
     private final HolderGetter<NormalNoise.NoiseParameters> noise;
     private final OrbitCamera camera = new OrbitCamera();
     private final RegionPan pan = new RegionPan();
+    private final List<Button> footer = new ArrayList<>();
     private final ProviderTabs providerTabs = new ProviderTabs();
     /** The center chunk of the last request. */
     @Nullable
@@ -464,7 +469,12 @@ public class PreviewScreen extends Screen {
 
     /** The movement keys and the middle drag work only while no widget and no panel field takes the keyboard. */
     private boolean panAllowed() {
-        return this.getFocused() == null && !this.tools.panel().wantsTextInput();
+        return !this.editorOpen() && this.getFocused() == null && !this.tools.panel().wantsTextInput();
+    }
+
+    /** True while the node editor window covers the screen. */
+    private boolean editorOpen() {
+        return this.editor != null && this.editor.isOpen();
     }
 
     /** The movement key of a key event, or null. */
@@ -541,16 +551,17 @@ public class PreviewScreen extends Screen {
     protected void init() {
         int y = this.footerTop();
         int x = this.width / 2 - BUTTON_WIDTH - MARGIN / 2;
-        this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> {
+        this.footer.clear();
+        this.footer.add(this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, button -> {
             if (this.onIslandsDone != null && this.graphs != null) {
                 this.onIslandsDone.accept(this.graphs, this.chosenSeedText());
             } else {
                 this.onDone.accept(this.settings, this.chosenSeedText());
             }
             this.closeTo(this.parent);
-        }).bounds(x, y, BUTTON_WIDTH, 20).build());
-        this.addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose())
-                .bounds(x + BUTTON_WIDTH + MARGIN, y, BUTTON_WIDTH, 20).build());
+        }).bounds(x, y, BUTTON_WIDTH, 20).build()));
+        this.footer.add(this.addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, button -> this.onClose())
+                .bounds(x + BUTTON_WIDTH + MARGIN, y, BUTTON_WIDTH, 20).build()));
     }
 
     private void closeTo(Screen next) {
@@ -597,12 +608,20 @@ public class PreviewScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // The footer buttons draw over ImGui, so they hide under the open node editor.
+        boolean footerShown = !this.editorOpen();
+        for (Button button : this.footer) {
+            button.visible = footerShown;
+        }
         super.render(graphics, mouseX, mouseY, partialTick);
         this.tools.icons().flush(graphics);
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.editorOpen()) {
+            return true;
+        }
         if (super.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
@@ -632,6 +651,9 @@ public class PreviewScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (this.editorOpen()) {
+            return true;
+        }
         if (this.orbiting && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             this.camera.turn(dragX, dragY);
             return true;
@@ -647,6 +669,12 @@ public class PreviewScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (this.editorOpen()) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE && this.editor != null) {
+                this.editor.close();
+            }
+            return true;
+        }
         RegionPan.Key key = this.panKey(keyCode, scanCode);
         if (key != null && this.panAllowed()) {
             this.pan.press(key, Util.getMillis());
@@ -666,6 +694,9 @@ public class PreviewScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (this.editorOpen()) {
+            return true;
+        }
         this.camera.zoom(scrollY);
         return true;
     }

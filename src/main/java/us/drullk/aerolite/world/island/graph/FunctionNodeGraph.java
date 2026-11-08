@@ -17,6 +17,7 @@ import java.util.NoSuchElementException;
  * A function node without a link stays in the graph. A save writes only the trees under the graph outputs.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public abstract sealed class FunctionNodeGraph permits FunctionGraph, RouterGraph {
 
@@ -213,6 +214,35 @@ public abstract sealed class FunctionNodeGraph permits FunctionGraph, RouterGrap
             if (child != null) {
                 this.collect(child, childPath(path, pin), paths);
             }
+        }
+    }
+
+    /**
+     * The function node that a problem path names, or null. A path after {@code #} names the function node of that id.
+     * Any other path names the deepest function node whose path is the path or a parent of it, so a field path names its function node.
+     */
+    @Nullable
+    public Integer functionNodeAt(String path) {
+        if (path.startsWith("#")) {
+            try {
+                int id = Integer.parseInt(path.substring(1));
+                return this.functionNodes.containsKey(id) ? id : null;
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        Map<String, Integer> paths = this.paths();
+        String current = path;
+        while (true) {
+            Integer id = paths.get(current);
+            if (id != null) {
+                return id;
+            }
+            if (current.isEmpty()) {
+                return null;
+            }
+            int slash = current.lastIndexOf('/');
+            current = slash < 0 ? "" : current.substring(0, slash);
         }
     }
 

@@ -68,6 +68,7 @@
   "createWorld.customize.aerolite.maze_type.uniform": "Uniform",
   "createWorld.customize.aerolite.min_shaft_spacing": "Minimum Pillar Spacing: %s",
   "createWorld.customize.aerolite.no_prefab": "No prefab",
+  "createWorld.customize.aerolite.node_editor": "Node Editor",
   "createWorld.customize.aerolite.node_spacing": "Node Spacing: %s",
   "createWorld.customize.aerolite.node_spacing_tooltip": "The node spacing in blocks",
   "createWorld.customize.aerolite.paste": "Paste",

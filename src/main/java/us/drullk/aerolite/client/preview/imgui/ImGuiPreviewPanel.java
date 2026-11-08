@@ -68,6 +68,7 @@ import java.util.function.UnaryOperator;
  * The pattern widgets of a variation sit at a half indent under the combo Pattern.
  * The block fields of a variation sit in a tab bar. The tab Blocks holds the fields. Each opened field has a tab with its provider editor.
  * The islands preview also shows the node canvas window over the game view. Its island sliders edit the island function node of the router graph.
+ * The button Node Editor opens the node canvas window. While that window is open, the panel and the view gizmo take no input.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -81,6 +82,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -264,14 +266,18 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         ImGui.pushStyleVar(ImGuiStyleVar.WindowPadding, 0, 0);
         ImGui.pushStyleVar(ImGuiStyleVar.WindowRounding, 0);
         ImGui.pushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
-        boolean open = ImGui.begin("##aerolite_preview", WINDOW_FLAGS);
+        IslandEditor editor = screen.islandEditor();
+        boolean editorOpen = editor != null && editor.isOpen();
+        // The open node canvas window covers the panel, so the mouse passes through the panel to the screen.
+        boolean open = ImGui.begin("##aerolite_preview", editorOpen ? WINDOW_FLAGS | ImGuiWindowFlags.NoInputs : WINDOW_FLAGS);
         ImGui.popStyleVar(3);
         ImGui.popStyleColor();
         try {
             if (open) {
                 this.drawSplitter(screen, viewport.getPosX() + windowWidth, windowHeight);
                 ImGui.setCursorPos(SPLITTER_WIDTH, 0);
-                boolean child = ImGui.beginChild("##aerolite_preview_content", this.width - SPLITTER_WIDTH, windowHeight, ImGuiChildFlags.AlwaysUseWindowPadding);
+                boolean child = ImGui.beginChild("##aerolite_preview_content", this.width - SPLITTER_WIDTH, windowHeight, ImGuiChildFlags.AlwaysUseWindowPadding,
+                        editorOpen ? ImGuiWindowFlags.NoInputs : ImGuiWindowFlags.None);
                 try {
                     if (child) {
                         this.drawContent(screen);
@@ -283,10 +289,12 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         } finally {
             ImGui.end();
         }
-        this.gizmo.draw(screen.camera(), this.width);
-        IslandEditor editor = screen.islandEditor();
+        // The gizmo reads the mouse without its window, so it does not draw under the open node canvas window.
+        if (!editorOpen) {
+            this.gizmo.draw(screen.camera(), this.width);
+        }
         if (editor != null) {
-            this.nodeCanvas.draw(screen, editor, this.width, this.font.get(), FONT_SIZE);
+            this.nodeCanvas.draw(screen, editor, this.font.get(), FONT_SIZE);
         }
     }
 
@@ -349,6 +357,10 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
 
         if (screen.islandsMode()) {
             if (ImGui.collapsingHeader(text("islands"), ImGuiTreeNodeFlags.DefaultOpen)) {
+                IslandEditor editor = screen.islandEditor();
+                if (editor != null && ImGui.button(text("node_editor") + "##node_editor", ImGui.getContentRegionAvailX(), 0)) {
+                    editor.open();
+                }
                 IslandSettings islands = screen.islandSliders();
                 // A router graph without an island function node shows the sliders off.
                 ImGui.beginDisabled(islands == null);

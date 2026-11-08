@@ -15,7 +15,11 @@ import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -25,6 +29,7 @@ import java.util.function.Supplier;
  * The canvas shows the router graph of the previewed dimension, or the function graph of one opened entry.
  * Back returns to the router graph of the previewed dimension. An edit of an opened entry makes it an edited function graph.
  * Each graph edit starts a terrain build through the change action.
+ * The editor window is closed when the preview opens. The open state is not saved.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
@@ -46,6 +51,27 @@ public final class IslandEditor {
 
     }
 
+    /**
+     * The problems of the shown graph and the build error, as the field editor shows them.
+     *
+     * @param byFunctionNode the texts of each function node with a problem, in problem sequence
+     * @param general        the texts that name no function node of the shown graph
+     * @param notice         true while any problem or build error exists
+     */
+    public record ShownProblems(Map<Integer, List<String>> byFunctionNode, List<String> general, boolean notice) {
+
+        public static final ShownProblems NONE = new ShownProblems(Map.of(), List.of(), false);
+
+        /** The texts of one function node. A null function node has none. */
+        public List<String> of(@Nullable Integer functionNode) {
+            return functionNode == null ? List.of() : this.byFunctionNode.getOrDefault(functionNode, List.of());
+        }
+
+        public boolean has(int functionNode) {
+            return this.byFunctionNode.containsKey(functionNode);
+        }
+
+    }
 
     private final IslandGraphs graphs;
     private final IslandGraphs.EntryLoader loader;
@@ -55,6 +81,7 @@ public final class IslandEditor {
     /** The entry of the open function graph, or null for the router graph. */
     @Nullable
     private ResourceLocation entry;
+    private boolean open;
     @Nullable
     private Integer selected;
     @Nullable
@@ -95,6 +122,20 @@ public final class IslandEditor {
         this.noises = Set.copyOf(noises);
         this.dimension = dimension;
         this.onChange = onChange;
+    }
+
+    /** Opens the editor window. The next drawn frame puts it back at its margin. */
+    public void open() {
+        this.open = true;
+    }
+
+    /** Closes the editor window. The graphs stay as they are. */
+    public void close() {
+        this.open = false;
+    }
+
+    public boolean isOpen() {
+        return this.open;
     }
 
     public IslandGraphs graphs() {
@@ -371,6 +412,52 @@ public final class IslandEditor {
                     : GraphValidator.validate((FunctionGraph) graph, this.noises);
         }
         return this.problems;
+    }
+
+    /** The problems of the shown graph and the build error, split by function node. */
+    public ShownProblems shownProblems() {
+        // The build error comes from the router graph, so its paths name function nodes only while that graph shows.
+        return split(this.problems(), this.buildError, this.entry == null ? this.graph() : null);
+    }
+
+    /**
+     * Splits the problems and the build error by function node. A problem names its own function node.
+     * A build error line that repeats a problem shows once. Another build error line names the function node at its path in {@code buildGraph}.
+     *
+     * @param buildGraph the graph that the paths of the build error name, or null when they name no shown function node
+     */
+    public static ShownProblems split(List<GraphProblem> problems, @Nullable String buildError, @Nullable FunctionNodeGraph buildGraph) {
+        Map<Integer, List<String>> byFunctionNode = new LinkedHashMap<>();
+        List<String> general = new ArrayList<>();
+        List<String> texts = new ArrayList<>();
+        for (GraphProblem problem : problems) {
+            String text = problem.toString();
+            texts.add(text);
+            if (problem.functionNode() != null) {
+                byFunctionNode.computeIfAbsent(problem.functionNode(), ignored -> new ArrayList<>()).add(text);
+            } else {
+                general.add(text);
+            }
+        }
+        if (buildError != null) {
+            for (GraphProblem.Parsed line : GraphProblem.parse(buildError)) {
+                if (texts.contains(line.text())) {
+                    continue;
+                }
+                Integer functionNode = line.path() != null && buildGraph != null ? buildGraph.functionNodeAt(line.path()) : null;
+                if (functionNode != null) {
+                    byFunctionNode.computeIfAbsent(functionNode, ignored -> new ArrayList<>()).add(line.text());
+                } else {
+                    general.add(line.text());
+                }
+            }
+        }
+        if (problems.isEmpty() && buildError == null) {
+            return ShownProblems.NONE;
+        }
+        Map<Integer, List<String>> frozen = new LinkedHashMap<>();
+        byFunctionNode.forEach((id, list) -> frozen.put(id, List.copyOf(list)));
+        return new ShownProblems(Collections.unmodifiableMap(frozen), List.copyOf(general), true);
     }
 
 }

@@ -11,6 +11,7 @@ import imgui.extension.imnodes.ImNodes;
 import imgui.extension.imnodes.ImNodesContext;
 import imgui.extension.imnodes.ImNodesEditorContext;
 import imgui.extension.imnodes.ImNodesStyle;
+import imgui.extension.imnodes.flag.ImNodesCol;
 import imgui.extension.imnodes.flag.ImNodesMiniMapLocation;
 import imgui.extension.imnodes.flag.ImNodesStyleVar;
 import imgui.flag.ImGuiChildFlags;
@@ -24,6 +25,7 @@ import imgui.flag.ImGuiMouseCursor;
 import imgui.flag.ImGuiSelectableFlags;
 import imgui.flag.ImGuiStyleVar;
 import imgui.flag.ImGuiWindowFlags;
+import imgui.type.ImBoolean;
 import imgui.type.ImDouble;
 import imgui.type.ImInt;
 import imgui.type.ImString;
@@ -46,7 +48,6 @@ import us.drullk.aerolite.world.island.graph.FunctionNodeGraph;
 import us.drullk.aerolite.world.island.graph.FunctionNodeType;
 import us.drullk.aerolite.world.island.graph.FunctionNodeTypes;
 import us.drullk.aerolite.world.island.graph.GraphLayout;
-import us.drullk.aerolite.world.island.graph.GraphProblem;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
@@ -63,12 +64,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The node canvas window over the game view of the islands preview, left of the panel. It edits the graphs of the island editor with imnodes.
- * The window first shows above the footer buttons of the screen, because they draw over ImGui.
+ * The node canvas window over the islands preview. It edits the graphs of the island editor with imnodes.
+ * The window shows only while the editor is open. The title bar cross closes it.
+ * Each open puts the window over the whole game window, panel and footer included, inside a margin. The window then moves and resizes freely.
  * The router graph view holds one router box with one input pin per router field. The function graph view holds one output box.
  * An input pin of a box without a link shows its constant or the switch Dimension default.
  * Each function node shows its type path, its input pins and its output pin. A reference node also shows its entry id and the button Open.
- * The field editor right of the canvas edits the selected function node, then lists the validator problems and the build error in red.
+ * The field editor right of the canvas edits the selected function node. The problems of that function node follow in red.
+ * The problems that name no function node follow, then the notice that the terrain keeps the last good build.
+ * Each function node with a problem has a red title bar.
  * A splitter between the canvas and the field editor sets the field editor width. The release writes it to the client config.
  * The scroll wheel zooms the canvas around the cursor. imnodes has no zoom, so the canvas scales the positions, the imnodes style, the item spacing and the font.
  * The stored positions stay unscaled, so the sidecar holds no zoom.
@@ -81,9 +85,8 @@ import java.util.Set;
 final class ImGuiNodeCanvas {
 
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final float MARGIN = 8;
-    /** The share of the game view height that the window takes when it appears. */
-    private static final float HEIGHT_SHARE = 0.45F;
+    /** The gap between the opened window and each edge of the game window, in ImGui units. */
+    private static final float MARGIN = 32;
     /** The width of the splitter between the canvas and the field editor. */
     private static final float SPLITTER_WIDTH = 6;
     private static final float SPLITTER_LINE = 2;
@@ -106,6 +109,7 @@ final class ImGuiNodeCanvas {
     private static final String ELLIPSIS = "...";
     private static final String PALETTE = "##aerolite_palette";
     private static final float[] ERROR_COLOR = {1, 0.4F, 0.4F, 1};
+    private static final String NOTICE = "The terrain keeps the last good build";
     private static final float INVALID_RED = 0.55F;
 
     /** One imnodes editor context per graph of the drawn screen. */
@@ -136,6 +140,11 @@ final class ImGuiNodeCanvas {
     /** The field editor width, from the client config, or from the cursor during a splitter drag. */
     private float fieldsWidth = AeroliteClientConfig.DEFAULT_FIELDS_WIDTH;
     private boolean fieldsDragging;
+    /** True when the last drawn frame showed the window. A frame after a closed frame puts the window at the margin. */
+    private boolean shown;
+    private final ImBoolean windowOpen = new ImBoolean(true);
+    /** The problems of the frame that draws now. */
+    private IslandEditor.ShownProblems drawProblems = IslandEditor.ShownProblems.NONE;
 
     /** Creates the imnodes context after imgui-mc loads ImGui. */
     void register() {
@@ -178,7 +187,7 @@ final class ImGuiNodeCanvas {
      * @param font     the panel font
      * @param fontSize the size of the panel font at zoom 1
      */
-    void draw(PreviewScreen screen, IslandEditor editor, float panelWidth, ImFont font, float fontSize) {
+    void draw(PreviewScreen screen, IslandEditor editor, ImFont font, float fontSize) {
         if (this.context == null) {
             this.createContext("first draw");
         }
@@ -192,31 +201,44 @@ final class ImGuiNodeCanvas {
             this.placedZooms.clear();
             this.paletteAt = null;
             this.fieldsDragging = false;
+            this.shown = false;
             // The editor contexts of a closed screen live until the next screen draws.
             this.editorContexts.values().forEach(ImNodes::editorContextFree);
             this.editorContexts.clear();
         }
 
-        // With multiple viewports, ImGui positions are desktop coordinates. The main viewport is the game window.
+        if (!editor.isOpen()) {
+            this.shown = false;
+            this.paletteAt = null;
+            this.fieldsDragging = false;
+            return;
+        }
+        // With multiple viewports, ImGui positions are desktop coordinates. The main viewport is the full game window, panel included.
         ImGuiViewport viewport = ImGui.getMainViewport();
-        float gameWidth = viewport.getSizeX() - panelWidth;
-        // The footer buttons draw over ImGui, so the window starts above them.
-        float unitsPerGui = viewport.getSizeY() / Math.max(1, screen.height);
-        float bottom = screen.footerTop() * unitsPerGui - MARGIN;
-        float height = Math.max(1, Math.min(viewport.getSizeY() * HEIGHT_SHARE, bottom - MARGIN));
+        float width = Math.max(1, viewport.getSizeX() - 2 * MARGIN);
+        float height = Math.max(1, viewport.getSizeY() - 2 * MARGIN);
         ImGui.setNextWindowViewport(viewport.getID());
-        ImGui.setNextWindowPos(viewport.getPosX() + MARGIN, viewport.getPosY() + bottom - height, ImGuiCond.Appearing);
-        ImGui.setNextWindowSize(gameWidth - 2 * MARGIN, height, ImGuiCond.Appearing);
+        if (!this.shown) {
+            ImGui.setNextWindowPos(viewport.getPosX() + MARGIN, viewport.getPosY() + MARGIN, ImGuiCond.Always);
+            ImGui.setNextWindowSize(width, height, ImGuiCond.Always);
+            ImGui.setNextWindowFocus();
+            this.shown = true;
+        }
         // A narrower window shows the field editor below its least width.
         float leastWidth = FieldsWidth.leastContentWidth() + 2 * ImGui.getStyle().getWindowPaddingX();
-        ImGui.setNextWindowSizeConstraints(Math.min(leastWidth, Math.max(1, gameWidth - 2 * MARGIN)), 0, Float.MAX_VALUE, Float.MAX_VALUE);
-        boolean open = ImGui.begin("Island editor##aerolite_node_canvas", WINDOW_FLAGS);
+        ImGui.setNextWindowSizeConstraints(Math.min(leastWidth, width), 0, Float.MAX_VALUE, Float.MAX_VALUE);
+        this.windowOpen.set(true);
+        this.drawProblems = editor.shownProblems();
+        boolean expanded = ImGui.begin("Island editor##aerolite_node_canvas", this.windowOpen, WINDOW_FLAGS);
         try {
-            if (open) {
+            if (expanded) {
                 this.drawWindow(screen, editor, font, fontSize);
             }
         } finally {
             ImGui.end();
+        }
+        if (!this.windowOpen.get()) {
+            this.deferred.add(editor::close);
         }
         List<Runnable> work = List.copyOf(this.deferred);
         this.deferred.clear();
@@ -399,7 +421,7 @@ final class ImGuiNodeCanvas {
                 this.drawBox(editor, graph);
                 for (Map.Entry<Integer, FunctionNode> functionNode : graph.functionNodes().entrySet()) {
                     this.place(functionNode.getKey(), nodeId(functionNode.getKey()), positions, placedIds, zoom);
-                    this.drawFunctionNode(editor, graph, functionNode.getKey(), functionNode.getValue());
+                    this.drawFunctionNode(editor, functionNode.getKey(), functionNode.getValue());
                 }
                 this.drawLinks(graph);
                 ImNodes.miniMap(MINI_MAP_SIZE, ImNodesMiniMapLocation.BottomRight);
@@ -524,7 +546,27 @@ final class ImGuiNodeCanvas {
         };
     }
 
-    private void drawFunctionNode(IslandEditor editor, FunctionNodeGraph graph, int id, FunctionNode functionNode) {
+    private void drawFunctionNode(IslandEditor editor, int id, FunctionNode functionNode) {
+        int colorPushes = 0;
+        try {
+            if (this.drawProblems.has(id)) {
+                int red = ImGui.colorConvertFloat4ToU32(ERROR_COLOR[0], ERROR_COLOR[1], ERROR_COLOR[2], ERROR_COLOR[3]);
+                ImNodes.pushColorStyle(ImNodesCol.TitleBar, red);
+                colorPushes++;
+                ImNodes.pushColorStyle(ImNodesCol.TitleBarHovered, red);
+                colorPushes++;
+                ImNodes.pushColorStyle(ImNodesCol.TitleBarSelected, red);
+                colorPushes++;
+            }
+            this.drawFunctionNodeBody(editor, id, functionNode);
+        } finally {
+            for (int pop = 0; pop < colorPushes; pop++) {
+                ImNodes.popColorStyle();
+            }
+        }
+    }
+
+    private void drawFunctionNodeBody(IslandEditor editor, int id, FunctionNode functionNode) {
         ImNodes.beginNode(nodeId(id));
         ImGui.pushID(nodeId(id));
         try {
@@ -843,12 +885,15 @@ final class ImGuiNodeCanvas {
                 ImGui.popID();
             }
         }
-        for (GraphProblem problem : editor.problems()) {
-            errorText(problemText(graph, problem));
+        IslandEditor.ShownProblems problems = this.drawProblems;
+        for (String text : problems.of(selected)) {
+            errorText(text);
         }
-        String buildError = editor.buildError();
-        if (buildError != null) {
-            errorText("The terrain keeps the last good build: " + buildError);
+        for (String text : problems.general()) {
+            errorText(text);
+        }
+        if (problems.notice()) {
+            errorText(NOTICE);
         }
     }
 
@@ -955,22 +1000,6 @@ final class ImGuiNodeCanvas {
                 countPoints(point.value(), counts);
             }
         }
-    }
-
-    /** A problem at a function node id also names the type, because the canvas shows no id. */
-    private static String problemText(FunctionNodeGraph graph, GraphProblem problem) {
-        String path = problem.path();
-        if (path.startsWith("#")) {
-            try {
-                int id = Integer.parseInt(path.substring(1));
-                if (graph.functionNodes().containsKey(id)) {
-                    return GraphProblem.format(title(graph.functionNode(id)) + " " + path, problem.message());
-                }
-            } catch (NumberFormatException ignored) {
-                // A path that holds no id shows as it is.
-            }
-        }
-        return problem.toString();
     }
 
     private static void errorText(String text) {

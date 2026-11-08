@@ -16,9 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks the tree rule of a graph, the tree removal, the paths of its function nodes and the sidecar round trip. The graphs are arbitrary structures.
+ * Checks the tree rule of a graph, the tree removal, the paths of its function nodes, the path lookup and the sidecar round trip. The graphs are arbitrary structures.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 class FunctionNodeGraphTest {
 
@@ -145,6 +147,24 @@ class FunctionNodeGraphTest {
         graph.replace(spline, functionNode.with("spline", new FieldValue.Spline(flat)));
         assertNull(graph.target(nested));
         assertEquals(List.of("spline/coordinate"), graph.functionNode(spline).inputPins());
+    }
+
+    @Test
+    void functionNodeAtNamesTheDeepestFunctionNodeOnThePath() {
+        FunctionGraph graph = GraphJson.readFunction(JsonParser.parseString(NESTED)).getOrThrow();
+        Map<String, Integer> paths = graph.paths();
+        paths.forEach((path, id) -> assertEquals(id, graph.functionNodeAt(path), path));
+        assertEquals(paths.get("argument1/argument"), graph.functionNodeAt("argument1/argument/x"));
+        assertEquals(paths.get("argument2"), graph.functionNodeAt("argument2/spline/points/0/value"));
+        assertEquals(paths.get(""), graph.functionNodeAt("unknown_pin"));
+        int detached = graph.add(typed("abs"));
+        assertEquals(detached, graph.functionNodeAt("#" + detached));
+        assertNull(graph.functionNodeAt("#" + (detached + 1)));
+        assertNull(graph.functionNodeAt("#text"));
+        assertNull(new FunctionGraph().functionNodeAt(""));
+        RouterGraph router = new RouterGraph(new RouterGraph.Constant(0.0));
+        assertNull(router.functionNodeAt("continents"));
+        assertNull(router.functionNodeAt(""));
     }
 
 }
