@@ -242,6 +242,7 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("createWorld.customize.aerolite.preview.no_shafts", "This dimension has no variations, so it has no pillars.");
         this.add("createWorld.customize.aerolite.preview.center", "Center");
         this.add("createWorld.customize.aerolite.preview.reset_center", "Reset");
+        this.add("createWorld.customize.aerolite.preview.generate_all", "Generate all chunks");
         this.add("aerolite.configuration.panelWidth", "Preview Panel Width");
         this.add("aerolite.configuration.fieldsWidth", "Island Editor Field Width");
         this.add("aerolite.configuration.applyDefaultPillars", "Apply Default Pillars");

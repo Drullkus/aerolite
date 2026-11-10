@@ -99,6 +99,7 @@
   "createWorld.customize.aerolite.preview.center": "Center",
   "createWorld.customize.aerolite.preview.dimension": "Dimension",
   "createWorld.customize.aerolite.preview.done": "Baked sections: %s",
+  "createWorld.customize.aerolite.preview.generate_all": "Generate all chunks",
   "createWorld.customize.aerolite.preview.no_shafts": "This dimension has no variations, so it has no pillars.",
   "createWorld.customize.aerolite.preview.painting": "Painting chunks: %s / %s",
   "createWorld.customize.aerolite.preview.radius": "Radius: %s chunks",

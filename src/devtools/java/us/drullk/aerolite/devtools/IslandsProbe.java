@@ -6,6 +6,8 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.mojang.logging.LogUtils;
 import com.mojang.serialization.JsonOps;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.tabs.TabNavigationBar;
@@ -24,21 +26,25 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.DensityFunctions;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.phys.Vec2;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import us.drullk.aerolite.client.IslandsPresetScreen;
 import us.drullk.aerolite.client.preview.CanvasZoom;
 import us.drullk.aerolite.client.preview.IslandEditor;
+import us.drullk.aerolite.client.preview.OrbitCamera;
 import us.drullk.aerolite.client.preview.PreviewBuilder;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteWorldgen;
+import us.drullk.aerolite.world.island.CellGeometry;
 import us.drullk.aerolite.world.island.IslandPack;
 import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.VoronoiIslands;
@@ -73,8 +79,17 @@ import java.util.stream.Stream;
  * The probe saves these states under {@code screenshots/} of the game directory, in this sequence:
  * <ol start="0">
  *     <li>{@code islands-00-settings}: the Islands screen of the Islands preset.</li>
- *     <li>{@code islands-01-preview}: the islands preview at the radius {@value #PREVIEW_RADIUS}, with the editor closed and the Node Editor button.
- *     The check states that the editor starts closed. Then {@link IslandEditor#open()} opens the editor.</li>
+ *     <li>{@code islands-01a-geometry}: the islands preview at the radius {@value #PREVIEW_RADIUS} with generate all off: the cells and no terrain.
+ *     The checks state that the checkbox starts off and that no region chunk holds blocks.</li>
+ *     <li>{@code islands-01b-hover}: a top view with the cursor on the site of the cell nearest the region center, through GLFW.
+ *     The check states that the hovered cell is that cell.</li>
+ *     <li>{@code islands-01c-clicked}: the island of that cell after a left click through GLFW, at the pitch {@value #GEOMETRY_PITCH}.
+ *     The checks state that the region center is on the site and that the picked chunks are the cell chunks inside the region.
+ *     They also state that the site chunk holds blocks and that no other region chunk does.</li>
+ *     <li>{@code islands-01d-gridlines}: a close top view of that cell. The check states that each gridline lies on one grid plane.</li>
+ *     <li>{@code islands-01-preview}: the same preview with generate all on, the full region, the editor closed and the Node Editor button.
+ *     The checks state that a chunk outside the picked chunks holds blocks and that the editor starts closed.
+ *     Then {@link IslandEditor#open()} opens the editor.</li>
  *     <li>{@code islands-02-editor-router}: the router graph of the Overworld.</li>
  *     <li>{@code islands-03-function-graph}: the function graph of the Overworld island entry.</li>
  *     <li>{@code islands-04-palette}: the palette, opened through a request.</li>
@@ -130,6 +145,12 @@ public final class IslandsProbe {
     private static final int SIDE_HEIGHT = 120;
     private static final int TOP_HEIGHT = 200;
     private static final int PREVIEW_RADIUS = 10;
+    /** The camera pitch of the clicked island capture, in degrees. */
+    private static final float GEOMETRY_PITCH = 30;
+    /** The wheel notches that bring the top view close enough for one cell to fill it. */
+    private static final int GRIDLINE_NOTCHES = 8;
+    /** The distance in blocks below which a gridline end counts as on its grid plane. */
+    private static final double GRID_TOLERANCE = 1.0E-6;
     /** The ticks the probe gives the island editor to draw a new state. */
     private static final int EDITOR_WAIT = 10;
     /** The density function entry of the island function of the Overworld. */
@@ -251,12 +272,21 @@ public final class IslandsProbe {
             return true;
         });
         this.queuePreview("");
+        this.queueGeometry();
         this.step("grab preview", 10, () -> {
             IslandEditor editor = editor();
-            if (editor == null) {
+            PreviewScreen screen = previewScreen();
+            if (editor == null || screen == null) {
                 return false;
             }
             LOGGER.info("Islands probe: preview build done");
+            int withBlocks = regionChunksWithBlocks(screen, false);
+            LOGGER.info("Islands probe: with generate all on, {} region chunks hold blocks, {} of them outside the picked chunks",
+                    regionChunksWithBlocks(screen, true), withBlocks);
+            if (withBlocks == 0) {
+                throw new IllegalStateException("Generate all check failed: no chunk outside the picked chunks holds blocks");
+            }
+            LOGGER.info("Islands probe: generate all check passed");
             SettingsProbe.grabFront("islands-01-preview.png");
             LOGGER.info("Islands probe: at the preview start the editor is open {}", editor.isOpen());
             if (editor.isOpen()) {
@@ -354,6 +384,193 @@ public final class IslandsProbe {
             return true;
         });
         this.step(flow + "preview built", 20, () -> minecraft.screen instanceof PreviewScreen screen && screen.progress().phase() == PreviewBuilder.Phase.DONE);
+    }
+
+    /**
+     * The cell geometry steps of the islands preview. They run with the editor closed and generate all off.
+     * The hover and the click go through GLFW at the site of the cell nearest the region center, in a top view.
+     */
+    private void queueGeometry() {
+        CellGeometry.Shape[] target = new CellGeometry.Shape[1];
+        this.step("grab geometry", EDITOR_WAIT, () -> {
+            PreviewScreen screen = previewScreen();
+            if (screen == null || screen.progress().phase() != PreviewBuilder.Phase.DONE || screen.cells().isEmpty()) {
+                return false;
+            }
+            if (screen.generateAll()) {
+                throw new IllegalStateException("Geometry check (generate all off at start) failed: the checkbox is on");
+            }
+            int withBlocks = regionChunksWithBlocks(screen, true);
+            LOGGER.info("Islands probe: the preview draws {} cells, and {} region chunks hold blocks before a click", screen.cells().size(), withBlocks);
+            if (withBlocks != 0) {
+                throw new IllegalStateException("Geometry check (no terrain before a click) failed: " + withBlocks + " chunks hold blocks");
+            }
+            LOGGER.info("Islands probe: geometry check (no terrain before a click) passed");
+            SettingsProbe.grabFront("islands-01a-geometry.png");
+            return true;
+        });
+        this.step("top view", 1, () -> {
+            PreviewScreen screen = previewScreen();
+            if (screen == null) {
+                return false;
+            }
+            target[0] = screen.cells().stream()
+                    .min(java.util.Comparator.comparingDouble(shape -> Math.hypot(shape.cell().siteX() - screen.centerX(), shape.cell().siteZ() - screen.centerZ())))
+                    .orElseThrow();
+            screen.camera().setPitch(OrbitCamera.MAX_PITCH);
+            return true;
+        });
+        this.step("hover cursor", 2, () -> {
+            PreviewScreen screen = previewScreen();
+            Vec2 point = screen == null ? null : screen.guiPoint(target[0].site());
+            if (point == null) {
+                return false;
+            }
+            double[] window = windowPoint(point);
+            LOGGER.info("Islands probe: the cursor goes to the site of the cell {} {} at the window point {} {}",
+                    target[0].cell().ix(), target[0].cell().iz(), window[0], window[1]);
+            GlfwInput.cursor(window[0], window[1]);
+            return true;
+        });
+        this.step("grab hover", EDITOR_WAIT, () -> {
+            PreviewScreen screen = previewScreen();
+            if (screen == null) {
+                return false;
+            }
+            VoronoiLattice.Cell hovered = screen.hoveredCell();
+            LOGGER.info("Islands probe: the hovered cell is {}, the cell under the cursor is {}", hovered, target[0].cell());
+            if (!target[0].cell().equals(hovered)) {
+                throw new IllegalStateException("Hover check failed: the hovered cell is " + hovered);
+            }
+            LOGGER.info("Islands probe: hover check passed");
+            SettingsProbe.grabFront("islands-01b-hover.png");
+            return true;
+        });
+        this.step("click press", 1, () -> {
+            GlfwInput.leftButton(true);
+            return true;
+        });
+        this.step("click release", 2, () -> {
+            GlfwInput.leftButton(false);
+            return true;
+        });
+        this.step("clicked built", 20, () -> {
+            PreviewScreen screen = previewScreen();
+            return screen != null && !screen.pickedChunks().isEmpty() && screen.progress().phase() == PreviewBuilder.Phase.DONE;
+        });
+        this.step("grab clicked", EDITOR_WAIT, () -> {
+            PreviewScreen screen = previewScreen();
+            if (screen == null) {
+                return false;
+            }
+            VoronoiLattice.Cell cell = target[0].cell();
+            boolean centered = Math.abs(screen.centerX() - cell.siteX()) < POSITION_TOLERANCE && Math.abs(screen.centerZ() - cell.siteZ()) < POSITION_TOLERANCE;
+            LOGGER.info("Islands probe: after the click the region center is {} {}, the site is {} {}", screen.centerX(), screen.centerZ(), cell.siteX(), cell.siteZ());
+            if (!centered) {
+                throw new IllegalStateException("Pan check failed: the region center is not on the site");
+            }
+            LOGGER.info("Islands probe: pan check passed");
+            ChunkPos center = new ChunkPos(Math.floorDiv((int) Math.floor(cell.siteX()), 16), Math.floorDiv((int) Math.floor(cell.siteZ()), 16));
+            LongSet expected = new LongOpenHashSet();
+            for (long chunk : target[0].chunks()) {
+                if (Math.abs(ChunkPos.getX(chunk) - center.x) <= screen.radius() && Math.abs(ChunkPos.getZ(chunk) - center.z) <= screen.radius()) {
+                    expected.add(chunk);
+                }
+            }
+            boolean sitePainted = screen.drawsBlocks(center.x, center.z);
+            int outside = regionChunksWithBlocks(screen, false);
+            LOGGER.info("Islands probe: the click picks {} chunks ({} expected), the site chunk holds blocks {}, {} chunks outside the cell hold blocks",
+                    screen.pickedChunks().size(), expected.size(), sitePainted, outside);
+            if (!expected.equals(screen.pickedChunks()) || !sitePainted || outside != 0) {
+                throw new IllegalStateException("Click check failed");
+            }
+            LOGGER.info("Islands probe: click check passed");
+            screen.camera().setPitch(GEOMETRY_PITCH);
+            return true;
+        });
+        this.step("grab clicked view", EDITOR_WAIT, () -> {
+            SettingsProbe.grabFront("islands-01c-clicked.png");
+            PreviewScreen screen = previewScreen();
+            Vec2 point = screen == null ? null : screen.guiPoint(target[0].site());
+            if (point == null) {
+                return false;
+            }
+            screen.camera().setPitch(OrbitCamera.MAX_PITCH);
+            double[] window = windowPoint(point);
+            GlfwInput.cursor(window[0], window[1]);
+            GlfwInput.scroll(0, GRIDLINE_NOTCHES);
+            return true;
+        });
+        this.step("grab gridlines", EDITOR_WAIT, () -> {
+            PreviewScreen screen = previewScreen();
+            if (screen == null) {
+                return false;
+            }
+            checkGridlines(target[0]);
+            SettingsProbe.grabFront("islands-01d-gridlines.png");
+            GlfwInput.scroll(0, -GRIDLINE_NOTCHES);
+            screen.camera().setPitch(GEOMETRY_PITCH);
+            screen.setGenerateAll(true);
+            return true;
+        });
+        this.step("generate all built", 20, () -> {
+            PreviewScreen screen = previewScreen();
+            return screen != null && screen.progress().phase() == PreviewBuilder.Phase.DONE;
+        });
+    }
+
+    /** Checks that each gridline of the cell lies on one grid plane and logs the line count of each face. */
+    private static void checkGridlines(CellGeometry.Shape shape) {
+        for (CellGeometry.Face face : shape.faces()) {
+            int[] families = new int[3];
+            for (CellGeometry.Segment line : face.gridlines()) {
+                int family = gridPlane(line);
+                if (family < 0) {
+                    throw new IllegalStateException("Gridline check failed: " + line + " lies on no grid plane");
+                }
+                families[family]++;
+            }
+            LOGGER.info("Islands probe: the face with the normal {} has {} X lines, {} Y lines and {} Z lines",
+                    face.normal(), families[0], families[1], families[2]);
+        }
+        LOGGER.info("Islands probe: gridline check passed");
+    }
+
+    /** The axis of the grid plane that holds both ends of the line, or -1. */
+    private static int gridPlane(CellGeometry.Segment line) {
+        double[][] ends = {{line.from().x, line.from().y, line.from().z}, {line.to().x, line.to().y, line.to().z}};
+        for (int axis = 0; axis < 3; axis++) {
+            double from = ends[0][axis];
+            double plane = Math.round(from / CellGeometry.GRID_SPACING) * (double) CellGeometry.GRID_SPACING;
+            if (Math.abs(from - plane) < GRID_TOLERANCE && Math.abs(ends[1][axis] - plane) < GRID_TOLERANCE) {
+                return axis;
+            }
+        }
+        return -1;
+    }
+
+    /** The window point in screen units of a GUI point. */
+    private static double[] windowPoint(Vec2 gui) {
+        com.mojang.blaze3d.platform.Window window = Minecraft.getInstance().getWindow();
+        return new double[] {
+                gui.x * window.getScreenWidth() / (double) window.getGuiScaledWidth(),
+                gui.y * window.getScreenHeight() / (double) window.getGuiScaledHeight()
+        };
+    }
+
+    /** The count of region chunks that hold blocks. Without {@code picked}, the count skips the picked chunks. */
+    private static int regionChunksWithBlocks(PreviewScreen screen, boolean picked) {
+        int centerX = Math.floorDiv((int) Math.floor(screen.centerX()), 16);
+        int centerZ = Math.floorDiv((int) Math.floor(screen.centerZ()), 16);
+        int count = 0;
+        for (int x = centerX - screen.radius(); x <= centerX + screen.radius(); x++) {
+            for (int z = centerZ - screen.radius(); z <= centerZ + screen.radius(); z++) {
+                if ((picked || !screen.pickedChunks().contains(ChunkPos.asLong(x, z))) && screen.drawsBlocks(x, z)) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /** The island editor of the open islands preview, or null. */

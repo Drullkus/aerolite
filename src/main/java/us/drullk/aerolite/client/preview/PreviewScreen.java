@@ -4,7 +4,9 @@ import com.google.gson.JsonObject;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.Util;
+import com.mojang.blaze3d.platform.Window;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.MouseHandler;
 import net.minecraft.client.Options;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -26,13 +28,22 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.longs.LongSets;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 import us.drullk.aerolite.client.PresetTools;
 import us.drullk.aerolite.client.YLimits;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.island.CellGeometry;
 import us.drullk.aerolite.world.island.GraphSettings;
 import us.drullk.aerolite.world.island.IslandSettings;
+import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 
 import javax.annotation.Nullable;
@@ -54,6 +65,10 @@ import java.util.function.BiConsumer;
  * Its Done sends the graphs back. Its pillars come from the holder settings and stay as they are.
  * While the node editor is open, the screen takes no mouse input and no key input, and its footer buttons hide.
  * Escape then closes the node editor. The next Escape closes the screen.
+ * The islands preview draws the cells of the generating layer whose sites lie in the region. The cell under the cursor draws in gold.
+ * A left click without a drag on a cell picks the chunks of the cell inside the region and pans the region center to the site.
+ * While generate all is off, only the picked chunks get terrain and pillars. A shift keeps the picked chunks that stay in the region.
+ * A change of the settings, the seed, the dimension, the radius or the terrain forgets the picked chunks.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -72,6 +87,8 @@ public class PreviewScreen extends Screen {
     public static final int MAX_RADIUS = 32;
     private static final int BUTTON_WIDTH = 100;
     private static final int MARGIN = 8;
+    /** The largest cursor travel of a left press and release that still counts as a click, in GUI units. */
+    private static final double CLICK_SLOP = 2;
 
     private final Screen parent;
     private final PresetTools tools;
@@ -123,6 +140,16 @@ public class PreviewScreen extends Screen {
     @Nullable
     private PreviewRenderer renderer;
     private boolean orbiting;
+    /** The cursor travel of the held left button, in GUI units. */
+    private double leftTravel;
+    @Nullable
+    private VoronoiLattice.Cell hovered;
+    /** True when every chunk of the islands preview gets terrain. */
+    private boolean generateAll;
+    /** The packed positions of the picked chunks of the islands preview. */
+    private final LongSet picked = new LongOpenHashSet();
+    @Nullable
+    private PreviewBuilder.Request lastRequest;
 
     /**
      * @param seedText the seed text of the world creation screen; an empty text gives a random seed
@@ -426,7 +453,100 @@ public class PreviewScreen extends Screen {
             this.buildTerrain(dimension);
             terrain = this.goodTerrain.get(dimension.key());
         }
-        this.builder.request(new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise, center, terrain));
+        PreviewBuilder.Request scene = new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise,
+                center, terrain, this.generateAll, LongSets.EMPTY_SET);
+        if (this.lastRequest != null && !this.lastRequest.sameScene(scene)) {
+            this.picked.clear();
+        }
+        this.picked.removeIf((long key) -> !RegionChunks.contains(center, this.radius, ChunkPos.getX(key), ChunkPos.getZ(key)));
+        PreviewBuilder.Request request = new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise,
+                center, terrain, this.generateAll, LongSets.unmodifiable(new LongOpenHashSet(this.picked)));
+        this.lastRequest = request;
+        this.builder.request(request);
+    }
+
+    /** True when every chunk of the islands preview gets terrain. It starts off. */
+    public boolean generateAll() {
+        return this.generateAll;
+    }
+
+    public void setGenerateAll(boolean generateAll) {
+        if (generateAll != this.generateAll) {
+            this.generateAll = generateAll;
+            this.requestBuild();
+        }
+    }
+
+    /** The packed positions of the picked chunks. */
+    public LongSet pickedChunks() {
+        return LongSets.unmodifiable(this.picked);
+    }
+
+    /** The cell polyhedra of the drawn region of the islands preview. */
+    public List<CellGeometry.Shape> cells() {
+        return this.renderer == null ? List.of() : this.renderer.cells();
+    }
+
+    /** The cell under the cursor, or null. */
+    @Nullable
+    public VoronoiLattice.Cell hoveredCell() {
+        return this.hovered;
+    }
+
+    /** True when the drawn chunk holds a block with a model. */
+    public boolean drawsBlocks(int chunkX, int chunkZ) {
+        return this.renderer != null && this.renderer.drawsBlocks(chunkX, chunkZ);
+    }
+
+    /** True when the renderer holds the chunk. */
+    public boolean drawsChunk(int chunkX, int chunkZ) {
+        return this.renderer != null && this.renderer.drawsChunk(chunkX, chunkZ);
+    }
+
+    /** Picks the chunks of the cell that lie in the region around its site, and pans the region center to the site. */
+    public void pickCell(CellGeometry.Shape shape) {
+        Vec3 site = shape.site();
+        ChunkPos center = new ChunkPos(RegionPan.chunk(site.x), RegionPan.chunk(site.z));
+        for (long chunk : shape.chunks()) {
+            if (RegionChunks.contains(center, this.radius, ChunkPos.getX(chunk), ChunkPos.getZ(chunk))) {
+                this.picked.add(chunk);
+            }
+        }
+        this.pan.set(site.x, site.z);
+        this.requestBuild();
+    }
+
+    /** The GUI point of a world point in the game view, or null for a point behind the camera. */
+    @Nullable
+    public Vec2 guiPoint(Vec3 world) {
+        PreviewDimension dimension = this.dimension();
+        if (dimension == null) {
+            return null;
+        }
+        Vector4f clip = this.viewProjection().transform(new Vector4f((float) (world.x - this.pan.x()), (float) (world.y - (dimension.minY() + dimension.maxY()) / 2F),
+                (float) (world.z - this.pan.z()), 1));
+        if (clip.w <= 0) {
+            return null;
+        }
+        return new Vec2((clip.x / clip.w + 1) / 2 * this.width, (1 - clip.y / clip.w) / 2 * this.height);
+    }
+
+    /** The nearest drawn cell under the GUI point of the game view, or null. */
+    @Nullable
+    private CellGeometry.Shape cellAt(double mouseX, double mouseY) {
+        PreviewDimension dimension = this.dimension();
+        List<CellGeometry.Shape> cells = this.cells();
+        if (dimension == null || cells.isEmpty() || this.editorOpen() || !(mouseX >= 0 && mouseX < this.width && mouseY >= 0 && mouseY < this.height)
+                || this.tools.panel().wantsMouse()) {
+            return null;
+        }
+        Matrix4f inverse = this.viewProjection().invert();
+        Vector3f near = inverse.transformProject(this.ndcX(mouseX), this.ndcY(mouseY), -1, new Vector3f());
+        Vector3f far = inverse.transformProject(this.ndcX(mouseX), this.ndcY(mouseY), 1, new Vector3f());
+        double centerY = (dimension.minY() + dimension.maxY()) / 2F;
+        Vec3 origin = new Vec3(near.x + this.pan.x(), near.y + centerY, near.z + this.pan.z());
+        Vec3 direction = new Vec3(far.x - near.x, far.y - near.y, far.z - near.z);
+        return CellGeometry.nearestHit(cells, origin, direction);
     }
 
     /**
@@ -602,7 +722,13 @@ public class PreviewScreen extends Screen {
         if (this.renderer != null && this.builder != null) {
             this.movePan();
             this.renderer.drain(this.builder);
-            this.renderer.render(this.camera, this.pan.x(), this.pan.z());
+            // The mouse handler moves the cursor also while the window has no focus. Then the screen gets no move event.
+            MouseHandler mouse = Minecraft.getInstance().mouseHandler;
+            Window window = Minecraft.getInstance().getWindow();
+            CellGeometry.Shape shape = this.cellAt(mouse.xpos() * window.getGuiScaledWidth() / window.getScreenWidth(),
+                    mouse.ypos() * window.getGuiScaledHeight() / window.getScreenHeight());
+            this.hovered = shape == null ? null : shape.cell();
+            this.renderer.render(this.camera, this.pan.x(), this.pan.z(), this.hovered);
         }
     }
 
@@ -628,6 +754,7 @@ public class PreviewScreen extends Screen {
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             this.setFocused(null);
             this.orbiting = true;
+            this.leftTravel = 0;
             return true;
         }
         if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
@@ -641,6 +768,12 @@ public class PreviewScreen extends Screen {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            if (this.orbiting && this.leftTravel <= CLICK_SLOP) {
+                CellGeometry.Shape shape = this.cellAt(mouseX, mouseY);
+                if (shape != null) {
+                    this.pickCell(shape);
+                }
+            }
             this.orbiting = false;
         }
         if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
@@ -655,6 +788,7 @@ public class PreviewScreen extends Screen {
             return true;
         }
         if (this.orbiting && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            this.leftTravel += Math.abs(dragX) + Math.abs(dragY);
             this.camera.turn(dragX, dragY);
             return true;
         }

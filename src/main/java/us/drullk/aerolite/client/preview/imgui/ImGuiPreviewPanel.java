@@ -69,6 +69,7 @@ import java.util.function.UnaryOperator;
  * The block fields of a variation sit in a tab bar. The tab Blocks holds the fields. Each opened field has a tab with its provider editor.
  * The islands preview also shows the node canvas window over the game view. Its island sliders edit the island function node of the router graph.
  * The button Node Editor opens the node canvas window. While that window is open, the panel and the view gizmo take no input.
+ * The islands preview adds the checkbox Generate all chunks under the Center row.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -164,6 +165,13 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         // The ImGui context is current only inside the imgui-mc frame hooks.
         try (foundry.imgui.api.ImGuiMC.ActiveContext context = foundry.imgui.api.ImGuiMC.withImGui()) {
             return context.io().getWantTextInput();
+        }
+    }
+
+    @Override
+    public boolean wantsMouse() {
+        try (foundry.imgui.api.ImGuiMC.ActiveContext context = foundry.imgui.api.ImGuiMC.withImGui()) {
+            return context.io().getWantCaptureMouse();
         }
     }
 
@@ -1107,6 +1115,9 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         }
         if (ImGui.button(resetCenter)) {
             screen.resetCenter();
+        }
+        if (screen.islandsMode() && ImGui.checkbox(text("preview.generate_all") + "##generate_all", screen.generateAll())) {
+            screen.setGenerateAll(!screen.generateAll());
         }
     }
 

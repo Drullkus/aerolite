@@ -16,6 +16,8 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.math.Axis;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.GameRenderer;
@@ -33,7 +35,10 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
+import org.lwjgl.opengl.GL11;
 import us.drullk.aerolite.Aerolite;
+import us.drullk.aerolite.world.island.CellGeometry;
+import us.drullk.aerolite.world.island.VoronoiLattice;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -46,10 +51,14 @@ import java.util.List;
  * The start of a shift drops the drawn chunks outside the new region and keeps the rest.
  * The model space has the region center of the pan at its origin. Each mesh keeps its world origin.
  * An outline edge draws translucent when a pixel of it is in front of a block. Else it draws opaque.
+ * The islands preview also draws the cell polyhedra of its region: edges, gridlines and a cross at each site.
+ * A first pass draws the parts behind blocks at a reduced opacity. A second pass draws the parts in front at full opacity.
+ * The hovered cell draws in gold after the other cells, so it covers the faces it shares with them.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 final class PreviewRenderer {
 
@@ -64,6 +73,15 @@ final class PreviewRenderer {
     private static final int EDGES = 12;
     private static final int MAX_EDGE_SAMPLES = 4096;
     private static final double RAY_START = 1.0E-3;
+    /** The red, green and blue of a cell, and of the hovered cell in the chat color gold. */
+    private static final int CELL_RGB = 0xFFFFFF;
+    private static final int HOVERED_RGB = 0xFFAA00;
+    /** The opacity of a cell line part that a block hides. */
+    private static final float CELL_COVERED_ALPHA = 0.3F;
+    /** The opacity of a gridline in front of the blocks. */
+    private static final float GRIDLINE_ALPHA = 0.35F;
+    /** The half length of each arm of the site cross, in blocks. */
+    private static final float SITE_HALF = 3;
 
     private record SectionBuffer(BlockPos origin, RenderType layer, VertexBuffer buffer) {
     }
@@ -116,6 +134,8 @@ final class PreviewRenderer {
     private int coverWidth;
     private int coverHeight;
     private final DynamicTexture lightmap;
+    /** The cell polyhedra of the drawn region. */
+    private List<CellGeometry.Shape> cells = List.of();
 
     PreviewRenderer() {
         this.lightmap = new DynamicTexture(LIGHTMAP_SIZE, LIGHTMAP_SIZE, false);
@@ -164,8 +184,33 @@ final class PreviewRenderer {
         }
     }
 
+    /** The cell polyhedra of the drawn region. */
+    List<CellGeometry.Shape> cells() {
+        return this.cells;
+    }
+
+    /** True when the drawn chunk holds a block with a model. */
+    boolean drawsBlocks(int chunkX, int chunkZ) {
+        long[][] chunk = this.chunkSolids.get(ChunkPos.asLong(chunkX, chunkZ));
+        if (chunk == null) {
+            return false;
+        }
+        for (long[] section : chunk) {
+            if (section != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** True when the renderer holds the chunk of the drawn region. */
+    boolean drawsChunk(int chunkX, int chunkZ) {
+        return this.chunkSolids.containsKey(ChunkPos.asLong(chunkX, chunkZ));
+    }
+
     /** Takes the region of a message of the drawn scene. A new center drops the chunks outside the region. */
     private void follow(PreviewBuilder.Region region) {
+        this.cells = region.cells();
         Scene old = this.scene;
         Scene scene = new Scene(region.dimension(), region.radius(), region.center(), region.centerBiome());
         this.scene = scene;
@@ -228,6 +273,7 @@ final class PreviewRenderer {
         this.meshes.clear();
         this.chunkSolids.clear();
         this.scene = null;
+        this.cells = List.of();
     }
 
     private static void free(List<SectionBuffer> buffers) {
@@ -242,8 +288,9 @@ final class PreviewRenderer {
      *
      * @param originX the world X of the model space origin, which the camera orbits
      * @param originZ the world Z of the model space origin
+     * @param hovered the cell under the cursor, or null
      */
-    void render(OrbitCamera camera, double originX, double originZ) {
+    void render(OrbitCamera camera, double originX, double originZ, @Nullable VoronoiLattice.Cell hovered) {
         this.originX = originX;
         this.originZ = originZ;
         Minecraft minecraft = Minecraft.getInstance();
@@ -286,6 +333,7 @@ final class PreviewRenderer {
         for (RenderType layer : RenderType.chunkBufferLayers()) {
             this.renderLayer(layer, scene, view, projection);
         }
+        this.renderCells(scene, hovered);
         this.updateCoverEdges(scene, camera.position(), view, projection, target.width, target.height);
         this.renderLines(scene);
 
@@ -360,6 +408,85 @@ final class PreviewRenderer {
         if (mesh != null) {
             RenderType.lines().draw(mesh);
         }
+    }
+
+    /** Draws the cell lines behind the blocks at the reduced opacity, then the cell lines in front of them. */
+    private void renderCells(Scene scene, @Nullable VoronoiLattice.Cell hovered) {
+        if (this.cells.isEmpty()) {
+            return;
+        }
+        RenderType lines = RenderType.lines();
+        MeshData covered = this.cellLines(scene, hovered, CELL_COVERED_ALPHA);
+        if (covered != null) {
+            lines.setupRenderState();
+            RenderSystem.depthFunc(GL11.GL_GREATER);
+            RenderSystem.depthMask(false);
+            BufferUploader.drawWithShader(covered);
+            lines.clearRenderState();
+        }
+        MeshData front = this.cellLines(scene, hovered, 1);
+        if (front != null) {
+            lines.draw(front);
+        }
+    }
+
+    /**
+     * The lines of every cell at the opacity, the hovered cell last.
+     * A face that two drawn cells share draws its gridlines once: the hovered cell draws them, else the cell with the lesser lattice key.
+     */
+    @Nullable
+    private MeshData cellLines(Scene scene, @Nullable VoronoiLattice.Cell hovered, float alpha) {
+        LongSet drawn = new LongOpenHashSet();
+        for (CellGeometry.Shape shape : this.cells) {
+            drawn.add(ChunkPos.asLong(shape.cell().ix(), shape.cell().iz()));
+        }
+        int alphaBits = Mth.clamp(Math.round(alpha * 255), 0, 255) << 24;
+        int gridBits = Mth.clamp(Math.round(alpha * GRIDLINE_ALPHA * 255), 0, 255) << 24;
+        BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
+        CellGeometry.Shape hoveredShape = null;
+        for (CellGeometry.Shape shape : this.cells) {
+            if (shape.cell().equals(hovered)) {
+                hoveredShape = shape;
+            } else {
+                this.cellLines(buffer, scene, shape, hovered, drawn, alphaBits | CELL_RGB, gridBits | CELL_RGB);
+            }
+        }
+        if (hoveredShape != null) {
+            this.cellLines(buffer, scene, hoveredShape, hovered, drawn, alphaBits | HOVERED_RGB, gridBits | HOVERED_RGB);
+        }
+        return buffer.build();
+    }
+
+    private void cellLines(BufferBuilder buffer, Scene scene, CellGeometry.Shape shape, @Nullable VoronoiLattice.Cell hovered, LongSet drawn,
+                           int edgeColor, int gridColor) {
+        boolean isHovered = shape.cell().equals(hovered);
+        long own = ChunkPos.asLong(shape.cell().ix(), shape.cell().iz());
+        for (CellGeometry.Segment edge : shape.edges()) {
+            this.modelLine(buffer, scene, edge.from(), edge.to(), edgeColor);
+        }
+        for (CellGeometry.Face face : shape.faces()) {
+            VoronoiLattice.Cell neighbor = face.neighbor();
+            if (!isHovered && neighbor != null && neighbor.iy() == 0) {
+                long other = ChunkPos.asLong(neighbor.ix(), neighbor.iz());
+                if (neighbor.equals(hovered) || drawn.contains(other) && other < own) {
+                    continue;
+                }
+            }
+            for (CellGeometry.Segment line : face.gridlines()) {
+                this.modelLine(buffer, scene, line.from(), line.to(), gridColor);
+            }
+        }
+        Vec3 site = shape.site();
+        this.modelLine(buffer, scene, site.add(-SITE_HALF, 0, 0), site.add(SITE_HALF, 0, 0), edgeColor);
+        this.modelLine(buffer, scene, site.add(0, -SITE_HALF, 0), site.add(0, SITE_HALF, 0), edgeColor);
+        this.modelLine(buffer, scene, site.add(0, 0, -SITE_HALF), site.add(0, 0, SITE_HALF), edgeColor);
+    }
+
+    /** One line between two world points, in model space. */
+    private void modelLine(BufferBuilder buffer, Scene scene, Vec3 from, Vec3 to, int color) {
+        float centerY = scene.centerY();
+        line(buffer, (float) (from.x - this.originX), (float) from.y - centerY, (float) (from.z - this.originZ),
+                (float) (to.x - this.originX), (float) to.y - centerY, (float) (to.z - this.originZ), color);
     }
 
     /**

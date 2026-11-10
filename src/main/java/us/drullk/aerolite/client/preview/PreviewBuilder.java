@@ -38,7 +38,10 @@ import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteSettings;
+import us.drullk.aerolite.world.island.CellGeometry;
 import us.drullk.aerolite.world.island.IslandTerrain;
+import us.drullk.aerolite.world.island.VoronoiIslands;
+import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
 import us.drullk.aerolite.world.shaft.maze.ShaftMazes;
@@ -67,6 +70,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * The chunks go to the render thread in spiral sequence, each one when it and every earlier chunk are baked.
  * A newer request stops an older generation at the next chunk and drops its pending bakes.
  * A request with terrain settings fills each chunk with their terrain before the pillars.
+ * A request with terrain settings also gives the cell polyhedra of the generating layer whose sites lie in the region.
+ * With terrain settings and without generate all, only the picked chunks inside the region get terrain and pillars.
+ * Every other chunk paints empty. A chunk whose generate state changes paints and bakes again.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -74,6 +80,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  */
 public final class PreviewBuilder implements AutoCloseable {
 
@@ -89,9 +96,20 @@ public final class PreviewBuilder implements AutoCloseable {
      *
      * @param center  the chunk that holds the region center
      * @param terrain the noise generator settings of the terrain, or null for a preview without terrain; the screen gives a new object only for a new terrain
+     * @param generateAll true when every chunk gets terrain; without terrain every chunk gets its pillars
+     * @param picked the packed positions of the chunks that get terrain and pillars while generate all is off
      */
     public record Request(AeroliteSettings settings, long seed, PreviewDimension dimension, int radius, boolean constantAmbientLight,
-                          Registry<Biome> biomes, HolderGetter<NormalNoise.NoiseParameters> noise, ChunkPos center, @Nullable NoiseGeneratorSettings terrain) {
+                          Registry<Biome> biomes, HolderGetter<NormalNoise.NoiseParameters> noise, ChunkPos center, @Nullable NoiseGeneratorSettings terrain,
+                          boolean generateAll, LongSet picked) {
+
+        /** True when the chunk gets terrain and pillars. Without terrain, every chunk gets its pillars. */
+        public boolean generates(long chunk) {
+            if (this.terrain == null || this.generateAll) {
+                return true;
+            }
+            return this.picked.contains(chunk) && RegionChunks.contains(this.center, this.radius, ChunkPos.getX(chunk), ChunkPos.getZ(chunk));
+        }
 
         /** True when the two requests differ in the center at most. */
         public boolean sameScene(Request other) {
@@ -143,8 +161,9 @@ public final class PreviewBuilder implements AutoCloseable {
      *
      * @param scene  the number of the scene; a shift keeps it, and every other change gives a larger one
      * @param center the chunk that holds the region center
+     * @param cells  the polyhedra of the cells with an island whose sites lie in the region; empty without terrain
      */
-    public record Region(long scene, PreviewDimension dimension, int radius, ChunkPos center, Holder<Biome> centerBiome) {
+    public record Region(long scene, PreviewDimension dimension, int radius, ChunkPos center, Holder<Biome> centerBiome, List<CellGeometry.Shape> cells) {
     }
 
     /** A message from the builder to the render thread. The messages of one scene keep their sequence. */
@@ -201,6 +220,13 @@ public final class PreviewBuilder implements AutoCloseable {
         @Nullable
         final IslandTerrain terrain;
         final Long2ObjectMap<ProtoChunk> painted = new Long2ObjectOpenHashMap<>();
+        /** The painted chunks that hold terrain and pillars. */
+        final LongSet generated = new LongOpenHashSet();
+        /** The island function of the wired final density, or null without one. */
+        @Nullable
+        final VoronoiIslands islands;
+        /** The polyhedra of the cells by lattice X and Z. A shift keeps the cells that stay in the region. */
+        final Long2ObjectMap<CellGeometry.Shape> cells = new Long2ObjectOpenHashMap<>();
 
         Scene(Request request, long number, ShaftMazes mazes) {
             this.request = request;
@@ -214,6 +240,7 @@ public final class PreviewBuilder implements AutoCloseable {
             this.terrain = terrain
                     ? new IslandTerrain(generatorSettings, randomState, dimension.biomeSource(), this.biomes::at, request.biomes(), request.seed())
                     : null;
+            this.islands = terrain ? CellGeometry.findIslands(randomState.router().finalDensity()) : null;
             this.layout = request.settings().variations(dimension.key()).isEmpty()
                     ? null
                     : new ShaftLayout(mazes, request.seed(), dimension.key(), dimension.minY(), dimension.maxY(), request.settings().dimension(dimension.key()));
@@ -357,18 +384,21 @@ public final class PreviewBuilder implements AutoCloseable {
         int paintRadius = radius + MARGIN;
         ChunkPos center = request.center();
         Scene scene = this.scene(request);
-        scene.painted.keySet().removeIf((long key) -> !RegionChunks.contains(center, paintRadius, ChunkPos.getX(key), ChunkPos.getZ(key)));
+        scene.painted.keySet().removeIf((long key) -> !RegionChunks.contains(center, paintRadius, ChunkPos.getX(key), ChunkPos.getZ(key))
+                || scene.generated.contains(key) != request.generates(key));
+        scene.generated.removeIf((long key) -> !scene.painted.containsKey(key));
         int centerY = dimension.minY() + scene.heightAccessor.getHeight() / 2;
         Holder<Biome> centerBiome = scene.biomes.at(QuartPos.fromBlock(center.getMiddleBlockX()), QuartPos.fromBlock(centerY),
                 QuartPos.fromBlock(center.getMiddleBlockZ()));
-        Region region = new Region(scene.number, dimension, radius, center, centerBiome);
+        Region region = new Region(scene.number, dimension, radius, center, centerBiome, this.cells(scene, center, radius));
 
         List<ChunkPos> bakes;
         synchronized (this.lock) {
             if (this.stale(generation)) {
                 return;
             }
-            this.delivered.removeIf((long key) -> !RegionChunks.contains(center, radius, ChunkPos.getX(key), ChunkPos.getZ(key)));
+            this.delivered.removeIf((long key) -> !RegionChunks.contains(center, radius, ChunkPos.getX(key), ChunkPos.getZ(key))
+                    || !scene.painted.containsKey(key));
             bakes = RegionChunks.missing(center, radius, this.delivered);
             this.output.add(new Started(generation, region));
         }
@@ -382,7 +412,15 @@ public final class PreviewBuilder implements AutoCloseable {
         }
         PreviewBlockGetter getter = new PreviewBlockGetter(chunks, center, paintRadius, dimension.minY(), scene.heightAccessor.getHeight(),
                 request.constantAmbientLight(), scene.biomes);
-        Build build = new Build(generation, region, bakes, paints.size(), scene.heightAccessor, getter, chunks, paintRadius);
+        int generating = 0;
+        for (ChunkPos pos : paints) {
+            generating += request.generates(pos.toLong()) ? 1 : 0;
+        }
+        boolean[] counted = new boolean[bakes.size()];
+        for (int i = 0; i < bakes.size(); i++) {
+            counted[i] = request.generates(bakes.get(i).toLong());
+        }
+        Build build = new Build(generation, region, bakes, counted, generating, scene.heightAccessor, getter, chunks, paintRadius);
         this.current = build;
         if (bakes.isEmpty()) {
             build.completeEmpty();
@@ -401,20 +439,59 @@ public final class PreviewBuilder implements AutoCloseable {
             }
             ChunkPos pos = paints.get(paintIndex);
             ProtoChunk chunk = new ProtoChunk(pos, UpgradeData.EMPTY, scene.heightAccessor, request.biomes(), null);
-            if (scene.terrain != null) {
-                scene.terrain.generate(chunk);
-            }
-            if (scene.layout != null) {
-                this.painter.paint(scene.layout, chunk);
+            boolean generates = request.generates(pos.toLong());
+            if (generates) {
+                if (scene.terrain != null) {
+                    scene.terrain.generate(chunk);
+                }
+                if (scene.layout != null) {
+                    this.painter.paint(scene.layout, chunk);
+                }
+                scene.generated.add(pos.toLong());
+                build.painted.incrementAndGet();
             }
             chunks[RegionChunks.index(center, paintRadius, pos.x, pos.z)] = chunk;
             scene.painted.put(pos.toLong(), chunk);
-            build.painted.incrementAndGet();
             IntArrayList release = releases[paintIndex];
             for (int i = 0; i < release.size(); i++) {
                 this.submit(build, release.getInt(i));
             }
         }
+    }
+
+    /**
+     * The polyhedra of the cells with an island whose sites lie in the region. The scene keeps each cell while its site stays in the region.
+     */
+    private List<CellGeometry.Shape> cells(Scene scene, ChunkPos center, int radius) {
+        VoronoiIslands islands = scene.islands;
+        if (islands == null) {
+            return List.of();
+        }
+        VoronoiLattice lattice = islands.lattice();
+        int minX = (center.x - radius) * 16;
+        int maxX = (center.x + radius + 1) * 16;
+        int minZ = (center.z - radius) * 16;
+        int maxZ = (center.z + radius + 1) * 16;
+        Long2ObjectMap<CellGeometry.Shape> kept = new Long2ObjectOpenHashMap<>();
+        List<CellGeometry.Shape> cells = new ArrayList<>();
+        for (int ix = Math.floorDiv(minX, lattice.cellSize()) - 1; ix <= Math.floorDiv(maxX, lattice.cellSize()) + 1; ix++) {
+            for (int iz = Math.floorDiv(minZ, lattice.cellSize()) - 1; iz <= Math.floorDiv(maxZ, lattice.cellSize()) + 1; iz++) {
+                VoronoiLattice.Cell cell = lattice.cell(ix, 0, iz);
+                if (cell.siteX() < minX || cell.siteX() >= maxX || cell.siteZ() < minZ || cell.siteZ() >= maxZ || !islands.hasIsland(cell)) {
+                    continue;
+                }
+                long key = ChunkPos.asLong(ix, iz);
+                CellGeometry.Shape shape = scene.cells.get(key);
+                if (shape == null) {
+                    shape = CellGeometry.shape(lattice, cell);
+                }
+                kept.put(key, shape);
+                cells.add(shape);
+            }
+        }
+        scene.cells.clear();
+        scene.cells.putAll(kept);
+        return List.copyOf(cells);
     }
 
     /**
@@ -458,7 +535,9 @@ public final class PreviewBuilder implements AutoCloseable {
                 sections.add(section);
             }
         }
-        build.baked.addAndGet(build.sectionsPerChunk - sections.size());
+        if (build.counted[sequenceIndex]) {
+            build.baked.addAndGet(build.sectionsPerChunk - sections.size());
+        }
         ChunkBake bake = new ChunkBake(sequenceIndex, pos, sections.size(), build.sectionsPerChunk);
         if (sections.isEmpty()) {
             build.finish(bake);
@@ -587,6 +666,8 @@ public final class PreviewBuilder implements AutoCloseable {
         final long generation;
         final Region region;
         final List<ChunkPos> bakes;
+        /** For each bake, true when the progress counts its sections. Only a chunk with terrain and pillars counts. */
+        final boolean[] counted;
         final int paintCount;
         final LevelHeightAccessor heightAccessor;
         final PreviewBlockGetter getter;
@@ -602,17 +683,22 @@ public final class PreviewBuilder implements AutoCloseable {
         private boolean discarded;
         volatile boolean complete;
 
-        Build(long generation, Region region, List<ChunkPos> bakes, int paintCount, LevelHeightAccessor heightAccessor,
+        Build(long generation, Region region, List<ChunkPos> bakes, boolean[] counted, int paintCount, LevelHeightAccessor heightAccessor,
               PreviewBlockGetter getter, ProtoChunk[] chunks, int paintRadius) {
             this.generation = generation;
             this.region = region;
             this.bakes = bakes;
+            this.counted = counted;
             this.paintCount = paintCount;
             this.heightAccessor = heightAccessor;
             this.getter = getter;
             this.chunks = chunks;
             this.paintRadius = paintRadius;
-            this.chunkCount = bakes.size();
+            int countedBakes = 0;
+            for (boolean count : counted) {
+                countedBakes += count ? 1 : 0;
+            }
+            this.chunkCount = countedBakes;
             this.sectionsPerChunk = heightAccessor.getSectionsCount();
             this.waiting = new ChunkReady[bakes.size()];
         }
