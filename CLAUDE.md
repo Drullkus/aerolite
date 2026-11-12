@@ -308,6 +308,7 @@ Data generation writes:
 - The islands probe also captures the palette, the dimension cycle button, the recreate flow and the reload failure.
 - The islands probe keeps a cell size edit through Done. In the new world it checks the island pack and logs each check.
 - The islands probe hovers and clicks a cell of the preview through GLFW. Then it turns the checkbox "Generate all chunks" on.
+- The islands probe checks that the click does not move the region center.
 - The islands probe also saves a close top view of the clicked cell. It checks that each gridline lies on one grid plane.
 - `GlfwInput` drives the installed GLFW callbacks of the game window: cursor, wheel, mouse buttons and keys.
 - Every run loads the test source set as part of the mod `aerolite`.
@@ -1323,20 +1324,26 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - A cell without an island draws nothing and takes no hover and no click.
 - Each cell draws its edges, a cross at its site and translucent gridlines on its faces.
 - The gridlines lie where the planes at the chunk section spacing on X, Y and Z cut each face.
-- A line part behind blocks draws at a reduced opacity. `PreviewRenderer` holds the opacity constants.
+- Only a face whose outer side faces the camera draws its gridlines. A nearer face hides no gridline.
+- The gridline opacity falls with the distance to the nearest edge of the face, along a smoothstep curve.
+- The gridline opacity is zero at the fade distance from the edge. `PreviewRenderer` holds the opacity and the fade distance.
+- The cell lines, the floor grid and the region outline use the plain depth test. So blocks hide each cell line.
 - The cell under the cursor draws in gold, the chat color `§6`. The other cells draw white.
+- The gridlines of a face draw in gold when one of its two cells is the cell under the cursor.
 - The hover takes the nearest cell that the cursor ray hits.
 - The hover and the click skip the cursor over a panel window, such as the view gizmo.
-- A left click without a drag on a cell picks each chunk of the cell inside the region around its site.
-- The click also moves the region center to the site.
+- A left click without a drag on a cell picks every chunk of the cell.
+- The click does not move the region center.
+- The picked chunks keep the chunk sequence of the preview, nearest the region center first.
 - The checkbox "Generate all chunks" sits under the Center row of the Preview section. It shows only in the islands preview.
 - The checkbox starts off. The preview does not save it.
 - With the checkbox on, every chunk of the region gets terrain.
-- With the checkbox off, only the picked chunks get terrain. A shift keeps the picked chunks that stay in the region.
+- With the checkbox off, only the picked chunks inside the region get terrain.
+- A shift keeps the picked chunks. A picked chunk that enters the region gets its terrain.
 - A change of the settings, the seed, the dimension, the radius or the terrain forgets the picked chunks.
 - In the islands preview, a chunk gets its pillars only when it gets its terrain.
 - The builder finds the island function in the final density of the wired random state. So the cells match the terrain.
-- `CellGeometry` holds the polyhedron math, the gridlines, the ray test and the chunk overlap.
+- `CellGeometry` holds the polyhedron math, the gridlines, the edge distance of a face, the ray test and the chunk overlap.
 - `IslandTerrain` fills a chunk from the noise settings and builds its surface without a level. The fill is the vanilla noise fill without a structure manager, so the terrain adaptation of structures is absent.
 - The biome choices of the Islands screen reach the preview only after Done. The preview reads the generators of the world creation state.
 - Island types, inner cells, cell merging, island bridges and center structures are 0.6.0 work.
@@ -1510,7 +1517,7 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - `IslandGameTests` checks the Islands preset, the seed wiring of the island function, the surface floor, the island settings edit and the blocks of a generated island chunk.
 - `IslandGameTests` also checks that the terrain fill of the preview writes the blocks of the generator fill, and that its surface follows the biome.
 - The island JUnit tests check the lattice and the island density.
-- `CellGeometryTest` checks the cell polyhedra, the gridlines, the ray test and the chunk overlap.
+- `CellGeometryTest` checks the cell polyhedra, the gridlines, the edge distance, the ray test and the chunk overlap.
 - The graph JUnit tests also check the inline step, the slider map, the graph layout and the new field values.
 - `IslandGameTests` checks that the start router graph fills a chunk like the shipped noise settings.
 - `IslandGameTests` checks that a slider write reaches the built router.

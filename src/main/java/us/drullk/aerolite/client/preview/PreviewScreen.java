@@ -66,8 +66,9 @@ import java.util.function.BiConsumer;
  * While the node editor is open, the screen takes no mouse input and no key input, and its footer buttons hide.
  * Escape then closes the node editor. The next Escape closes the screen.
  * The islands preview draws the cells of the generating layer whose sites lie in the region. The cell under the cursor draws in gold.
- * A left click without a drag on a cell picks the chunks of the cell inside the region and pans the region center to the site.
- * While generate all is off, only the picked chunks get terrain and pillars. A shift keeps the picked chunks that stay in the region.
+ * A left click without a drag on a cell picks every chunk of the cell. The click does not move the region center.
+ * While generate all is off, only the picked chunks inside the region get terrain and pillars.
+ * A shift keeps every picked chunk. A picked chunk that enters the region gets its terrain then.
  * A change of the settings, the seed, the dimension, the radius or the terrain forgets the picked chunks.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
@@ -80,6 +81,7 @@ import java.util.function.BiConsumer;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -458,7 +460,6 @@ public class PreviewScreen extends Screen {
         if (this.lastRequest != null && !this.lastRequest.sameScene(scene)) {
             this.picked.clear();
         }
-        this.picked.removeIf((long key) -> !RegionChunks.contains(center, this.radius, ChunkPos.getX(key), ChunkPos.getZ(key)));
         PreviewBuilder.Request request = new PreviewBuilder.Request(this.settings, this.seed, dimension, this.radius, constantAmbientLight, this.biomes, this.noise,
                 center, terrain, this.generateAll, LongSets.unmodifiable(new LongOpenHashSet(this.picked)));
         this.lastRequest = request;
@@ -503,16 +504,9 @@ public class PreviewScreen extends Screen {
         return this.renderer != null && this.renderer.drawsChunk(chunkX, chunkZ);
     }
 
-    /** Picks the chunks of the cell that lie in the region around its site, and pans the region center to the site. */
+    /** Picks every chunk of the cell, inside the region or not. The region center stays. */
     public void pickCell(CellGeometry.Shape shape) {
-        Vec3 site = shape.site();
-        ChunkPos center = new ChunkPos(RegionPan.chunk(site.x), RegionPan.chunk(site.z));
-        for (long chunk : shape.chunks()) {
-            if (RegionChunks.contains(center, this.radius, ChunkPos.getX(chunk), ChunkPos.getZ(chunk))) {
-                this.picked.add(chunk);
-            }
-        }
-        this.pan.set(site.x, site.z);
+        this.picked.addAll(shape.chunks());
         this.requestBuild();
     }
 

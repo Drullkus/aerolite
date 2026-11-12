@@ -19,9 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks the cell polyhedra: the boxes of a lattice without jitter, the shared faces, the vertex distances, the gridlines, the ray test and the chunk overlap.
+ * Checks the cell polyhedra: the boxes of a lattice without jitter, the shared faces, the vertex distances, the gridlines, the edge distance, the ray test and the chunk overlap.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
  */
 class CellGeometryTest {
 
@@ -124,6 +125,44 @@ class CellGeometryTest {
         CellGeometry.Face side = shape.faces().stream().filter(face -> face.normal().x > 0.99).findFirst().orElseThrow();
         // The side face spans 256 blocks on Z and 128 on Y: 15 lines across Z and 7 across Y.
         assertEquals(22, side.gridlines().size());
+    }
+
+    @Test
+    void boxFaceEdgeDistanceIsTheDistanceToTheNearestSide() {
+        CellGeometry.Shape shape = CellGeometry.shape(BOXES, BOXES.cell(0, 0, 0));
+        // The top face spans 0 to 256 on X and Z at Y 128.
+        CellGeometry.Face top = shape.faces().stream().filter(face -> face.normal().y > 0.99).findFirst().orElseThrow();
+        assertEquals(128, top.edgeDistance(new Vec3(128, 128, 128)), TOLERANCE);
+        assertEquals(10, top.edgeDistance(new Vec3(10, 128, 100)), TOLERANCE);
+        assertEquals(20, top.edgeDistance(new Vec3(200, 128, 236)), TOLERANCE);
+        assertEquals(0, top.edgeDistance(new Vec3(256, 128, 77)), TOLERANCE);
+        assertEquals(0, top.edgeDistance(new Vec3(0, 128, 0)), TOLERANCE);
+        // The side face spans 0 to 128 on Y and 0 to 256 on Z at X 256.
+        CellGeometry.Face side = shape.faces().stream().filter(face -> face.normal().x > 0.99).findFirst().orElseThrow();
+        assertEquals(64, side.edgeDistance(new Vec3(256, 64, 128)), TOLERANCE);
+        assertEquals(28, side.edgeDistance(new Vec3(256, 100, 128)), TOLERANCE);
+        for (CellGeometry.Segment line : top.gridlines()) {
+            assertEquals(0, top.edgeDistance(line.from()), TOLERANCE);
+            assertEquals(0, top.edgeDistance(line.to()), TOLERANCE);
+        }
+    }
+
+    @Test
+    void tiltedFaceEdgeDistanceIsMeasuredInTheFacePlane() {
+        // A rectangle in the plane x + y = 8: 128 blocks across, Z from 0 to 64.
+        double half = 32 * Math.sqrt(2);
+        Vec3 normal = new Vec3(1, 1, 0).normalize();
+        Vec3 across = new Vec3(1, -1, 0).normalize();
+        Vec3 corner = new Vec3(8 - half, half, 0);
+        List<Vec3> rectangle = List.of(corner, new Vec3(8 + half, -half, 0), new Vec3(8 + half, -half, 64), new Vec3(8 - half, half, 64));
+        CellGeometry.Face face = new CellGeometry.Face(rectangle, normal, normal.dot(corner), null, List.of());
+        // The center is 32 from each long side and 64 from each short side.
+        assertEquals(32, face.edgeDistance(corner.add(across.scale(64)).add(0, 0, 32)), TOLERANCE);
+        assertEquals(5, face.edgeDistance(corner.add(across.scale(5)).add(0, 0, 32)), TOLERANCE);
+        assertEquals(7, face.edgeDistance(corner.add(across.scale(100)).add(0, 0, 57)), TOLERANCE);
+        assertEquals(0, face.edgeDistance(corner.add(across.scale(128)).add(0, 0, 13)), TOLERANCE);
+        // A point outside the polygon measures to the nearest corner.
+        assertEquals(5, face.edgeDistance(corner.add(across.scale(-3)).add(0, 0, -4)), TOLERANCE);
     }
 
     @Test

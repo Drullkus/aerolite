@@ -19,9 +19,11 @@ import java.util.Set;
  * A cell starts as a box around its site that holds every point of the cell.
  * Each bisector plane to a site within the wall reach then clips it. The rows above and below count too.
  * Each face carries the gridlines where the planes at every {@link #GRID_SPACING} blocks on X, Y and Z cut it.
+ * Each face gives the distance from a point on it to its nearest edge.
  * The ray test and the chunk overlap work on the face planes and on the vertices.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
  */
 public final class CellGeometry {
 
@@ -46,6 +48,20 @@ public final class CellGeometry {
         /** The signed distance of the point to the face plane. It is negative inside the cell. */
         public double distance(Vec3 point) {
             return this.normal.dot(point) - this.offset;
+        }
+
+        /** The distance from a point on the face to the nearest edge of the face polygon. */
+        public double edgeDistance(Vec3 point) {
+            double nearest = Double.POSITIVE_INFINITY;
+            int count = this.vertices.size();
+            for (int i = 0; i < count; i++) {
+                Vec3 a = this.vertices.get(i);
+                Vec3 edge = this.vertices.get((i + 1) % count).subtract(a);
+                Vec3 relative = point.subtract(a);
+                double along = Mth.clamp(relative.dot(edge) / edge.lengthSqr(), 0, 1);
+                nearest = Math.min(nearest, relative.distanceToSqr(edge.scale(along)));
+            }
+            return Math.sqrt(nearest);
         }
     }
 

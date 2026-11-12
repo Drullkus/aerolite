@@ -84,8 +84,9 @@ import java.util.stream.Stream;
  *     <li>{@code islands-01b-hover}: a top view with the cursor on the site of the cell nearest the region center, through GLFW.
  *     The check states that the hovered cell is that cell.</li>
  *     <li>{@code islands-01c-clicked}: the island of that cell after a left click through GLFW, at the pitch {@value #GEOMETRY_PITCH}.
- *     The checks state that the region center is on the site and that the picked chunks are the cell chunks inside the region.
- *     They also state that the site chunk holds blocks and that no other region chunk does.</li>
+ *     The checks state that the click does not move the region center and that the picked chunks are all chunks of the cell.
+ *     They also state that the site chunk holds blocks and that no region chunk outside the picked chunks does.
+ *     Then the probe moves the region center to the site through {@link PreviewScreen#setCenter}, so the view frames the cell.</li>
  *     <li>{@code islands-01d-gridlines}: a close top view of that cell. The check states that each gridline lies on one grid plane.</li>
  *     <li>{@code islands-01-preview}: the same preview with generate all on, the full region, the editor closed and the Node Editor button.
  *     The checks state that a chunk outside the picked chunks holds blocks and that the editor starts closed.
@@ -126,6 +127,7 @@ import java.util.stream.Stream;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
  */
 public final class IslandsProbe {
 
@@ -392,6 +394,7 @@ public final class IslandsProbe {
      */
     private void queueGeometry() {
         CellGeometry.Shape[] target = new CellGeometry.Shape[1];
+        double[] before = new double[2];
         this.step("grab geometry", EDITOR_WAIT, () -> {
             PreviewScreen screen = previewScreen();
             if (screen == null || screen.progress().phase() != PreviewBuilder.Phase.DONE || screen.cells().isEmpty()) {
@@ -447,6 +450,12 @@ public final class IslandsProbe {
             return true;
         });
         this.step("click press", 1, () -> {
+            PreviewScreen screen = previewScreen();
+            if (screen == null) {
+                return false;
+            }
+            before[0] = screen.centerX();
+            before[1] = screen.centerZ();
             GlfwInput.leftButton(true);
             return true;
         });
@@ -464,19 +473,15 @@ public final class IslandsProbe {
                 return false;
             }
             VoronoiLattice.Cell cell = target[0].cell();
-            boolean centered = Math.abs(screen.centerX() - cell.siteX()) < POSITION_TOLERANCE && Math.abs(screen.centerZ() - cell.siteZ()) < POSITION_TOLERANCE;
-            LOGGER.info("Islands probe: after the click the region center is {} {}, the site is {} {}", screen.centerX(), screen.centerZ(), cell.siteX(), cell.siteZ());
-            if (!centered) {
-                throw new IllegalStateException("Pan check failed: the region center is not on the site");
+            boolean moved = screen.centerX() != before[0] || screen.centerZ() != before[1];
+            LOGGER.info("Islands probe: the region center is {} {} before the click and {} {} after it, the site is {} {}",
+                    before[0], before[1], screen.centerX(), screen.centerZ(), cell.siteX(), cell.siteZ());
+            if (moved) {
+                throw new IllegalStateException("No-move check failed: the click moved the region center");
             }
-            LOGGER.info("Islands probe: pan check passed");
+            LOGGER.info("Islands probe: no-move check passed");
             ChunkPos center = new ChunkPos(Math.floorDiv((int) Math.floor(cell.siteX()), 16), Math.floorDiv((int) Math.floor(cell.siteZ()), 16));
-            LongSet expected = new LongOpenHashSet();
-            for (long chunk : target[0].chunks()) {
-                if (Math.abs(ChunkPos.getX(chunk) - center.x) <= screen.radius() && Math.abs(ChunkPos.getZ(chunk) - center.z) <= screen.radius()) {
-                    expected.add(chunk);
-                }
-            }
+            LongSet expected = new LongOpenHashSet(target[0].chunks());
             boolean sitePainted = screen.drawsBlocks(center.x, center.z);
             int outside = regionChunksWithBlocks(screen, false);
             LOGGER.info("Islands probe: the click picks {} chunks ({} expected), the site chunk holds blocks {}, {} chunks outside the cell hold blocks",
@@ -485,8 +490,13 @@ public final class IslandsProbe {
                 throw new IllegalStateException("Click check failed");
             }
             LOGGER.info("Islands probe: click check passed");
+            screen.setCenter(cell.siteX(), cell.siteZ());
             screen.camera().setPitch(GEOMETRY_PITCH);
             return true;
+        });
+        this.step("centered built", 20, () -> {
+            PreviewScreen screen = previewScreen();
+            return screen != null && screen.progress().phase() == PreviewBuilder.Phase.DONE;
         });
         this.step("grab clicked view", EDITOR_WAIT, () -> {
             SettingsProbe.grabFront("islands-01c-clicked.png");

@@ -16,8 +16,6 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.math.Axis;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.GameRenderer;
@@ -35,7 +33,6 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
-import org.lwjgl.opengl.GL11;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.island.CellGeometry;
 import us.drullk.aerolite.world.island.VoronoiLattice;
@@ -52,13 +49,16 @@ import java.util.List;
  * The model space has the region center of the pan at its origin. Each mesh keeps its world origin.
  * An outline edge draws translucent when a pixel of it is in front of a block. Else it draws opaque.
  * The islands preview also draws the cell polyhedra of its region: edges, gridlines and a cross at each site.
- * A first pass draws the parts behind blocks at a reduced opacity. A second pass draws the parts in front at full opacity.
- * The hovered cell draws in gold after the other cells, so it covers the faces it shares with them.
+ * Every line draws in one pass with the depth test and the depth write. So a block hides each line behind it.
+ * A face draws its gridlines only when the camera is on its outer side. So one of two neighbor cells draws a shared face.
+ * A gridline fades with the distance to the nearest edge of its face.
+ * The hovered cell draws in gold after the other cells. The gridlines of each face of its neighbors toward it are gold too.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_01-46_f1e9d346-7ee2-499e-8bdf-81792143696f.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
  */
 final class PreviewRenderer {
 
@@ -76,10 +76,12 @@ final class PreviewRenderer {
     /** The red, green and blue of a cell, and of the hovered cell in the chat color gold. */
     private static final int CELL_RGB = 0xFFFFFF;
     private static final int HOVERED_RGB = 0xFFAA00;
-    /** The opacity of a cell line part that a block hides. */
-    private static final float CELL_COVERED_ALPHA = 0.3F;
-    /** The opacity of a gridline in front of the blocks. */
+    /** The opacity of a gridline at an edge of its face. */
     private static final float GRIDLINE_ALPHA = 0.35F;
+    /** The distance from the nearest face edge at which a gridline has no opacity, in blocks. */
+    private static final double GRIDLINE_FADE = 32;
+    /** The length of the pieces of a gridline, in blocks. Each piece end takes its own opacity. */
+    private static final double GRIDLINE_STEP = 4;
     /** The half length of each arm of the site cross, in blocks. */
     private static final float SITE_HALF = 3;
 
@@ -305,6 +307,8 @@ final class PreviewRenderer {
         Biome biome = scene.centerBiome().value();
         Vec3 clear = Vec3.fromRGB24(effects.skyType() == DimensionSpecialEffects.SkyType.NORMAL ? biome.getSkyColor() : biome.getFogColor());
         RenderSystem.clearColor((float) clear.x, (float) clear.y, (float) clear.z, 1);
+        // The depth clear and each line pass need the depth write.
+        RenderSystem.depthMask(true);
         RenderSystem.clear(GlConst.GL_COLOR_BUFFER_BIT | GlConst.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
 
         float aspect = target.width / (float) Math.max(1, target.height);
@@ -333,7 +337,7 @@ final class PreviewRenderer {
         for (RenderType layer : RenderType.chunkBufferLayers()) {
             this.renderLayer(layer, scene, view, projection);
         }
-        this.renderCells(scene, hovered);
+        this.renderCells(scene, camera.position(), hovered);
         this.updateCoverEdges(scene, camera.position(), view, projection, target.width, target.height);
         this.renderLines(scene);
 
@@ -410,83 +414,78 @@ final class PreviewRenderer {
         }
     }
 
-    /** Draws the cell lines behind the blocks at the reduced opacity, then the cell lines in front of them. */
-    private void renderCells(Scene scene, @Nullable VoronoiLattice.Cell hovered) {
+    /** Draws the lines of every cell, the hovered cell last. The camera position is in model space. */
+    private void renderCells(Scene scene, Vector3f camera, @Nullable VoronoiLattice.Cell hovered) {
         if (this.cells.isEmpty()) {
             return;
         }
-        RenderType lines = RenderType.lines();
-        MeshData covered = this.cellLines(scene, hovered, CELL_COVERED_ALPHA);
-        if (covered != null) {
-            lines.setupRenderState();
-            RenderSystem.depthFunc(GL11.GL_GREATER);
-            RenderSystem.depthMask(false);
-            BufferUploader.drawWithShader(covered);
-            lines.clearRenderState();
-        }
-        MeshData front = this.cellLines(scene, hovered, 1);
-        if (front != null) {
-            lines.draw(front);
-        }
-    }
-
-    /**
-     * The lines of every cell at the opacity, the hovered cell last.
-     * A face that two drawn cells share draws its gridlines once: the hovered cell draws them, else the cell with the lesser lattice key.
-     */
-    @Nullable
-    private MeshData cellLines(Scene scene, @Nullable VoronoiLattice.Cell hovered, float alpha) {
-        LongSet drawn = new LongOpenHashSet();
-        for (CellGeometry.Shape shape : this.cells) {
-            drawn.add(ChunkPos.asLong(shape.cell().ix(), shape.cell().iz()));
-        }
-        int alphaBits = Mth.clamp(Math.round(alpha * 255), 0, 255) << 24;
-        int gridBits = Mth.clamp(Math.round(alpha * GRIDLINE_ALPHA * 255), 0, 255) << 24;
+        Vec3 eye = new Vec3(camera.x + this.originX, camera.y + scene.centerY(), camera.z + this.originZ);
         BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
         CellGeometry.Shape hoveredShape = null;
         for (CellGeometry.Shape shape : this.cells) {
             if (shape.cell().equals(hovered)) {
                 hoveredShape = shape;
             } else {
-                this.cellLines(buffer, scene, shape, hovered, drawn, alphaBits | CELL_RGB, gridBits | CELL_RGB);
+                this.cellLines(buffer, scene, shape, eye, hovered, CELL_RGB);
             }
         }
         if (hoveredShape != null) {
-            this.cellLines(buffer, scene, hoveredShape, hovered, drawn, alphaBits | HOVERED_RGB, gridBits | HOVERED_RGB);
+            this.cellLines(buffer, scene, hoveredShape, eye, hovered, HOVERED_RGB);
         }
-        return buffer.build();
+        MeshData mesh = buffer.build();
+        if (mesh != null) {
+            RenderType.lines().draw(mesh);
+        }
     }
 
-    private void cellLines(BufferBuilder buffer, Scene scene, CellGeometry.Shape shape, @Nullable VoronoiLattice.Cell hovered, LongSet drawn,
-                           int edgeColor, int gridColor) {
-        boolean isHovered = shape.cell().equals(hovered);
-        long own = ChunkPos.asLong(shape.cell().ix(), shape.cell().iz());
+    /** The edges and the site cross of one cell, and the gridlines of each face that faces the world position {@code eye}. */
+    private void cellLines(BufferBuilder buffer, Scene scene, CellGeometry.Shape shape, Vec3 eye, @Nullable VoronoiLattice.Cell hovered, int rgb) {
+        int color = 0xFF000000 | rgb;
         for (CellGeometry.Segment edge : shape.edges()) {
-            this.modelLine(buffer, scene, edge.from(), edge.to(), edgeColor);
+            this.modelLine(buffer, scene, edge.from(), edge.to(), color, color);
         }
         for (CellGeometry.Face face : shape.faces()) {
-            VoronoiLattice.Cell neighbor = face.neighbor();
-            if (!isHovered && neighbor != null && neighbor.iy() == 0) {
-                long other = ChunkPos.asLong(neighbor.ix(), neighbor.iz());
-                if (neighbor.equals(hovered) || drawn.contains(other) && other < own) {
-                    continue;
-                }
+            if (face.distance(eye) <= 0) {
+                continue;
             }
+            int gridRgb = hovered != null && hovered.equals(face.neighbor()) ? HOVERED_RGB : rgb;
             for (CellGeometry.Segment line : face.gridlines()) {
-                this.modelLine(buffer, scene, line.from(), line.to(), gridColor);
+                this.fadedLine(buffer, scene, face, line, gridRgb);
             }
         }
         Vec3 site = shape.site();
-        this.modelLine(buffer, scene, site.add(-SITE_HALF, 0, 0), site.add(SITE_HALF, 0, 0), edgeColor);
-        this.modelLine(buffer, scene, site.add(0, -SITE_HALF, 0), site.add(0, SITE_HALF, 0), edgeColor);
-        this.modelLine(buffer, scene, site.add(0, 0, -SITE_HALF), site.add(0, 0, SITE_HALF), edgeColor);
+        this.modelLine(buffer, scene, site.add(-SITE_HALF, 0, 0), site.add(SITE_HALF, 0, 0), color, color);
+        this.modelLine(buffer, scene, site.add(0, -SITE_HALF, 0), site.add(0, SITE_HALF, 0), color, color);
+        this.modelLine(buffer, scene, site.add(0, 0, -SITE_HALF), site.add(0, 0, SITE_HALF), color, color);
+    }
+
+    /** One gridline in pieces. A piece with no opacity at both ends draws nothing. */
+    private void fadedLine(BufferBuilder buffer, Scene scene, CellGeometry.Face face, CellGeometry.Segment line, int rgb) {
+        int pieces = Mth.ceil(line.from().distanceTo(line.to()) / GRIDLINE_STEP);
+        Vec3 from = line.from();
+        int fromAlpha = gridlineAlpha(face, from);
+        for (int piece = 1; piece <= pieces; piece++) {
+            Vec3 to = line.from().lerp(line.to(), piece / (double) pieces);
+            int toAlpha = gridlineAlpha(face, to);
+            if (fromAlpha > 0 || toAlpha > 0) {
+                this.modelLine(buffer, scene, from, to, fromAlpha << 24 | rgb, toAlpha << 24 | rgb);
+            }
+            from = to;
+            fromAlpha = toAlpha;
+        }
+    }
+
+    /** The opacity of a gridline at a point of its face, from 0 to 255. */
+    private static int gridlineAlpha(CellGeometry.Face face, Vec3 point) {
+        double t = Mth.clamp(face.edgeDistance(point) / GRIDLINE_FADE, 0, 1);
+        return (int) Math.round(GRIDLINE_ALPHA * (1 - t * t * (3 - 2 * t)) * 255);
     }
 
     /** One line between two world points, in model space. */
-    private void modelLine(BufferBuilder buffer, Scene scene, Vec3 from, Vec3 to, int color) {
+    private void modelLine(BufferBuilder buffer, Scene scene, Vec3 from, Vec3 to, int fromColor, int toColor) {
         float centerY = scene.centerY();
         line(buffer, (float) (from.x - this.originX), (float) from.y - centerY, (float) (from.z - this.originZ),
-                (float) (to.x - this.originX), (float) to.y - centerY, (float) (to.z - this.originZ), color);
+                (float) (to.x - this.originX), (float) to.y - centerY, (float) (to.z - this.originZ), fromColor, toColor);
     }
 
     /**
@@ -686,9 +685,13 @@ final class PreviewRenderer {
     }
 
     private static void line(BufferBuilder lines, float x0, float y0, float z0, float x1, float y1, float z1, int color) {
+        line(lines, x0, y0, z0, x1, y1, z1, color, color);
+    }
+
+    private static void line(BufferBuilder lines, float x0, float y0, float z0, float x1, float y1, float z1, int fromColor, int toColor) {
         Vector3f normal = new Vector3f(x1 - x0, y1 - y0, z1 - z0).normalize();
-        lines.addVertex(x0, y0, z0).setColor(color).setNormal(normal.x, normal.y, normal.z);
-        lines.addVertex(x1, y1, z1).setColor(color).setNormal(normal.x, normal.y, normal.z);
+        lines.addVertex(x0, y0, z0).setColor(fromColor).setNormal(normal.x, normal.y, normal.z);
+        lines.addVertex(x1, y1, z1).setColor(toColor).setNormal(normal.x, normal.y, normal.z);
     }
 
     // [VANILLACOPY] LevelRenderer#renderEndSky
