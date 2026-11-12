@@ -845,7 +845,8 @@ The player sets the pillar settings in the World tab of the create world screen.
 - A shift keeps the painted and baked data of each chunk that stays in the region. It drops the chunks that leave.
 - The painted chunks hold one ring of margin around the region. The margin is not baked.
 - A chunk bakes when its neighbors in the margin are painted. So the bake of a chunk does not depend on the region position.
-- A shift paints the chunks that enter the margin and bakes the chunks that enter the region, nearest chunk first. It bakes no kept chunk again.
+- A shift paints the chunks that enter the margin and bakes the chunks that enter the region, nearest chunk first.
+- A shift bakes a kept chunk again only when one of its 8 neighbor chunks gains or loses its terrain. So the border shading fits the neighbor.
 - A chunk also bakes each border face that an opaque block of the next chunk hides. So a shift that drops the next chunk shows no hole.
 - A hidden face bakes with the next chunk read as air, so its shading fits the exposed state.
 - A progress bar shows the painted chunks and the baked sections of the newest rebuild or shift.
@@ -1329,6 +1330,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - The gridline opacity is zero at the fade distance from the edge. `PreviewRenderer` holds the opacity and the fade distance.
 - The cell lines, the floor grid and the region outline use the plain depth test. So blocks hide each cell line.
 - The cell under the cursor draws in gold, the chat color `§6`. The other cells draw white.
+- An edge that several drawn cells share draws once. It draws in gold when one of those cells is the cell under the cursor.
 - The gridlines of a face draw in gold when one of its two cells is the cell under the cursor.
 - The hover takes the nearest cell that the cursor ray hits.
 - The hover and the click skip the cursor over a panel window, such as the view gizmo.
@@ -1343,7 +1345,7 @@ The pillar data lives in datapack registries and data maps. See the glossary for
 - A change of the settings, the seed, the dimension, the radius or the terrain forgets the picked chunks.
 - In the islands preview, a chunk gets its pillars only when it gets its terrain.
 - The builder finds the island function in the final density of the wired random state. So the cells match the terrain.
-- `CellGeometry` holds the polyhedron math, the gridlines, the edge distance of a face, the ray test and the chunk overlap.
+- `CellGeometry` holds the polyhedron math, the gridlines, the edge distance of a face, the shared edges, the ray test and the chunk overlap.
 - `IslandTerrain` fills a chunk from the noise settings and builds its surface without a level. The fill is the vanilla noise fill without a structure manager, so the terrain adaptation of structures is absent.
 - The biome choices of the Islands screen reach the preview only after Done. The preview reads the generators of the world creation state.
 - Island types, inner cells, cell merging, island bridges and center structures are 0.6.0 work.
@@ -1517,7 +1519,7 @@ Aerolite adds no sounds. Blocks use vanilla sound types.
 - `IslandGameTests` checks the Islands preset, the seed wiring of the island function, the surface floor, the island settings edit and the blocks of a generated island chunk.
 - `IslandGameTests` also checks that the terrain fill of the preview writes the blocks of the generator fill, and that its surface follows the biome.
 - The island JUnit tests check the lattice and the island density.
-- `CellGeometryTest` checks the cell polyhedra, the gridlines, the edge distance, the ray test and the chunk overlap.
+- `CellGeometryTest` checks the cell polyhedra, the gridlines, the edge distance, the shared edges, the ray test and the chunk overlap.
 - The graph JUnit tests also check the inline step, the slider map, the graph layout and the new field values.
 - `IslandGameTests` checks that the start router graph fills a chunk like the shipped noise settings.
 - `IslandGameTests` checks that a slider write reaches the built router.

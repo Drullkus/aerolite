@@ -7,6 +7,7 @@ import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -19,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Checks the cell polyhedra: the boxes of a lattice without jitter, the shared faces, the vertex distances, the gridlines, the edge distance, the ray test and the chunk overlap.
+ * Checks the cell polyhedra: the boxes of a lattice without jitter, the shared faces, the distinct edges, the vertex distances, the gridlines, the edge distance, the ray test and the chunk overlap.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
@@ -69,6 +70,65 @@ class CellGeometryTest {
                 }
             }
         }
+    }
+
+    @Test
+    void boxEdgesAppearOnceWithTheirOwners() {
+        List<CellGeometry.Shape> shapes = shapes(BOXES);
+        List<CellGeometry.CellEdge> edges = CellGeometry.distinctEdges(shapes);
+        // 16 vertical edges, and 24 horizontal edges on each of the two levels.
+        assertEquals(64, edges.size());
+        int[] byOwners = new int[5];
+        int[] verticalByOwners = new int[5];
+        for (CellGeometry.CellEdge edge : edges) {
+            byOwners[edge.owners().size()]++;
+            if (!near(edge.segment().from().y, edge.segment().to().y)) {
+                verticalByOwners[edge.owners().size()]++;
+            }
+        }
+        // The vertical edges: 4 at the corners, 8 on the border, 4 inside. The horizontal edges: 24 on the border, 24 inside.
+        assertEquals(List.of(0, 4, 8, 0, 4), Arrays.stream(verticalByOwners).boxed().toList());
+        assertEquals(List.of(0, 28, 32, 0, 4), Arrays.stream(byOwners).boxed().toList());
+    }
+
+    @Test
+    void jitteredSharedEdgesAppearOnceWithTheirOwners() {
+        List<CellGeometry.Shape> shapes = shapes(JITTERED);
+        Set<VoronoiLattice.Cell> drawn = new HashSet<>();
+        int sum = 0;
+        for (CellGeometry.Shape shape : shapes) {
+            drawn.add(shape.cell());
+            sum += shape.edges().size();
+        }
+        List<CellGeometry.CellEdge> edges = CellGeometry.distinctEdges(shapes);
+        assertTrue(edges.size() < sum, edges.size() + " of " + sum);
+        int owners = 0;
+        for (int i = 0; i < edges.size(); i++) {
+            List<VoronoiLattice.Cell> cells = edges.get(i).owners();
+            owners += cells.size();
+            assertEquals(cells.size(), new HashSet<>(cells).size(), "An owner repeats");
+            for (int j = i + 1; j < edges.size(); j++) {
+                assertTrue(!sameEdge(edges.get(i).segment(), edges.get(j).segment()), "Two copies of " + edges.get(i).segment());
+            }
+        }
+        assertEquals(sum, owners);
+        boolean shared = false;
+        for (CellGeometry.Shape shape : shapes) {
+            for (CellGeometry.Face face : shape.faces()) {
+                List<Vec3> polygon = face.vertices();
+                for (int i = 0; i < polygon.size(); i++) {
+                    CellGeometry.Segment edge = new CellGeometry.Segment(polygon.get(i), polygon.get((i + 1) % polygon.size()));
+                    List<CellGeometry.CellEdge> found = edges.stream().filter(candidate -> sameEdge(candidate.segment(), edge)).toList();
+                    assertEquals(1, found.size());
+                    assertTrue(found.getFirst().owners().contains(shape.cell()), "The edge lacks its cell");
+                    if (drawn.contains(face.neighbor())) {
+                        shared = true;
+                        assertTrue(found.getFirst().owners().contains(face.neighbor()), "The edge lacks the cell across its face");
+                    }
+                }
+            }
+        }
+        assertTrue(shared, "No drawn cell has a drawn neighbor");
     }
 
     @Test
@@ -291,6 +351,23 @@ class CellGeometryTest {
             // The hull is no rectangle, so its bounds hold chunks outside it.
             assertTrue(chunks.size() < bounds, chunks.size() + " of " + bounds);
         }
+    }
+
+    /** The shapes of the 3 by 3 cells of the row 0 around the origin. */
+    private static List<CellGeometry.Shape> shapes(VoronoiLattice lattice) {
+        List<CellGeometry.Shape> shapes = new ArrayList<>();
+        for (int ix = -1; ix <= 1; ix++) {
+            for (int iz = -1; iz <= 1; iz++) {
+                shapes.add(CellGeometry.shape(lattice, lattice.cell(ix, 0, iz)));
+            }
+        }
+        return shapes;
+    }
+
+    /** True when the two segments have the same end points, in either direction. */
+    private static boolean sameEdge(CellGeometry.Segment a, CellGeometry.Segment b) {
+        return a.from().distanceTo(b.from()) < 1.0E-4 && a.to().distanceTo(b.to()) < 1.0E-4
+                || a.from().distanceTo(b.to()) < 1.0E-4 && a.to().distanceTo(b.from()) < 1.0E-4;
     }
 
     /** True when the vertical line at X and Z crosses the polyhedron. */

@@ -11,7 +11,9 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -21,6 +23,7 @@ import java.util.Set;
  * Each face carries the gridlines where the planes at every {@link #GRID_SPACING} blocks on X, Y and Z cut it.
  * Each face gives the distance from a point on it to its nearest edge.
  * The ray test and the chunk overlap work on the face planes and on the vertices.
+ * Neighbor cells each hold a copy of an edge between them. {@link #distinctEdges} gives each such edge once, with its owner cells.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
@@ -63,6 +66,10 @@ public final class CellGeometry {
             }
             return Math.sqrt(nearest);
         }
+    }
+
+    /** One distinct edge of a list of shapes, with each cell that holds it. */
+    public record CellEdge(Segment segment, List<VoronoiLattice.Cell> owners) {
     }
 
     /** The polyhedron of one cell, its faces, its edges without duplicates and its vertices without duplicates. */
@@ -183,6 +190,19 @@ public final class CellGeometry {
             }
         }
         return nearest;
+    }
+
+    /** Each distinct edge of the shapes once. Its owners are the cells of the shapes that hold it, in shape sequence. */
+    public static List<CellEdge> distinctEdges(List<Shape> shapes) {
+        Set<List<Long>> points = new HashSet<>();
+        Map<List<Long>, CellEdge> edges = new LinkedHashMap<>();
+        for (Shape shape : shapes) {
+            for (Segment edge : shape.edges()) {
+                List<Long> key = edgeKey(snappedKey(points, edge.from()), snappedKey(points, edge.to()));
+                edges.computeIfAbsent(key, absent -> new CellEdge(edge, new ArrayList<>())).owners().add(shape.cell());
+            }
+        }
+        return edges.values().stream().map(edge -> new CellEdge(edge.segment(), List.copyOf(edge.owners()))).toList();
     }
 
     /** The six faces of the box of half size {@code reach} around the site. */
@@ -342,18 +362,21 @@ public final class CellGeometry {
             for (int i = 0; i < polygon.size(); i++) {
                 Vec3 a = polygon.get(i);
                 Vec3 b = polygon.get((i + 1) % polygon.size());
-                List<Long> keyA = key(a);
-                List<Long> keyB = key(b);
-                List<Long> key = new ArrayList<>(6);
-                boolean forward = compareKeys(keyA, keyB) <= 0;
-                key.addAll(forward ? keyA : keyB);
-                key.addAll(forward ? keyB : keyA);
-                if (seen.add(key)) {
+                if (seen.add(edgeKey(key(a), key(b)))) {
                     edges.add(new Segment(a, b));
                 }
             }
         }
         return List.copyOf(edges);
+    }
+
+    /** The key of an edge from the keys of its end points, the same for both directions. */
+    private static List<Long> edgeKey(List<Long> keyA, List<Long> keyB) {
+        List<Long> key = new ArrayList<>(6);
+        boolean forward = compareKeys(keyA, keyB) <= 0;
+        key.addAll(forward ? keyA : keyB);
+        key.addAll(forward ? keyB : keyA);
+        return key;
     }
 
     private static int compareKeys(List<Long> a, List<Long> b) {
@@ -368,6 +391,23 @@ public final class CellGeometry {
 
     private static List<Long> key(Vec3 point) {
         return List.of(Math.round(point.x * EDGE_KEY_SCALE), Math.round(point.y * EDGE_KEY_SCALE), Math.round(point.z * EDGE_KEY_SCALE));
+    }
+
+    /**
+     * The key of a seen point within half a rounding step on each axis, else the key of the point, which joins the seen keys.
+     * So two copies of one point on the two sides of a rounding step get one key.
+     */
+    private static List<Long> snappedKey(Set<List<Long>> seen, Vec3 point) {
+        double half = 0.5 / EDGE_KEY_SCALE;
+        for (int corner = 0; corner < 8; corner++) {
+            List<Long> key = key(point.add((corner & 1) == 0 ? -half : half, (corner & 2) == 0 ? -half : half, (corner & 4) == 0 ? -half : half));
+            if (seen.contains(key)) {
+                return key;
+            }
+        }
+        List<Long> key = key(point);
+        seen.add(key);
+        return key;
     }
 
     private static List<Vec3> vertices(List<Face> faces) {

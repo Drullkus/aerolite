@@ -73,6 +73,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * A request with terrain settings also gives the cell polyhedra of the generating layer whose sites lie in the region.
  * With terrain settings and without generate all, only the picked chunks inside the region get terrain and pillars.
  * Every other chunk paints empty. A chunk whose generate state changes paints and bakes again.
+ * Each delivered chunk next to such a chunk, by a side or a corner, also bakes again. So its border shading fits the new neighbor.
+ * A shift without a change of a generate state bakes no kept chunk again.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -81,6 +83,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
  */
 public final class PreviewBuilder implements AutoCloseable {
 
@@ -377,6 +380,8 @@ public final class PreviewBuilder implements AutoCloseable {
     /**
      * Paints the chunks that the region lacks on the paint thread.
      * It hands each chunk that the render thread lacks to the bake pool when its neighbors are painted.
+     * A painted chunk whose generate state changes paints again. Each delivered chunk among its 8 neighbors bakes again.
+     * A chunk that enters or leaves the painted chunks with no such change causes no second bake.
      */
     private void paint(Request request, long generation) {
         PreviewDimension dimension = request.dimension();
@@ -384,6 +389,12 @@ public final class PreviewBuilder implements AutoCloseable {
         int paintRadius = radius + MARGIN;
         ChunkPos center = request.center();
         Scene scene = this.scene(request);
+        LongSet changed = new LongOpenHashSet();
+        for (long key : scene.painted.keySet()) {
+            if (scene.generated.contains(key) != request.generates(key)) {
+                changed.add(key);
+            }
+        }
         scene.painted.keySet().removeIf((long key) -> !RegionChunks.contains(center, paintRadius, ChunkPos.getX(key), ChunkPos.getZ(key))
                 || scene.generated.contains(key) != request.generates(key));
         scene.generated.removeIf((long key) -> !scene.painted.containsKey(key));
@@ -398,7 +409,7 @@ public final class PreviewBuilder implements AutoCloseable {
                 return;
             }
             this.delivered.removeIf((long key) -> !RegionChunks.contains(center, radius, ChunkPos.getX(key), ChunkPos.getZ(key))
-                    || !scene.painted.containsKey(key));
+                    || !scene.painted.containsKey(key) || nextTo(changed, key));
             bakes = RegionChunks.missing(center, radius, this.delivered);
             this.output.add(new Started(generation, region));
         }
@@ -457,6 +468,23 @@ public final class PreviewBuilder implements AutoCloseable {
                 this.submit(build, release.getInt(i));
             }
         }
+    }
+
+    /** True when one of the 8 neighbors of the chunk is in the set. */
+    private static boolean nextTo(LongSet chunks, long chunk) {
+        if (chunks.isEmpty()) {
+            return false;
+        }
+        int x = ChunkPos.getX(chunk);
+        int z = ChunkPos.getZ(chunk);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if ((dx != 0 || dz != 0) && chunks.contains(ChunkPos.asLong(x + dx, z + dz))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

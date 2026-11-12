@@ -52,7 +52,9 @@ import java.util.List;
  * Every line draws in one pass with the depth test and the depth write. So a block hides each line behind it.
  * A face draws its gridlines only when the camera is on its outer side. So one of two neighbor cells draws a shared face.
  * A gridline fades with the distance to the nearest edge of its face.
- * The hovered cell draws in gold after the other cells. The gridlines of each face of its neighbors toward it are gold too.
+ * Each distinct edge of the cells draws once. The edge list follows the cell list, not the frame.
+ * An edge of the hovered cell draws in gold, also where a neighbor cell holds it too. Any other edge draws white.
+ * The gridlines and the site cross of the hovered cell are gold. The gridlines of each face of its neighbors toward it are gold too.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -138,6 +140,8 @@ final class PreviewRenderer {
     private final DynamicTexture lightmap;
     /** The cell polyhedra of the drawn region. */
     private List<CellGeometry.Shape> cells = List.of();
+    /** Each distinct edge of the cell polyhedra, with its owner cells. */
+    private List<CellGeometry.CellEdge> cellEdges = List.of();
 
     PreviewRenderer() {
         this.lightmap = new DynamicTexture(LIGHTMAP_SIZE, LIGHTMAP_SIZE, false);
@@ -212,7 +216,10 @@ final class PreviewRenderer {
 
     /** Takes the region of a message of the drawn scene. A new center drops the chunks outside the region. */
     private void follow(PreviewBuilder.Region region) {
-        this.cells = region.cells();
+        if (this.cells != region.cells()) {
+            this.cells = region.cells();
+            this.cellEdges = CellGeometry.distinctEdges(this.cells);
+        }
         Scene old = this.scene;
         Scene scene = new Scene(region.dimension(), region.radius(), region.center(), region.centerBiome());
         this.scene = scene;
@@ -276,6 +283,7 @@ final class PreviewRenderer {
         this.chunkSolids.clear();
         this.scene = null;
         this.cells = List.of();
+        this.cellEdges = List.of();
     }
 
     private static void free(List<SectionBuffer> buffers) {
@@ -414,23 +422,19 @@ final class PreviewRenderer {
         }
     }
 
-    /** Draws the lines of every cell, the hovered cell last. The camera position is in model space. */
+    /** Draws each distinct edge once, then the gridlines and the site cross of every cell. The camera position is in model space. */
     private void renderCells(Scene scene, Vector3f camera, @Nullable VoronoiLattice.Cell hovered) {
         if (this.cells.isEmpty()) {
             return;
         }
         Vec3 eye = new Vec3(camera.x + this.originX, camera.y + scene.centerY(), camera.z + this.originZ);
         BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.LINES, DefaultVertexFormat.POSITION_COLOR_NORMAL);
-        CellGeometry.Shape hoveredShape = null;
-        for (CellGeometry.Shape shape : this.cells) {
-            if (shape.cell().equals(hovered)) {
-                hoveredShape = shape;
-            } else {
-                this.cellLines(buffer, scene, shape, eye, hovered, CELL_RGB);
-            }
+        for (CellGeometry.CellEdge edge : this.cellEdges) {
+            int color = 0xFF000000 | (hovered != null && edge.owners().contains(hovered) ? HOVERED_RGB : CELL_RGB);
+            this.modelLine(buffer, scene, edge.segment().from(), edge.segment().to(), color, color);
         }
-        if (hoveredShape != null) {
-            this.cellLines(buffer, scene, hoveredShape, eye, hovered, HOVERED_RGB);
+        for (CellGeometry.Shape shape : this.cells) {
+            this.cellLines(buffer, scene, shape, eye, hovered, shape.cell().equals(hovered) ? HOVERED_RGB : CELL_RGB);
         }
         MeshData mesh = buffer.build();
         if (mesh != null) {
@@ -438,12 +442,9 @@ final class PreviewRenderer {
         }
     }
 
-    /** The edges and the site cross of one cell, and the gridlines of each face that faces the world position {@code eye}. */
+    /** The site cross of one cell, and the gridlines of each face that faces the world position {@code eye}. */
     private void cellLines(BufferBuilder buffer, Scene scene, CellGeometry.Shape shape, Vec3 eye, @Nullable VoronoiLattice.Cell hovered, int rgb) {
         int color = 0xFF000000 | rgb;
-        for (CellGeometry.Segment edge : shape.edges()) {
-            this.modelLine(buffer, scene, edge.from(), edge.to(), color, color);
-        }
         for (CellGeometry.Face face : shape.faces()) {
             if (face.distance(eye) <= 0) {
                 continue;
