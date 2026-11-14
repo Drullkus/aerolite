@@ -13,6 +13,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -23,8 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Checks the function node types against the density function type registry, and the JSON round trip of each type.
  * The saved JSON of each type also parses through the vanilla codec with the vanilla registries, and the vanilla encode gives it back.
+ * It checks the field descriptions of the Aerolite types by id.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 class FunctionNodeTypesTest {
 
@@ -42,6 +47,32 @@ class FunctionNodeTypesTest {
         for (FunctionNodeType type : FunctionNodeTypes.all()) {
             assertTrue(registered.contains(type.id()), "The registry does not hold " + type.id());
         }
+    }
+
+    @Test
+    void theAeroliteTypesHaveTheirFieldDescriptions() {
+        Map<String, List<String>> expected = new LinkedHashMap<>();
+        expected.put("voronoi_islands", List.of("noise", "cell_size", "cell_height", "layer_min_y", "jitter", "fill_min", "fill_max", "empty_chance",
+                "distortion", "distortion_scale", "distortion_octaves"));
+        expected.put("island_variations", List.of("noise", "cell_size", "cell_height", "layer_min_y", "jitter", "variations"));
+        expected.put("island_carrier", List.of("islands", "argument"));
+        for (String node : List.of("island_body", "cell_gauge", "wall_distance", "cell_radius", "cell_fill", "cell_weight")) {
+            expected.put(node, List.of());
+        }
+        expected.put("site_offset", List.of("axis"));
+        expected.put("site_distance", List.of("plane"));
+        expected.put("cell_random", List.of("min", "max", "channel"));
+        for (Map.Entry<String, List<String>> type : expected.entrySet()) {
+            FunctionNodeType found = FunctionNodeTypes.get(ResourceLocation.fromNamespaceAndPath("aerolite", type.getKey()));
+            assertNotNull(found, "No field description for aerolite:" + type.getKey());
+            assertEquals(type.getValue(), found.fields().stream().map(FieldSpec::name).toList(), "The fields of aerolite:" + type.getKey());
+        }
+        FunctionNodeType islands = FunctionNodeTypes.get(AeroliteWorldgen.ISLAND_VARIATIONS_TYPE);
+        assertNotNull(islands);
+        assertEquals(FieldKind.VARIATION_LIST, islands.fields().getLast().kind());
+        FunctionNodeType carrier = FunctionNodeTypes.get(AeroliteWorldgen.ISLAND_CARRIER_TYPE);
+        assertNotNull(carrier);
+        assertTrue(carrier.fields().stream().allMatch(field -> field.kind() == FieldKind.FUNCTION && field.acceptsReference()));
     }
 
     @ParameterizedTest

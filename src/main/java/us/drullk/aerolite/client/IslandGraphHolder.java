@@ -22,10 +22,12 @@ import javax.annotation.Nullable;
  * Holds the graphs of the island editor for the open world creation flow. The Islands screen reads and writes them.
  * The first read of a flow loads the router graphs from the dimensions of the world being created.
  * When the temporary data pack folder of the flow holds an island pack, the first read also restores the graphs from it.
+ * The graphs also hold the island variations and lists of the flow. The copy and the restore carry them.
  * Done in the Islands screen keeps the graphs and writes the island pack through {@link IslandPackApplier}.
  * A new create world screen, the screen "Preparing world data", the title screen and the world list end the flow and drop the graphs.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 @tamaized.beanification.Component(dist = Dist.CLIENT)
 public final class IslandGraphHolder {

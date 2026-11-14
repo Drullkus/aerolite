@@ -42,6 +42,7 @@ import java.util.Map;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 @Component(dist = Dist.CLIENT)
 public final class IslandPackApplier {
@@ -63,11 +64,13 @@ public final class IslandPackApplier {
 
     /**
      * Writes or removes the pack for the graphs, then reloads the context when the folder changed.
+     * The pack holds the changed island variations and lists of the graphs. Their island checks read the registries of the context.
      * A pack that does not build keeps the folder as it is and logs the error.
      */
     public void apply(CreateWorldScreen screen, IslandGraphs graphs) {
         WorldCreationContext context = screen.getUiState().getSettings();
-        Map<String, JsonElement> files = this.pack.files(graphs, this.noiseSettings(context), this.graphSettings.noises(context.worldgenLoadContext()))
+        Map<String, JsonElement> files = this.pack.files(graphs, this.noiseSettings(context), this.graphSettings.noises(context.worldgenLoadContext()),
+                        this.graphSettings.entries(graphs, context.worldgenLoadContext()))
                 .ifError(error -> Aerolite.LOGGER.error("The island pack does not build: {}", error.message()))
                 .result().orElse(null);
         if (files == null) {

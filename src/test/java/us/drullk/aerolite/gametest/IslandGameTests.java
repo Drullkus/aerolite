@@ -1,12 +1,15 @@
 package us.drullk.aerolite.gametest;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -69,8 +72,11 @@ import us.drullk.aerolite.world.island.node.IslandValue;
 import us.drullk.aerolite.world.island.variation.IslandVariation;
 import us.drullk.aerolite.world.island.variation.IslandVariationList;
 import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
+import us.drullk.aerolite.world.island.variation.PreviewOverride;
 import us.drullk.aerolite.world.island.variation.UnitRange;
 import us.drullk.aerolite.world.island.variation.VariationLookup;
+import us.drullk.aerolite.world.island.graph.FunctionGraph;
+import us.drullk.aerolite.world.island.graph.FunctionNode;
 import us.drullk.aerolite.world.island.graph.GraphJson;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
@@ -96,6 +102,8 @@ import java.util.concurrent.Future;
  * It checks the biome of a block in a cell of the row 0 and above the row 0. It also checks the island settings edit of a world of 0.5.0,
  * the chunk fill of the noise settings of 0.5.0 and the terrain build from the graphs of the island editor.
  * It checks the island function in the climate sampler of a noise chunk, the chunk wrappers in a variation graph and a parallel fill.
+ * It checks the dropped caches of a variation graph. It checks a variation edit of the flow in the built router.
+ * It checks that a list problem and a missing carrier fail the build.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
@@ -845,6 +853,164 @@ public final class IslandGameTests {
             helper.assertTrue(inIslands > 0, "No sample of " + graph.getKey() + " lies in an island");
         }
         helper.succeed();
+    }
+
+    /**
+     * A variation graph holds {@code flat_cache} over cell random, or {@code cache_2d} over the cell gauge. Both give the direct values.
+     * The island function drops both markers. So the chunk sampler of a noise chunk gives the values of the random state sampler.
+     */
+    @GameTest(template = "empty")
+    public static void droppedCachesInAVariationGraphGiveTheDirectValues(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NoiseGeneratorSettings shipped = generator(level, LevelStem.OVERWORLD).generatorSettings().value();
+        Holder<NormalNoise.NoiseParameters> noise = level.registryAccess().registryOrThrow(Registries.NOISE).getHolderOrThrow(AeroliteWorldgen.ISLANDS_NOISE);
+        Map<String, DensityFunction> graphs = Map.of(
+                "flat_cache", DensityFunctions.flatCache(new CellRandom(0, 1, 7)),
+                "cache_2d", DensityFunctions.cache2d(IslandValue.Kind.CELL_GAUGE.function()));
+        ResourceKey<IslandVariation> key = ResourceKey.create(IslandVariationRegistries.ISLAND_VARIATION, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "test_dropped"));
+        ResourceKey<IslandVariationList> list = ResourceKey.create(IslandVariationRegistries.ISLAND_VARIATION_LIST, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "test_dropped"));
+        for (Map.Entry<String, DensityFunction> graph : graphs.entrySet()) {
+            IslandVariation variation = IslandVariation.island(Holder.direct(graph.getValue()), new FixedBiomeSource(level.registryAccess().registryOrThrow(Registries.BIOME)
+                    .getHolderOrThrow(Biomes.PLAINS)), IslandVariation.DEFAULT_CELL_WEIGHT, IslandVariation.DEFAULT_FILL, 0, 64, 3);
+            VariationLookup lookup = VariationLookup.of(Map.of(key, variation), Map.of(list, new IslandVariationList(List.of(IslandVariationList.Entry.variation(key, 1)))));
+            IslandFunction function = new IslandFunction(new DensityFunction.NoiseHolder(noise), 256, 128, 0, 0.8, list, lookup);
+            NoiseRouter router = shipped.noiseRouter();
+            NoiseRouter carried = new NoiseRouter(router.barrierNoise(), router.fluidLevelFloodednessNoise(), router.fluidLevelSpreadNoise(), router.lavaNoise(),
+                    function, router.vegetation(), router.continents(), router.erosion(), router.depth(), router.ridges(),
+                    router.initialDensityWithoutJaggedness(), router.finalDensity(), router.veinToggle(), router.veinRidged(), router.veinGap());
+            NoiseGeneratorSettings settings = GraphSettings.withRouter(shipped, carried);
+            RandomState randomState = RandomState.create(settings, level.registryAccess().lookupOrThrow(Registries.NOISE), SEED);
+            int inIslands = 0;
+            int distinct = 0;
+            for (int chunkX = 0; chunkX < 8; chunkX++) {
+                ChunkPos pos = new ChunkPos(chunkX * 3, 0);
+                Climate.Sampler sampler = new SamplerChunk(randomState, pos, settings, protoChunk(level, pos)).sampler(randomState);
+                for (int x = 0; x < 16; x += 3) {
+                    for (int z = 0; z < 16; z += 3) {
+                        double previous = Double.NaN;
+                        for (int y = -8; y < 140; y += 4) {
+                            DensityFunction.SinglePointContext context = new DensityFunction.SinglePointContext(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
+                            double direct = randomState.sampler().temperature().compute(context);
+                            if (direct != function.lowest()) {
+                                inIslands++;
+                                if (direct != 0 && direct != previous) {
+                                    distinct++;
+                                }
+                                previous = direct;
+                            }
+                            double chunk = sampler.temperature().compute(context);
+                            helper.assertTrue(chunk == direct, "The marker " + graph.getKey() + " of a variation graph gave " + chunk + ", not " + direct
+                                    + " at " + context.blockX() + " " + y + " " + context.blockZ());
+                        }
+                    }
+                }
+            }
+            helper.assertTrue(inIslands > 0, "No sample of " + graph.getKey() + " lies in an island");
+            helper.assertTrue(distinct > 1, "The samples of " + graph.getKey() + " hold fewer than two distinct values");
+        }
+        helper.succeed();
+    }
+
+    /**
+     * An edit of the Basic variation reaches the built router and changes the blocks of a chunk.
+     * A larger fill adds blocks. Solo on the Empty variation removes every block. A constant graph below zero for the variation removes every block.
+     */
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void variationEditReachesTheBuiltRouterAndChangesTheBlocks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        RegistryAccess registries = level.registryAccess();
+        IslandGraphs graphs = graphSettings.start(presetDimensions(level), registries);
+        IslandGraphs.VariationLoader variations = graphSettings.variationLoader(registries);
+        IslandGraphs.EntryLoader loader = graphSettings.loader(registries);
+        NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
+        VoronoiLattice.Cell cell = firstIsland(helper, islands(helper, randomState(level, shipped)));
+        ChunkPos pos = new ChunkPos(BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ()));
+        int before = solids(level, shipped, graphSettings.build(graphs, Level.OVERWORLD, shipped.generatorSettings().value(), registries, graphSettings.noises(registries))
+                .getOrThrow(message -> new IllegalStateException("The start graphs do not build: " + message)).settings(), pos);
+        helper.assertTrue(before > 0, "The start graphs fill no block in the chunk of the first island");
+
+        ResourceLocation basic = IslandVariationRegistries.basicOf(Level.OVERWORLD).location();
+        JsonObject json = graphs.variation(basic, variations).getOrThrow();
+        JsonArray fill = new JsonArray();
+        fill.add(1.0);
+        fill.add(1.0);
+        json.add("fill", fill);
+        graphs.putVariation(basic, json);
+        GraphSettings.Built built = graphSettings.build(graphs, Level.OVERWORLD, shipped.generatorSettings().value(), registries, graphSettings.noises(registries))
+                .getOrThrow(message -> new IllegalStateException("The edited graphs do not build: " + message));
+        helper.assertTrue(built.variations().getAsJsonObject("variations").getAsJsonObject(basic.toString()).get("fill").equals(fill),
+                "The build JSON does not hold the edited fill");
+        IslandFunction function = (IslandFunction) unwrap(built.settings().noiseRouter().finalDensity());
+        helper.assertTrue(function.picks().variations().stream().anyMatch(variation -> variation.fill().equals(new UnitRange(1.0, 1.0))),
+                "The island function of the build does not read the edited variation");
+        int edited = solids(level, shipped, built.settings(), pos);
+        helper.assertTrue(edited > before, "The fill edit gave " + edited + " blocks, not more than " + before);
+
+        PreviewOverride solo = PreviewOverride.NONE.withSolo(IslandVariationRegistries.emptyOf(Level.OVERWORLD));
+        NoiseGeneratorSettings soloSettings = graphSettings.build(graphs, Level.OVERWORLD, shipped.generatorSettings().value(), registries,
+                graphSettings.noises(registries), solo).getOrThrow(message -> new IllegalStateException("The Solo build fails: " + message)).settings();
+        helper.assertTrue(solids(level, shipped, soloSettings, pos) == 0, "Solo on the Empty variation left blocks");
+
+        IslandGraphs.VariationFunction entry = graphs.variationFunction(basic, variations, loader).getOrThrow();
+        FunctionGraph graph = graphs.function(entry.entry(), loader).getOrThrow();
+        Integer body = graph.output();
+        helper.assertTrue(body != null, "The graph of the Basic variation has no output");
+        graph.removeTree(body);
+        graph.setOutput(graph.add(FunctionNode.Typed.bareConstant(-1.0)));
+        graphs.markEdited(entry.entry(), graph);
+        NoiseGeneratorSettings constant = graphSettings.build(graphs, Level.OVERWORLD, shipped.generatorSettings().value(), registries, graphSettings.noises(registries))
+                .getOrThrow(message -> new IllegalStateException("The constant variation graph does not build: " + message)).settings();
+        helper.assertTrue(solids(level, shipped, constant, pos) == 0, "A constant variation graph below zero left blocks");
+        helper.succeed();
+    }
+
+    /** A list with a missing entry fails the build. So does a router whose carrier leaves its climate outputs. */
+    @GameTest(template = "empty")
+    public static void islandProblemFailsTheBuild(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        RegistryAccess registries = level.registryAccess();
+        NoiseGeneratorSettings base = generator(level, LevelStem.OVERWORLD).generatorSettings().value();
+        IslandGraphs graphs = graphSettings.start(presetDimensions(level), registries);
+        ResourceLocation list = IslandVariationRegistries.listOf(Level.OVERWORLD).location();
+        JsonObject broken = graphs.list(list, graphSettings.variationLoader(registries)).getOrThrow();
+        broken.getAsJsonArray("entries").get(0).getAsJsonObject().addProperty("variation", "aerolite:missing_variation");
+        graphs.putList(list, broken);
+        String error = graphSettings.build(graphs, Level.OVERWORLD, base, registries, graphSettings.noises(registries)).error()
+                .map(DataResult.Error::message).orElse("");
+        helper.assertTrue(error.contains("aerolite:missing_variation"), "A list with a missing entry built: " + error);
+
+        IslandGraphs carrierless = graphSettings.start(presetDimensions(level), registries);
+        RouterGraph router = carrierless.router(Level.OVERWORLD);
+        helper.assertTrue(router != null, "The Overworld has no router graph");
+        for (String field : List.of("temperature", "vegetation", "continents", "erosion", "depth", "ridges")) {
+            Integer root = router.linked(field);
+            if (root != null) {
+                router.removeTree(root);
+            }
+            router.set(field, new RouterGraph.Constant(0.0));
+        }
+        helper.assertTrue(graphSettings.build(carrierless, Level.OVERWORLD, base, registries, graphSettings.noises(registries)).isError(),
+                "A router without a carrier built");
+        helper.succeed();
+    }
+
+    /** The solid blocks of the chunk that the preview terrain fill of the settings writes. */
+    private static int solids(ServerLevel level, NoiseBasedChunkGenerator shipped, NoiseGeneratorSettings settings, ChunkPos pos) {
+        NoiseBasedChunkGenerator generator = new NoiseBasedChunkGenerator(shipped.getBiomeSource(), Holder.direct(settings));
+        ProtoChunk chunk = protoChunk(level, pos);
+        terrain(level, generator, randomState(level, generator)).fill(chunk);
+        int solids = 0;
+        BlockPos.MutableBlockPos block = new BlockPos.MutableBlockPos();
+        for (int y = chunk.getMinBuildHeight(); y < chunk.getMaxBuildHeight(); y++) {
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    if (!chunk.getBlockState(block.set(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z)).isAir()) {
+                        solids++;
+                    }
+                }
+            }
+        }
+        return solids;
     }
 
     /** Twelve threads fill the chunks of a region in reverse sequence with the blocks of one thread in sequence. */

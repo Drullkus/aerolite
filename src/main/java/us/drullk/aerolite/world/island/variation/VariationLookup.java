@@ -15,6 +15,7 @@ import java.util.Optional;
  * Finds island variations and island variation lists by key. An island function and an island biome source resolve their list through it.
  * The codec takes the lookup from the registry ops of the decode and writes nothing. Ops without the registries give a lookup that finds nothing.
  * During the registry load a found holder has no value yet. A lookup of it then throws {@link Unbound}.
+ * It has a registry form, a map form and an overlay form.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
@@ -75,6 +76,26 @@ public interface VariationLookup {
             @Override
             public Optional<IslandVariationList> list(ResourceKey<IslandVariationList> key) {
                 return Optional.ofNullable(listCopy.get(key));
+            }
+        };
+    }
+
+    /** The lookup over two maps, then the fallback for a key that the maps do not hold. The preview build overlays the edits of the flow with it. */
+    static VariationLookup overlay(Map<ResourceKey<IslandVariation>, IslandVariation> variations, Map<ResourceKey<IslandVariationList>, IslandVariationList> lists,
+                                   VariationLookup fallback) {
+        VariationLookup maps = of(variations, lists);
+        return new VariationLookup() {
+
+            @Override
+            public Optional<IslandVariation> variation(ResourceKey<IslandVariation> key) {
+                Optional<IslandVariation> found = maps.variation(key);
+                return found.isPresent() ? found : fallback.variation(key);
+            }
+
+            @Override
+            public Optional<IslandVariationList> list(ResourceKey<IslandVariationList> key) {
+                Optional<IslandVariationList> found = maps.list(key);
+                return found.isPresent() ? found : fallback.list(key);
             }
         };
     }

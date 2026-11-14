@@ -57,6 +57,8 @@ import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
 import us.drullk.aerolite.world.island.node.IslandFunction;
+import us.drullk.aerolite.world.island.variation.IslandVariation;
+import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -93,6 +95,9 @@ import java.util.stream.Stream;
  *     Then {@link IslandEditor#open()} opens the editor.</li>
  *     <li>{@code islands-02-editor-router}: the router graph of the Overworld.</li>
  *     <li>{@code islands-03-function-graph}: the function graph of the Overworld island function entry {@code aerolite:island_variations/overworld}.</li>
+ *     <li>{@code islands-03b-variation-graph}: the function graph of the Basic variation {@code aerolite:overworld_basic}, opened through
+ *     {@link IslandEditor#openVariation}. The checks state that the open entry is {@code aerolite:island_variations/basic} and that the graph shows the island body node.
+ *     Then the editor opens the Overworld island function entry again.</li>
  *     <li>{@code islands-04-palette}: the palette, opened through a request.</li>
  *     <li>{@code islands-05-palette-wheel}: the palette after a real right click on empty canvas and a wheel over its list.
  *     The check states that the palette stays open and the canvas zoom stays.</li>
@@ -111,16 +116,19 @@ import java.util.stream.Stream;
  *     <li>{@code islands-18-escape}: the preview after Escape closed the editor.</li>
  *     <li>{@code islands-19-second-escape}: the Islands screen after a second Escape closed the preview.</li>
  *     <li>{@code islands-20-dimension-overworld}: the Islands screen with its dimension cycle button on the Overworld.
- *     A second preview first edits the cell size, a router constant and the router box position, and its Done keeps them.</li>
+ *     A second preview first edits the cell size, a router constant and the router box position, and its Done keeps them.
+ *     It also sets the distortion of the Basic variation to {@value #PROBE_DISTORTION} through the graphs of the editor.</li>
  *     <li>{@code islands-21-dimension-nether}: the Islands screen after a press of the cycle button.
  *     The check states that the sliders show the lattice settings of the Nether island function entry.</li>
  *     <li>{@code islands-22-reload-failed}: the vanilla failure screen of a reload with a reference to a missing entry.</li>
  *     <li>{@code islands-23-reload-returned}: the create world screen after that failure. The check states that the old pack files stay.
  *     Then another preview logs the graphs that the graph holder keeps.</li>
  *     <li>{@code islands-24-side} and {@code islands-25-top}: a side view and a top view of the first island of a new world with the seed {@value #SEED}.
- *     Before them, the pack checks (a), (b) and (c) run in that world. Check (b) follows the carrier and the terrain of the router to the island function.</li>
+ *     Before them, the pack checks (a), (b), (c) and (d) run in that world. Check (b) follows the carrier and the terrain of the router to the island function.
+ *     Check (a) states that the pack holds the edited Basic variation and its start JSON. Check (d) states that the server registry holds the edited distortion.</li>
  *     <li>{@code islands-26-recreate}: the World tab of the create world screen after Recreate of that world. The check states the world type Aerolite Islands.</li>
  *     <li>{@code islands-27-recreate-editor}: the editor of the recreated flow. The check states the saved router box position and the restored graphs.
+ *     The check also states the edited distortion of the restored Basic variation. Its start JSON holds the shipped distortion.
  *     Then the probe edits the cell size back to its start value and checks that the pack writes no file for that entry.</li>
  * </ol>
  * Then it stops the game.
@@ -160,6 +168,12 @@ public final class IslandsProbe {
     /** The island function entry of the Overworld. The noise settings of the Overworld have the same id. */
     private static final ResourceLocation OVERWORLD_ISLANDS = ResourceLocation.fromNamespaceAndPath("aerolite", "island_variations/overworld");
     private static final ResourceLocation NETHER_ISLANDS = ResourceLocation.fromNamespaceAndPath("aerolite", "island_variations/nether");
+    /** The Basic variation of the Overworld and the density function entry of its graph. */
+    private static final ResourceLocation OVERWORLD_BASIC = ResourceLocation.fromNamespaceAndPath("aerolite", "overworld_basic");
+    private static final ResourceLocation BASIC_ENTRY = ResourceLocation.fromNamespaceAndPath("aerolite", "island_variations/basic");
+    private static final ResourceLocation ISLAND_BODY_TYPE = ResourceLocation.fromNamespaceAndPath("aerolite", "island_body");
+    /** The distortion of the Basic variation edit. The edit stays through Done, so the island pack carries it. */
+    private static final double PROBE_DISTORTION = 6.0;
     /** The type id of the island function in a JSON tree. */
     private static final String ISLAND_FUNCTION_TYPE = "aerolite:island_variations";
     /** An entry that no pack holds. A reference to it fails the reload of the world creation context. */
@@ -209,7 +223,9 @@ public final class IslandsProbe {
             IslandPack.startJsonPath(OVERWORLD_ISLANDS),
             IslandPack.entryPath(Registries.NOISE_SETTINGS, OVERWORLD_ISLANDS),
             IslandPack.routerSidecarPath(Level.OVERWORLD),
-            IslandPack.dimensionDefaultPath(Level.OVERWORLD));
+            IslandPack.dimensionDefaultPath(Level.OVERWORLD),
+            IslandPack.entryPath(IslandVariationRegistries.ISLAND_VARIATION, OVERWORLD_BASIC),
+            IslandPack.startJsonPath(IslandVariationRegistries.ISLAND_VARIATION, OVERWORLD_BASIC));
     /** The files of the island pack that belong to the Overworld island entry. */
     private static final List<String> ENTRY_FILES = List.of(
             IslandPack.entryPath(Registries.DENSITY_FUNCTION, OVERWORLD_ISLANDS),
@@ -639,6 +655,37 @@ public final class IslandsProbe {
         });
         this.step("grab function graph", EDITOR_WAIT, () -> {
             SettingsProbe.grabFront("islands-03-function-graph.png");
+            return true;
+        });
+        this.step("open variation", 1, () -> {
+            IslandEditor editor = editor();
+            if (editor == null) {
+                return false;
+            }
+            editor.openVariation(OVERWORLD_BASIC);
+            ResourceLocation entry = editor.openEntry();
+            LOGGER.info("Islands probe: the variation {} opens the entry {}, open error {}", OVERWORLD_BASIC, entry, editor.openError());
+            if (!BASIC_ENTRY.equals(entry)) {
+                throw new IllegalStateException("Variation graph check failed: the open entry is " + entry);
+            }
+            return true;
+        });
+        this.step("grab variation graph", EDITOR_WAIT, () -> {
+            IslandEditor editor = editor();
+            FunctionNodeGraph graph = editor == null ? null : editor.graph();
+            if (graph == null || editor.canvasArea().width() <= 0) {
+                return false;
+            }
+            SettingsProbe.grabFront("islands-03b-variation-graph.png");
+            boolean body = graph.functionNodes().values().stream()
+                    .anyMatch(node -> node instanceof FunctionNode.Typed typed && typed.type().id().equals(ISLAND_BODY_TYPE));
+            LOGGER.info("Islands probe: the function graph of {} holds {} function nodes, the island body node {}, problems {}",
+                    OVERWORLD_BASIC, graph.functionNodes().size(), body, editor.problems());
+            if (!body) {
+                throw new IllegalStateException("Variation graph check failed: the graph shows no island body node");
+            }
+            LOGGER.info("Islands probe: variation graph check passed");
+            editor.openReference(OVERWORLD_ISLANDS);
             return true;
         });
         // ImGui closes a popup when the game window loses the focus, so the probe opens the palette again until a frame shows it.
@@ -1289,6 +1336,19 @@ public final class IslandsProbe {
             LOGGER.info("Islands probe: the router box moves from {} to {}, and {} becomes {}", box, this.savedBox, SPARE_OUTPUT, SPARE_VALUE);
             return true;
         });
+        this.step("variation edit", 1, () -> {
+            IslandEditor editor = editor();
+            if (editor == null) {
+                return false;
+            }
+            JsonObject basic = editor.graphs().variation(OVERWORLD_BASIC, editor.variationLoader()).getOrThrow();
+            double before = basic.get("distortion").getAsDouble();
+            basic.addProperty("distortion", PROBE_DISTORTION);
+            editor.graphs().putVariation(OVERWORLD_BASIC, basic);
+            editor.changed();
+            LOGGER.info("Islands probe: the distortion of {} changes from {} to {}", OVERWORLD_BASIC, before, PROBE_DISTORTION);
+            return true;
+        });
         this.step("preview done", 1, () -> minecraft.screen instanceof PreviewScreen && SettingsProbe.press(minecraft.screen, "gui.done"));
     }
 
@@ -1529,6 +1589,16 @@ public final class IslandsProbe {
             }
             LOGGER.info("Islands probe: recreate editor check passed");
             startCellSize[0] = startCell;
+            JsonObject restoredBasic = editor.graphs().editedVariations().get(OVERWORLD_BASIC);
+            JsonObject startBasic = editor.graphs().variationStartJson(OVERWORLD_BASIC);
+            Double restoredDistortion = restoredBasic == null ? null : restoredBasic.get("distortion").getAsDouble();
+            Double startDistortion = startBasic == null ? null : startBasic.get("distortion").getAsDouble();
+            LOGGER.info("Islands probe: the recreated flow holds {} with the distortion {} and the start distortion {}", OVERWORLD_BASIC,
+                    restoredDistortion, startDistortion);
+            if (restoredDistortion == null || restoredDistortion != PROBE_DISTORTION || startDistortion == null || startDistortion == PROBE_DISTORTION) {
+                throw new IllegalStateException("Recreate variation check failed: distortion " + restoredDistortion + ", start distortion " + startDistortion);
+            }
+            LOGGER.info("Islands probe: recreate variation check passed");
             return true;
         });
         this.step("recreate revert entry", 1, () -> {
@@ -1672,6 +1742,12 @@ public final class IslandsProbe {
             throw new IllegalStateException("Pack check (b) failed: the router of " + OVERWORLD_ISLANDS + " reaches the cell size " + cellSize);
         }
         LOGGER.info("Islands probe: pack check (b) passed: the router of {} reaches island_variations with cell_size {}", OVERWORLD_ISLANDS, cellSize);
+        IslandVariation basic = registries.registryOrThrow(IslandVariationRegistries.ISLAND_VARIATION).get(OVERWORLD_BASIC);
+        if (basic == null || basic.distortion() != PROBE_DISTORTION) {
+            throw new IllegalStateException("Pack check (d) failed: the server variation " + OVERWORLD_BASIC + " has the distortion "
+                    + (basic == null ? "none" : basic.distortion()));
+        }
+        LOGGER.info("Islands probe: pack check (d) passed: the server variation {} has the distortion {}", OVERWORLD_BASIC, basic.distortion());
     }
 
     /** The cell size of the first island function object in the JSON. A string follows its density function entry. */

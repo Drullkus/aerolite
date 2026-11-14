@@ -1,5 +1,6 @@
 package us.drullk.aerolite.client.preview;
 
+import com.google.gson.JsonObject;
 import com.mojang.serialization.DataResult;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -8,8 +9,11 @@ import us.drullk.aerolite.world.island.graph.FieldValue;
 import us.drullk.aerolite.world.island.graph.FunctionGraph;
 import us.drullk.aerolite.world.island.graph.FunctionNode;
 import us.drullk.aerolite.world.island.graph.FunctionNodeGraph;
+import us.drullk.aerolite.world.island.graph.GraphJson;
+import us.drullk.aerolite.world.island.graph.GraphLayout;
 import us.drullk.aerolite.world.island.graph.GraphProblem;
 import us.drullk.aerolite.world.island.graph.GraphValidator;
+import us.drullk.aerolite.world.island.graph.IslandEntries;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
@@ -30,9 +34,12 @@ import java.util.function.Supplier;
  * Back returns to the router graph of the previewed dimension. An edit of an opened entry makes it an edited function graph.
  * Each graph edit starts a terrain build through the change action.
  * The editor window is closed when the preview opens. The open state is not saved.
+ * The function graph of an island variation opens through {@link #openVariation}. Its problems also hold the island checks of a variation graph.
+ * The problems of a router graph also hold the missing carrier, on the router box.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class IslandEditor {
 
@@ -75,6 +82,7 @@ public final class IslandEditor {
 
     private final IslandGraphs graphs;
     private final IslandGraphs.EntryLoader loader;
+    private final IslandGraphs.VariationLoader variationLoader;
     private final Set<ResourceLocation> noises;
     private final Supplier<ResourceKey<Level>> dimension;
     private final Runnable onChange;
@@ -115,10 +123,11 @@ public final class IslandEditor {
      * @param dimension the previewed dimension, or null
      * @param onChange  runs after each graph edit
      */
-    public IslandEditor(IslandGraphs graphs, IslandGraphs.EntryLoader loader, Set<ResourceLocation> noises, Supplier<ResourceKey<Level>> dimension,
-                        Runnable onChange) {
+    public IslandEditor(IslandGraphs graphs, IslandGraphs.EntryLoader loader, IslandGraphs.VariationLoader variationLoader, Set<ResourceLocation> noises,
+                        Supplier<ResourceKey<Level>> dimension, Runnable onChange) {
         this.graphs = graphs;
         this.loader = loader;
+        this.variationLoader = variationLoader;
         this.noises = Set.copyOf(noises);
         this.dimension = dimension;
         this.onChange = onChange;
@@ -144,6 +153,11 @@ public final class IslandEditor {
 
     public IslandGraphs.EntryLoader loader() {
         return this.loader;
+    }
+
+    /** The loader of the island variations and lists of the registries of the creation context. */
+    public IslandGraphs.VariationLoader variationLoader() {
+        return this.variationLoader;
     }
 
     /** The ids of the noise registry of the creation context. */
@@ -203,6 +217,23 @@ public final class IslandEditor {
         this.openError = null;
         this.selected = null;
         this.selectRequest = null;
+    }
+
+    /**
+     * Opens the function graph of the density function of an island variation. An inline tree first moves to an entry under the id of the variation.
+     * That move is an edit and starts a terrain build. A variation without a density function entry keeps the view and shows the error.
+     */
+    public void openVariation(ResourceLocation variation) {
+        DataResult<IslandGraphs.VariationFunction> function = this.graphs.variationFunction(variation, this.variationLoader, this.loader);
+        if (function.error().isPresent()) {
+            this.openError = function.error().get().message();
+            return;
+        }
+        IslandGraphs.VariationFunction found = function.getOrThrow();
+        this.openReference(found.entry());
+        if (found.moved()) {
+            this.changed();
+        }
     }
 
     /** Shows the router graph of the previewed dimension. */
@@ -407,9 +438,19 @@ public final class IslandEditor {
         if (this.problemsVersion != this.version || !id.equals(this.problemsGraph)) {
             this.problemsVersion = this.version;
             this.problemsGraph = id;
-            this.problems = graph instanceof RouterGraph router && id instanceof IslandGraphs.GraphId.Router routerId
-                    ? GraphValidator.validate(router, this.graphs.shipped(routerId.dimension()), this.noises)
-                    : GraphValidator.validate((FunctionGraph) graph, this.noises);
+            IslandEntries entries = this.graphs.entries(this.variationLoader, this.loader);
+            List<GraphProblem> found = new ArrayList<>();
+            if (graph instanceof RouterGraph router && id instanceof IslandGraphs.GraphId.Router routerId) {
+                JsonObject shipped = this.graphs.shipped(routerId.dimension());
+                found.addAll(GraphValidator.validate(router, shipped, this.noises));
+                GraphJson.writeRouter(router, shipped).ifSuccess(json -> found.addAll(GraphValidator.carrier(json, entries)));
+            } else if (graph instanceof FunctionGraph function && id instanceof IslandGraphs.GraphId.Entry entry) {
+                found.addAll(GraphValidator.validate(function, this.noises));
+                if (this.graphs.variationFunctions(this.variationLoader).contains(entry.entry())) {
+                    found.addAll(GraphValidator.variationGraph(function, entries));
+                }
+            }
+            this.problems = List.copyOf(found);
         }
         return this.problems;
     }
@@ -422,6 +463,7 @@ public final class IslandEditor {
 
     /**
      * Splits the problems and the build error by function node. A problem names its own function node.
+     * A problem of the output box, {@link GraphLayout#BOX}, also shows its text without a selection.
      * A build error line that repeats a problem shows once. Another build error line names the function node at its path in {@code buildGraph}.
      *
      * @param buildGraph the graph that the paths of the build error name, or null when they name no shown function node
@@ -435,6 +477,9 @@ public final class IslandEditor {
             texts.add(text);
             if (problem.functionNode() != null) {
                 byFunctionNode.computeIfAbsent(problem.functionNode(), ignored -> new ArrayList<>()).add(text);
+                if (problem.functionNode() == GraphLayout.BOX) {
+                    general.add(text);
+                }
             } else {
                 general.add(text);
             }

@@ -23,9 +23,11 @@ import us.drullk.aerolite.world.island.graph.GraphJson;
 import us.drullk.aerolite.world.island.graph.GraphLayout;
 import us.drullk.aerolite.world.island.graph.GraphProblem;
 import us.drullk.aerolite.world.island.graph.GraphValidator;
+import us.drullk.aerolite.world.island.graph.IslandEntries;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
+import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -38,6 +40,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -50,10 +54,12 @@ import java.util.stream.Stream;
  * An edited function graph whose saved JSON equals its start JSON writes no file.
  * Each written graph gets a sidecar under {@value #SIDECAR}. A changed router graph also keeps its dimension default router there.
  * Each written entry with a start JSON also keeps that start JSON there. So a restored entry compares against the start of the first flow.
+ * Each changed island variation and list goes to its registry folder under its own id. Its start JSON goes along.
  * The game reads no registry from {@value #SIDECAR}.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 @Component
 public final class IslandPack {
@@ -90,7 +96,25 @@ public final class IslandPack {
      */
     public DataResult<Map<String, JsonElement>> files(IslandGraphs graphs, Map<ResourceKey<Level>, NoiseSettingsEntry> settings,
                                                       @Nullable Set<ResourceLocation> noises) {
+        return this.files(graphs, settings, noises, null);
+    }
+
+    /**
+     * The files of the pack like {@link #files(IslandGraphs, Map, Set)}, with the island variations and lists.
+     * An edited variation or list goes to its registry folder under its own id. A JSON equal to its start JSON writes no file.
+     * Its start JSON goes under {@value #SIDECAR}. With entries, a problem of an edited variation or list is the error of the result.
+     *
+     * @param entries the entries that the island checks read, or null to skip the island checks
+     */
+    public DataResult<Map<String, JsonElement>> files(IslandGraphs graphs, Map<ResourceKey<Level>, NoiseSettingsEntry> settings,
+                                                      @Nullable Set<ResourceLocation> noises, @Nullable IslandEntries entries) {
         Map<String, JsonElement> files = new LinkedHashMap<>();
+        if (entries != null) {
+            List<GraphProblem> problems = GraphValidator.islands(graphs.editedLists().keySet(), graphs.editedVariations().keySet(), entries).problems();
+            if (!problems.isEmpty()) {
+                return DataResult.error(() -> "The island variations and lists have problems: " + joined(problems));
+            }
+        }
         for (ResourceKey<Level> dimension : graphs.dimensions()) {
             RouterGraph router = graphs.router(dimension);
             if (router == null) {
@@ -140,6 +164,8 @@ public final class IslandPack {
                 files.put(startJsonPath(id), start);
             }
         }
+        changed(files, graphs.editedVariations(), graphs::variationStartJson, IslandVariationRegistries.ISLAND_VARIATION);
+        changed(files, graphs.editedLists(), graphs::listStartJson, IslandVariationRegistries.ISLAND_VARIATION_LIST);
         if (files.isEmpty()) {
             return DataResult.success(Map.of());
         }
@@ -154,6 +180,7 @@ public final class IslandPack {
      * A dimension with a dimension default router in the pack loads its router graph again, with that router as its dimension default.
      * Each output of that router graph links to the function nodes of the router of the pack.
      * Each density function entry of the pack becomes an edited function graph. Each sidecar gives the positions of its graph.
+     * Each island variation and list of the pack becomes an edit of the flow. Its start JSON comes along.
      * A router sidecar also gives the position of the router box. The start JSON file of an entry becomes its start JSON.
      */
     public void restore(Map<String, JsonElement> files, IslandGraphs graphs) {
@@ -186,6 +213,44 @@ public final class IslandPack {
                 }
                 applySidecar(files.get(entrySidecarPath(id)), loaded, graphs.positions(new IslandGraphs.GraphId.Entry(id)), false);
             });
+        }
+        restoreEntries(files, IslandVariationRegistries.ISLAND_VARIATION, graphs::restoreVariation, graphs::setVariationStartJson);
+        restoreEntries(files, IslandVariationRegistries.ISLAND_VARIATION_LIST, graphs::restoreList, graphs::setListStartJson);
+    }
+
+    /** Puts each entry whose JSON differs from its start JSON into the files, with its start JSON. */
+    private static void changed(Map<String, JsonElement> files, Map<ResourceLocation, JsonObject> edited, Function<ResourceLocation, JsonObject> start,
+                                ResourceKey<? extends Registry<?>> registry) {
+        edited.forEach((id, json) -> {
+            JsonObject startJson = start.apply(id);
+            if (json.equals(startJson)) {
+                return;
+            }
+            files.put(entryPath(registry, id), json);
+            if (startJson != null) {
+                files.put(startJsonPath(registry, id), startJson);
+            }
+        });
+    }
+
+    /** Puts each JSON object of the registry folder of the pack into the graphs, with its start JSON. */
+    private static void restoreEntries(Map<String, JsonElement> files, ResourceKey<? extends Registry<?>> registry, BiConsumer<ResourceLocation, JsonObject> restore,
+                                       BiConsumer<ResourceLocation, JsonObject> setStart) {
+        Pattern pattern = Pattern.compile("data/([^/]+)/" + Pattern.quote(Registries.elementsDirPath(registry)) + "/(.+)\\.json");
+        for (Map.Entry<String, JsonElement> file : files.entrySet()) {
+            Matcher matcher = pattern.matcher(file.getKey());
+            ResourceLocation id = matcher.matches() ? ResourceLocation.tryBuild(matcher.group(1), matcher.group(2)) : null;
+            if (id == null) {
+                continue;
+            }
+            if (!(file.getValue() instanceof JsonObject json)) {
+                Aerolite.LOGGER.warn("The island pack entry {} of {} is no JSON object", id, registry.location());
+                continue;
+            }
+            restore.accept(id, json);
+            if (files.get(startJsonPath(registry, id)) instanceof JsonObject start) {
+                setStart.accept(id, start);
+            }
         }
     }
 
@@ -257,6 +322,11 @@ public final class IslandPack {
     /** The path inside the pack of the start JSON of a density function entry. */
     public static String startJsonPath(ResourceLocation id) {
         return "data/" + Aerolite.MODID + "/" + SIDECAR + "/" + START_JSON + "/" + id.getNamespace() + "/" + id.getPath() + ".json";
+    }
+
+    /** The path inside the pack of the start JSON of an island variation or an island variation list. */
+    public static String startJsonPath(ResourceKey<? extends Registry<?>> registry, ResourceLocation id) {
+        return "data/" + Aerolite.MODID + "/" + SIDECAR + "/" + START_JSON + "/" + registry.location().getPath() + "/" + id.getNamespace() + "/" + id.getPath() + ".json";
     }
 
     /** The path inside the pack of the sidecar of the router graph of a dimension. */

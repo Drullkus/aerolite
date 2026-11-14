@@ -498,8 +498,28 @@ final class ImGuiNodeCanvas {
         }
     }
 
-    /** The router box, or the output box of a function graph. */
+    /** The router box, or the output box of a function graph. A box with a problem has a red title bar. */
     private void drawBox(IslandEditor editor, FunctionNodeGraph graph) {
+        int colorPushes = 0;
+        try {
+            if (this.drawProblems.has(GraphLayout.BOX)) {
+                int red = ImGui.colorConvertFloat4ToU32(ERROR_COLOR[0], ERROR_COLOR[1], ERROR_COLOR[2], ERROR_COLOR[3]);
+                ImNodes.pushColorStyle(ImNodesCol.TitleBar, red);
+                colorPushes++;
+                ImNodes.pushColorStyle(ImNodesCol.TitleBarHovered, red);
+                colorPushes++;
+                ImNodes.pushColorStyle(ImNodesCol.TitleBarSelected, red);
+                colorPushes++;
+            }
+            this.drawBoxBody(editor, graph);
+        } finally {
+            for (int pop = 0; pop < colorPushes; pop++) {
+                ImNodes.popColorStyle();
+            }
+        }
+    }
+
+    private void drawBoxBody(IslandEditor editor, FunctionNodeGraph graph) {
         ImNodes.beginNode(BOX_NODE);
         ImGui.pushID("box");
         try {

@@ -4,6 +4,7 @@ import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import us.drullk.aerolite.world.island.graph.FunctionGraph;
 import us.drullk.aerolite.world.island.graph.GraphJson;
+import us.drullk.aerolite.world.island.graph.GraphLayout;
 import us.drullk.aerolite.world.island.graph.GraphProblem;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 
@@ -19,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Checks the split of the problems and the build error by function node, as the field editor shows them.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 class IslandEditorProblemsTest {
 
@@ -32,6 +34,15 @@ class IslandEditorProblemsTest {
     void noProblemAndNoBuildErrorShowNothing() {
         assertSame(IslandEditor.ShownProblems.NONE, IslandEditor.split(List.of(), null, graph()));
         assertFalse(IslandEditor.ShownProblems.NONE.notice());
+    }
+
+    @Test
+    void problemOfTheOutputBoxShowsOnTheBoxAndWithoutASelection() {
+        GraphProblem box = new GraphProblem("", "A router box problem", GraphLayout.BOX);
+        IslandEditor.ShownProblems shown = IslandEditor.split(List.of(box), null, graph());
+        assertTrue(shown.has(GraphLayout.BOX));
+        assertEquals(List.of(box.toString()), shown.of(GraphLayout.BOX));
+        assertEquals(List.of(box.toString()), shown.general());
     }
 
     @Test

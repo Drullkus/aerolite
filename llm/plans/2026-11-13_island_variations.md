@@ -31,6 +31,10 @@ All of 2026-11-13. "Request" is the first message of the session. "Round" is a q
 | D17 | The Islands screen and the preview panel both hold the list and the forms of a variation. | Round 4 |
 | D18 | An Export button writes the design files. The owner puts them in a design folder. Data generation reads that folder and writes the shipped entries. | Round 4 |
 | D19 | A carrier node on one climate output of the router gives the biome source its lattice. | Round 4 |
+| D20 | A cell weight that is not a number counts as 0.5. | Batch 1, 2026-11-14 |
+| D21 | The lattice caches have a size guard. A cell entry keeps only its true walls. | Batch 1, 2026-11-14 |
+| D22 | The island function drops `flat_cache` and `cache_2d` inside the graph of a variation when it maps the graph. The editor also shows a problem on such a node. | Batch 2, 2026-11-14 |
+| D23 | Done in the Islands screen writes the list of the island function into the island biome source of that dimension. | Batch 2, 2026-11-14 |
 
 ## 2. Readings of the session
 
@@ -66,6 +70,10 @@ The owner did not pick these. Each one follows from a decision or from the code.
 | R26 | The power rule measures distance with the Y axis scaled by cell size over cell height. So a neighbor above counts as far as a neighbor beside. With equal cell weights, the cells equal the cells of 0.5.0 only when the cell height equals the cell size. | D7, D9. The option text of round 5 said "Equal weights give the cells of 0.5.0". That line was wrong for a cell height that differs from the cell size. |
 | R27 | A cell that does not hold its own site is a lost cell. It holds no island. A cell without space is also a lost cell. | D7 |
 | R28 | The nearest cell of the row 0 in D12 is the row 0 cell with the least power rule value. | D7, D12 |
+| R29 | From batch 2 on, the Islands screen and the panel show only the four lattice sliders. The six other sliders come back as the forms of a variation in batches 4 and 5. | D4 |
+| R30 | The island biome source logs a missing island function once per biome source. Each chunk has its own sampler, so once per sampler is once per chunk. | Section 5.5 |
+| R31 | The validator reports a variation whose graph holds an island function. Such a graph has no end when the game maps it. | D3 |
+| R32 | Until the panel of batch 5, only `IslandEditor` and the probe open the function graph of a variation. | Batch 3 |
 
 ## 3. Terms
 
@@ -94,7 +102,7 @@ Each build subagent checks the facts of its batch in `build/moddev/artifacts/neo
 
 - F1. `RandomState` maps the router with its wiring visitor. The climate sampler holds the mapped climate functions. A custom density function class stays in them.
 - F2. The wiring visitor replaces a `HolderHolder` by its value and a marker by its wrapped function in the sampler.
-- F3. A cache wrapper of `NoiseChunk` computes its function directly when the context is not that noise chunk.
+- F3. A cache wrapper of `NoiseChunk` computes its function directly when the context is not that noise chunk. Batch 2 found that this holds for `interpolated`, `cache_once` and `cache_all_in_cell`. It does not hold for `flat_cache` and `cache_2d`. See D22.
 - F4. `TheEndBiomeSource` reads the erosion of the sampler. So a biome source can read a density function of the sampler.
 - F5. A holder of a datapack registry has no value during the registry load. It has its value after the load.
 - F6. NeoForge loads a registry of `DataPackRegistryEvent.NewRegistry` from `data/<namespace>/<registry namespace>/<registry path>/`.
@@ -272,6 +280,10 @@ The island nodes:
 - The lattice sliders edit the first island function node under the router outputs of the dimension. A router without one shows the lattice sliders and the list off.
 - The validator reports a router graph without a carrier over an island function on a climate output. The problem shows on the router box.
 - The validator reports three list problems: a missing entry, no positive weight, and a list that names itself.
+- The validator reports `flat_cache` and `cache_2d` in the graph of a variation, on the node. See D22.
+- The validator reports a variation whose graph holds an island function. See R31.
+- The island function maps the graph of a variation without its `flat_cache` and `cache_2d` markers. Each such marker gives the value of its input. See D22.
+- Done sets the list of the island biome source of a dimension to the list of its island function. See D23.
 
 ### 5.8 Islands screen
 
@@ -375,7 +387,7 @@ Each batch has one Opus build subagent and one Opus check subagent. The batches 
 - The preview override of the island function gets its API here. The panel of batch 5 calls it.
 - JUnit: `FunctionNodeTypesTest` covers the new ids. `IslandPackTest` covers the two registry folders, the start JSON and the restore. The validator tests cover the three list problems and the missing carrier.
 - GameTest: a variation edit reaches the built router and changes the blocks of a chunk.
-- Done: the node editor opens the graph of the Basic variation and shows the island body node.
+- Done: the node editor opens the graph of the Basic variation through `IslandEditor` and shows the island body node. See R32.
 
 ### Batch 4: screens
 

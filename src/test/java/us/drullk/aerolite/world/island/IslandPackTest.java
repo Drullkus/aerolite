@@ -17,6 +17,7 @@ import us.drullk.aerolite.world.island.graph.GraphLayout;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
+import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +29,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,9 +38,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Checks the content of the island pack as a pure function of the graphs, and the restore of graphs from that content.
+ * It also checks the registry folders of the island variations and lists, their start JSON and their restore.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 class IslandPackTest {
 
@@ -347,6 +351,101 @@ class IslandPackTest {
         this.pack.restore(files, restored);
         assertTrue(restored.setIslands(OVERWORLD, start, loader()));
         assertTrue(this.files(restored).isEmpty(), "A start JSON in another key sequence counts as a change");
+    }
+
+    private static final ResourceLocation BASIC = ResourceLocation.fromNamespaceAndPath("aerolite", "overworld_basic");
+    private static final ResourceLocation LIST = ResourceLocation.fromNamespaceAndPath("aerolite", "overworld_islands");
+    private static final ResourceLocation NEW_LIST = ResourceLocation.fromNamespaceAndPath("aerolite_world", "list_1");
+    private static final String BASIC_PATH = "data/aerolite/aerolite/island_variation/overworld_basic.json";
+    private static final String BASIC_START_PATH = "data/aerolite/aerolite_sidecar/start_json/island_variation/aerolite/overworld_basic.json";
+    private static final String NEW_LIST_PATH = "data/aerolite_world/aerolite/island_variation_list/list_1.json";
+    private static final String NEW_LIST_START_PATH = "data/aerolite/aerolite_sidecar/start_json/island_variation_list/aerolite_world/list_1.json";
+
+    /** The shipped Basic variation and list of the Overworld, from the generated resources. */
+    private static IslandGraphs.VariationLoader variations() {
+        return new IslandGraphs.VariationLoader() {
+
+            @Override
+            public DataResult<JsonObject> variation(ResourceLocation id) {
+                return id.equals(BASIC) ? DataResult.success(generated("data/aerolite/aerolite/island_variation/overworld_basic.json"))
+                        : DataResult.error(() -> "No variation " + id);
+            }
+
+            @Override
+            public DataResult<JsonObject> list(ResourceLocation id) {
+                return id.equals(LIST) ? DataResult.success(generated("data/aerolite/aerolite/island_variation_list/overworld_islands.json"))
+                        : DataResult.error(() -> "No list " + id);
+            }
+
+            @Override
+            public Set<ResourceLocation> variationIds() {
+                return Set.of(BASIC);
+            }
+
+            @Override
+            public Set<ResourceLocation> listIds() {
+                return Set.of(LIST);
+            }
+        };
+    }
+
+    /** Graphs with the fill of the Basic variation edited and one new list of the Basic variation. */
+    private static IslandGraphs variationGraphs() {
+        IslandGraphs graphs = graphs(settings().getAsJsonObject("noise_router"));
+        JsonObject basic = graphs.variation(BASIC, variations()).getOrThrow();
+        JsonArray fill = new JsonArray();
+        fill.add(0.5);
+        fill.add(0.95);
+        basic.add("fill", fill);
+        graphs.putVariation(BASIC, basic);
+        graphs.putList(NEW_LIST, JsonParser.parseString("{\"entries\": [{\"variation\": \"aerolite:overworld_basic\", \"weight\": 1}]}").getAsJsonObject());
+        return graphs;
+    }
+
+    @Test
+    void changedVariationAndNewListGoToTheirRegistryFolders() {
+        IslandGraphs graphs = variationGraphs();
+        Map<String, JsonElement> files = this.files(graphs);
+        assertTrue(files.containsKey(IslandPack.PACK_META), "The pack has no pack.mcmeta");
+        assertEquals(BASIC_PATH, IslandPack.entryPath(IslandVariationRegistries.ISLAND_VARIATION, BASIC));
+        assertEquals(graphs.editedVariations().get(BASIC), files.get(BASIC_PATH));
+        assertEquals(generated("data/aerolite/aerolite/island_variation/overworld_basic.json"), files.get(BASIC_START_PATH));
+        assertEquals(graphs.editedLists().get(NEW_LIST), files.get(NEW_LIST_PATH));
+        assertFalse(files.containsKey(NEW_LIST_START_PATH), "A new list has a start JSON file");
+        assertFalse(files.containsKey(SETTINGS_PATH), "An edited variation alone wrote the noise settings");
+    }
+
+    @Test
+    void variationSetBackToItsStartWritesNoPack() {
+        IslandGraphs graphs = graphs(settings().getAsJsonObject("noise_router"));
+        JsonObject basic = graphs.variation(BASIC, variations()).getOrThrow();
+        graphs.putVariation(BASIC, reversed(basic).getAsJsonObject());
+        assertTrue(this.files(graphs).isEmpty(), "A variation equal to its start JSON wrote a pack");
+        graphs.putList(LIST, graphs.list(LIST, variations()).getOrThrow());
+        assertTrue(this.files(graphs).isEmpty(), "A list equal to its start JSON wrote a pack");
+    }
+
+    @Test
+    void restoreReadsBothRegistryFoldersBack() {
+        IslandGraphs graphs = variationGraphs();
+        Map<String, JsonElement> files = this.files(graphs);
+        IslandGraphs restored = graphs(settings().getAsJsonObject("noise_router"));
+        this.pack.restore(files, restored);
+        assertEquals(graphs.editedVariations(), restored.editedVariations());
+        assertEquals(graphs.editedLists(), restored.editedLists());
+        assertEquals(generated("data/aerolite/aerolite/island_variation/overworld_basic.json"), restored.variationStartJson(BASIC));
+        assertEquals(graphs.editedVariations().get(BASIC), restored.variation(BASIC, variations()).getOrThrow());
+        assertEquals(files, this.files(restored), "The restored graphs write another pack");
+    }
+
+    @Test
+    void islandProblemOfAnEditedListStopsThePack() {
+        IslandGraphs graphs = variationGraphs();
+        graphs.putList(NEW_LIST, JsonParser.parseString("{\"entries\": [{\"variation\": \"aerolite:gone\", \"weight\": 1}]}").getAsJsonObject());
+        DataResult<Map<String, JsonElement>> files = this.pack.files(graphs, Map.of(OVERWORLD, new IslandPack.NoiseSettingsEntry(SETTINGS_ID, settings())), null,
+                graphs.entries(variations(), loader()));
+        assertTrue(files.isError(), "A list with a missing entry wrote a pack");
+        assertTrue(files.error().orElseThrow().message().contains("names the missing island variation aerolite:gone"), files.error().orElseThrow().message());
     }
 
     /** A copy of the JSON with the keys of each object in reversed sequence. */

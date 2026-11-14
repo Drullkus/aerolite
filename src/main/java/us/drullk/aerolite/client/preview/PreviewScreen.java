@@ -1,6 +1,5 @@
 package us.drullk.aerolite.client.preview;
 
-import com.google.gson.JsonObject;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.Util;
@@ -45,6 +44,7 @@ import us.drullk.aerolite.world.island.GraphSettings;
 import us.drullk.aerolite.world.island.LatticeSettings;
 import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
+import us.drullk.aerolite.world.island.variation.PreviewOverride;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -70,6 +70,7 @@ import java.util.function.BiConsumer;
  * While generate all is off, only the picked chunks inside the region get terrain and pillars.
  * A shift keeps every picked chunk. A picked chunk that enters the region gets its terrain then.
  * A change of the settings, the seed, the dimension, the radius or the terrain forgets the picked chunks.
+ * The terrain takes the edited island variations and lists of the graphs. It also takes the preview override of the screen.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_07-08_90875d90-ad30-47fe-80ab-ff3a7b6f2b3c.md}.
@@ -107,7 +108,9 @@ public class PreviewScreen extends Screen {
     private final RegistryAccess registries;
     /** The last terrain that built, per dimension. */
     private final Map<ResourceKey<Level>, NoiseGeneratorSettings> goodTerrain = new HashMap<>();
-    private final Map<ResourceKey<Level>, JsonObject> goodRouter = new HashMap<>();
+    /** The router JSON, the variation JSON and the preview override of the last terrain that built, per dimension. */
+    private final Map<ResourceKey<Level>, List<Object>> goodBuild = new HashMap<>();
+    private PreviewOverride previewOverride = PreviewOverride.NONE;
     private int builtVersion = -1;
     @Nullable
     private ResourceKey<Level> builtDimension;
@@ -186,7 +189,8 @@ public class PreviewScreen extends Screen {
         this.registries = context.worldgenLoadContext();
         GraphSettings graphSettings = tools.graphSettings();
         this.editor = graphs == null ? null
-                : new IslandEditor(graphs, graphSettings.loader(this.registries), graphSettings.noises(this.registries), this::dimensionKey, this::graphChanged);
+                : new IslandEditor(graphs, graphSettings.loader(this.registries), graphSettings.variationLoader(this.registries), graphSettings.noises(this.registries),
+                this::dimensionKey, this::graphChanged);
         this.settings = settings;
         OptionalLong parsed = WorldOptions.parseSeed(seedText);
         if (parsed.isPresent()) {
@@ -559,15 +563,31 @@ public class PreviewScreen extends Screen {
             editor.setBuildError(null);
             return;
         }
-        this.tools.graphSettings().build(this.graphs, dimension.key(), dimension.noiseSettings().value(), this.registries, editor.noises())
+        PreviewOverride override = this.previewOverride;
+        this.tools.graphSettings().build(this.graphs, dimension.key(), dimension.noiseSettings().value(), this.registries, editor.noises(), override)
                 .ifSuccess(built -> {
                     editor.setBuildError(null);
-                    if (!built.router().equals(this.goodRouter.get(dimension.key()))) {
-                        this.goodRouter.put(dimension.key(), built.router());
+                    List<Object> key = List.of(built.router(), built.variations(), override);
+                    if (!key.equals(this.goodBuild.get(dimension.key()))) {
+                        this.goodBuild.put(dimension.key(), key);
                         this.goodTerrain.put(dimension.key(), built.settings());
                     }
                 })
                 .ifError(error -> editor.setBuildError(error.message()));
+    }
+
+    /** The preview override of the island functions of the terrain: Solo and the pinned rolls. It changes no data. */
+    public PreviewOverride previewOverride() {
+        return this.previewOverride;
+    }
+
+    /** Sets the preview override. A change builds the terrain again. */
+    public void setPreviewOverride(PreviewOverride override) {
+        if (!override.equals(this.previewOverride)) {
+            this.previewOverride = override;
+            this.builtVersion = -1;
+            this.graphChanged();
+        }
     }
 
     /** A graph edit builds the terrain. Only a good build starts a preview build. */

@@ -83,6 +83,11 @@ public final class IslandBiomeSource extends BiomeSource {
         return this.variations;
     }
 
+    /** A source with another island variation list, the same lookup and the same Plains holder. */
+    public IslandBiomeSource withVariations(ResourceKey<IslandVariationList> variations) {
+        return new IslandBiomeSource(variations, this.lookup, this.plains);
+    }
+
     @Override
     protected MapCodec<? extends BiomeSource> codec() {
         return CODEC;

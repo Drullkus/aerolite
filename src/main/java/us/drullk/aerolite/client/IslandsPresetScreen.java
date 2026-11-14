@@ -5,18 +5,25 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationContext;
+import net.minecraft.core.Holder;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.WorldDimensions;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.VoidPresetBiomes;
+import us.drullk.aerolite.world.island.GraphSettings;
 import us.drullk.aerolite.world.island.LatticeSettings;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
 
@@ -28,6 +35,7 @@ import java.util.function.UnaryOperator;
  * The sliders edit the first island function node of the router graph of the picked dimension.
  * Without such a dimension, the screen shows no dropdown, and the sliders are off at the shipped lattice settings.
  * Done writes the biome choices to the generators, then the graphs to the holder and the island pack.
+ * Done also gives each island biome source the list of the island function of its dimension.
  * The Preview button opens the islands preview with a copy of the graphs. Done in the preview sends the copy back.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
@@ -140,6 +148,13 @@ public final class IslandsPresetScreen extends VoidPresetScreen {
                     this.parent().getUiState().setSeed(seedText);
                     this.requestRebuild();
                 }).open();
+    }
+
+    /** The dimensions after Done with the biome choices. Each island biome source takes the list of the island function of its dimension. */
+    @Override
+    protected WorldDimensions dimensions(RegistryAccess registries, WorldDimensions current, Map<ResourceKey<LevelStem>, Optional<Holder<Biome>>> biomes) {
+        GraphSettings graphSettings = this.tools().graphSettings();
+        return graphSettings.withIslandLists(super.dimensions(registries, current, biomes), graphSettings.islandLists(this.graphs, this.loader));
     }
 
     /** Applies the edits, then writes the graphs to the holder and the island pack. The pack reloads the context after the biome edit. */

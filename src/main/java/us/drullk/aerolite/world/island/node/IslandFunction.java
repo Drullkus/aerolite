@@ -6,6 +6,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.util.Mth;
+import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.DensityFunctions;
 import us.drullk.aerolite.world.island.IslandCells;
@@ -20,6 +21,7 @@ import us.drullk.aerolite.world.island.variation.PreviewOverride;
 import us.drullk.aerolite.world.island.variation.VariationLookup;
 
 import javax.annotation.Nullable;
+import java.util.Set;
 
 /**
  * The island function, the density function type {@code aerolite:island_variations}. It finds the cell of a block
@@ -34,6 +36,9 @@ import javax.annotation.Nullable;
  * A mapped copy shares the resolved list. It also shares the lattice while the visitor keeps the noise holder.
  *
  * <p>The preview override is a transient field. The codec does not write it, and a mapped copy keeps it.
+ * {@link #rebind} gives the island functions of a tree another lookup and another override. The preview build overlays the edits of the flow with it.
+ *
+ * <p>The function maps the graph of each variation without its {@code flat_cache} and {@code cache_2d} markers. Each such marker gives the value of its input.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
@@ -50,6 +55,8 @@ public final class IslandFunction implements DensityFunction.SimpleFunction, Isl
     ).apply(instance, IslandFunction::new));
     public static final KeyDispatchDataCodec<IslandFunction> CODEC = KeyDispatchDataCodec.of(MAP_CODEC);
 
+    /** The marker names that the island function drops inside the graph of a variation. */
+    private static final Set<String> DROPPED_CACHES = Set.of("flat_cache", "cache_2d");
     /** The largest ring of the search for the nearest cell of the row 0. */
     private static final int MAX_RING = 64;
 
@@ -132,6 +139,24 @@ public final class IslandFunction implements DensityFunction.SimpleFunction, Isl
     /** The function with the preview override in each island function of the tree. */
     public static DensityFunction withOverride(DensityFunction function, PreviewOverride override) {
         return function.mapAll(visited -> visited instanceof IslandFunction islands ? islands.withOverride(override) : visited);
+    }
+
+    /**
+     * The visitor that gives each island function of a tree the lookup and the preview override.
+     * An island function maps no variation graph for it, so the old lookup resolves no list.
+     * The caller maps the tree before the random state wires it.
+     */
+    public static DensityFunction.Visitor rebind(VariationLookup lookup, PreviewOverride override) {
+        return new Rebind(lookup, override);
+    }
+
+    /** The visitor of {@link #rebind}. It keeps each function, and an island function takes the lookup in its {@link #mapAll}. */
+    private record Rebind(VariationLookup lookup, PreviewOverride override) implements DensityFunction.Visitor {
+
+        @Override
+        public DensityFunction apply(DensityFunction function) {
+            return function;
+        }
     }
 
     /** The resolved pick tree of the list and the override. */
@@ -240,6 +265,10 @@ public final class IslandFunction implements DensityFunction.SimpleFunction, Isl
 
     @Override
     public DensityFunction mapAll(DensityFunction.Visitor visitor) {
+        if (visitor instanceof Rebind rebind) {
+            return new IslandFunction(this.noise, this.cellSize, this.cellHeight, this.layerMinY, this.jitter, this.variations, rebind.lookup, rebind.override,
+                    new Resolved(), new Seeded(), null);
+        }
         DensityFunction[] current = this.functions();
         DensityFunction[] mapped = new DensityFunction[current.length];
         for (int i = 0; i < current.length; i++) {
@@ -304,11 +333,25 @@ public final class IslandFunction implements DensityFunction.SimpleFunction, Isl
             functions = new DensityFunction[picks.variations().size()];
             for (int i = 0; i < functions.length; i++) {
                 IslandVariation variation = picks.variation(i);
-                functions[i] = variation.densityFunction().<DensityFunction>map(DensityFunctions.HolderHolder::new).orElse(null);
+                functions[i] = variation.densityFunction().map(holder -> new DensityFunctions.HolderHolder(holder).mapAll(IslandFunction::dropCache)).orElse(null);
             }
             this.functions = functions;
         }
         return functions;
+    }
+
+    /**
+     * A {@code flat_cache} or {@code cache_2d} marker of a variation graph gives way to its input.
+     * A noise chunk fills these caches without the island context, so they read no cell.
+     */
+    private static DensityFunction dropCache(DensityFunction function) {
+        if (function instanceof DensityFunctions.MarkerOrMarked marker) {
+            Object type = marker.type();
+            if (type instanceof StringRepresentable named && DROPPED_CACHES.contains(named.getSerializedName())) {
+                return marker.wrapped();
+            }
+        }
+        return function;
     }
 
     private State seeded() {
