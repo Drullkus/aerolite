@@ -1,6 +1,10 @@
 package us.drullk.aerolite.world.island.graph;
 
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
+import us.drullk.aerolite.world.island.variation.IslandVariationList;
+import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -9,10 +13,15 @@ import java.util.Map;
  * The field values of a new function node. The vanilla density function codecs give no field a default value.
  * So a number takes zero, or the bound nearest zero when zero is out of range. A choice takes its first entry.
  * A noise field takes the noise id that the caller gives. A spline takes the constant spline zero.
+ * A variation list field takes the shipped list of the Overworld.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class FunctionNodeDefaults {
+
+    /** The list of a new variation list field. */
+    public static final ResourceKey<IslandVariationList> DEFAULT_VARIATION_LIST = IslandVariationRegistries.listOf(Level.OVERWORLD);
 
     private FunctionNodeDefaults() {
     }
@@ -29,6 +38,7 @@ public final class FunctionNodeDefaults {
                 case ENUM -> values.put(field.name(), new FieldValue.Choice(field.choices().getFirst()));
                 case NOISE -> values.put(field.name(), FieldValue.Noise.of(noise));
                 case SPLINE -> values.put(field.name(), new FieldValue.Spline(new SplineValue.Constant(0)));
+                case VARIATION_LIST -> values.put(field.name(), new FieldValue.VariationList(DEFAULT_VARIATION_LIST.location()));
             }
         }
         return new FunctionNode.Typed(type, values);

@@ -46,17 +46,17 @@ import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.island.CellGeometry;
 import us.drullk.aerolite.world.island.IslandPack;
-import us.drullk.aerolite.world.island.IslandSettings;
-import us.drullk.aerolite.world.island.VoronoiIslands;
+import us.drullk.aerolite.world.island.LatticeSettings;
 import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.island.graph.FieldValue;
 import us.drullk.aerolite.world.island.graph.FunctionNode;
 import us.drullk.aerolite.world.island.graph.FunctionNodeGraph;
 import us.drullk.aerolite.world.island.graph.GraphLayout;
+import us.drullk.aerolite.world.island.graph.IslandFunctionNode;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
-import us.drullk.aerolite.world.island.graph.IslandSettingsFunctionNode;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 import us.drullk.aerolite.world.island.graph.Sidecar;
+import us.drullk.aerolite.world.island.node.IslandFunction;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -78,8 +78,8 @@ import java.util.stream.Stream;
  * Each check logs one line with its result. A failed check stops its step with an error in the log.
  * The probe saves these states under {@code screenshots/} of the game directory, in this sequence:
  * <ol start="0">
- *     <li>{@code islands-00-settings}: the Islands screen of the Islands preset.</li>
- *     <li>{@code islands-01a-geometry}: the islands preview at the radius {@value #PREVIEW_RADIUS} with generate all off: the cells and no terrain.
+ *     <li>{@code islands-00-settings}: the Islands screen of the Islands preset with its four lattice sliders.</li>
+ *     <li>{@code islands-01a-geometry}: the islands preview at the radius {@value #PREVIEW_RADIUS} with generate all off: the cells of the island function and no terrain.
  *     The checks state that the checkbox starts off and that no region chunk holds blocks.</li>
  *     <li>{@code islands-01b-hover}: a top view with the cursor on the site of the cell nearest the region center, through GLFW.
  *     The check states that the hovered cell is that cell.</li>
@@ -92,7 +92,7 @@ import java.util.stream.Stream;
  *     The checks state that a chunk outside the picked chunks holds blocks and that the editor starts closed.
  *     Then {@link IslandEditor#open()} opens the editor.</li>
  *     <li>{@code islands-02-editor-router}: the router graph of the Overworld.</li>
- *     <li>{@code islands-03-function-graph}: the function graph of the Overworld island entry.</li>
+ *     <li>{@code islands-03-function-graph}: the function graph of the Overworld island function entry {@code aerolite:island_variations/overworld}.</li>
  *     <li>{@code islands-04-palette}: the palette, opened through a request.</li>
  *     <li>{@code islands-05-palette-wheel}: the palette after a real right click on empty canvas and a wheel over its list.
  *     The check states that the palette stays open and the canvas zoom stays.</li>
@@ -112,12 +112,13 @@ import java.util.stream.Stream;
  *     <li>{@code islands-19-second-escape}: the Islands screen after a second Escape closed the preview.</li>
  *     <li>{@code islands-20-dimension-overworld}: the Islands screen with its dimension cycle button on the Overworld.
  *     A second preview first edits the cell size, a router constant and the router box position, and its Done keeps them.</li>
- *     <li>{@code islands-21-dimension-nether}: the Islands screen after a press of the cycle button. The check states that the sliders show the Nether.</li>
+ *     <li>{@code islands-21-dimension-nether}: the Islands screen after a press of the cycle button.
+ *     The check states that the sliders show the lattice settings of the Nether island function entry.</li>
  *     <li>{@code islands-22-reload-failed}: the vanilla failure screen of a reload with a reference to a missing entry.</li>
  *     <li>{@code islands-23-reload-returned}: the create world screen after that failure. The check states that the old pack files stay.
  *     Then another preview logs the graphs that the graph holder keeps.</li>
  *     <li>{@code islands-24-side} and {@code islands-25-top}: a side view and a top view of the first island of a new world with the seed {@value #SEED}.
- *     Before them, the pack checks (a), (b) and (c) run in that world.</li>
+ *     Before them, the pack checks (a), (b) and (c) run in that world. Check (b) follows the carrier and the terrain of the router to the island function.</li>
  *     <li>{@code islands-26-recreate}: the World tab of the create world screen after Recreate of that world. The check states the world type Aerolite Islands.</li>
  *     <li>{@code islands-27-recreate-editor}: the editor of the recreated flow. The check states the saved router box position and the restored graphs.
  *     Then the probe edits the cell size back to its start value and checks that the pack writes no file for that entry.</li>
@@ -128,6 +129,7 @@ import java.util.stream.Stream;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class IslandsProbe {
 
@@ -155,9 +157,11 @@ public final class IslandsProbe {
     private static final double GRID_TOLERANCE = 1.0E-6;
     /** The ticks the probe gives the island editor to draw a new state. */
     private static final int EDITOR_WAIT = 10;
-    /** The density function entry of the island function of the Overworld. */
-    private static final ResourceLocation OVERWORLD_ISLANDS = ResourceLocation.fromNamespaceAndPath("aerolite", "islands/overworld");
-    private static final ResourceLocation NETHER_ISLANDS = ResourceLocation.fromNamespaceAndPath("aerolite", "islands/nether");
+    /** The island function entry of the Overworld. The noise settings of the Overworld have the same id. */
+    private static final ResourceLocation OVERWORLD_ISLANDS = ResourceLocation.fromNamespaceAndPath("aerolite", "island_variations/overworld");
+    private static final ResourceLocation NETHER_ISLANDS = ResourceLocation.fromNamespaceAndPath("aerolite", "island_variations/nether");
+    /** The type id of the island function in a JSON tree. */
+    private static final String ISLAND_FUNCTION_TYPE = "aerolite:island_variations";
     /** An entry that no pack holds. A reference to it fails the reload of the world creation context. */
     private static final ResourceLocation MISSING_ENTRY = ResourceLocation.fromNamespaceAndPath("aerolite", "probe/missing");
     /** A router output that the island noise settings do not read, because ore veins are off. */
@@ -194,8 +198,8 @@ public final class IslandsProbe {
     private static final float SPLITTER_DRAG = 120;
     /** The distance from the field editor corner to the resize grip of the editor window. */
     private static final float GRIP_OFFSET = 4;
-    /** The upward drag of the resize grip. */
-    private static final float RESIZE_DRAG = 480;
+    /** The upward drag of the resize grip. The six fields of the island function overflow the field editor after it. */
+    private static final float RESIZE_DRAG = 560;
 
     /** The files that the island pack of the probe holds. */
     private static final List<String> PACK_FILES = List.of(
@@ -327,7 +331,7 @@ public final class IslandsProbe {
             MinecraftServer server = minecraft.getSingleplayerServer();
             this.island = firstIsland(server);
             LOGGER.info("Islands probe: the first island sits at {} {} {}", this.island.siteX(), this.island.siteY(), this.island.siteZ());
-            int cellSize = IslandSettings.of(islands(server)).cellSize();
+            int cellSize = islands(server).cellSize();
             if (cellSize != PROBE_CELL_SIZE) {
                 throw new IllegalStateException("Pack check (c) failed: the island function of the Overworld has the cell size " + cellSize);
             }
@@ -597,7 +601,7 @@ public final class IslandsProbe {
             return null;
         }
         for (Map.Entry<Integer, FunctionNode> entry : graph.functionNodes().entrySet()) {
-            if (IslandSettingsFunctionNode.isIslands(entry.getValue())) {
+            if (IslandFunctionNode.isIslandFunction(entry.getValue())) {
                 return entry.getKey();
             }
         }
@@ -1322,7 +1326,7 @@ public final class IslandsProbe {
                 return false;
             }
             SettingsProbe.grabFront("islands-21-dimension-nether.png");
-            IslandSettings expected = shippedIslands(NETHER_ISLANDS);
+            LatticeSettings expected = shippedIslands(NETHER_ISLANDS);
             LOGGER.info("Islands probe: on the Nether the sliders show {}, the shipped Nether entry holds {}", screen.settings(), expected);
             if (!screen.settings().equals(expected) || screen.settings().cellSize() == PROBE_CELL_SIZE) {
                 throw new IllegalStateException("Dimension check failed: the sliders do not show the Nether");
@@ -1352,17 +1356,17 @@ public final class IslandsProbe {
         });
     }
 
-    /** The island settings of a density function entry of the creation context of the flow. */
-    private IslandSettings shippedIslands(ResourceLocation id) {
+    /** The lattice settings of an island function entry of the creation context of the flow. */
+    private LatticeSettings shippedIslands(ResourceLocation id) {
         CreateWorldScreen screen = this.createScreen;
         if (screen == null) {
             throw new IllegalStateException("The flow has no create world screen");
         }
         DensityFunction function = screen.getUiState().getSettings().worldgenLoadContext().registryOrThrow(Registries.DENSITY_FUNCTION).get(id);
-        if (!(unwrap(function) instanceof VoronoiIslands islands)) {
-            throw new IllegalStateException("The entry " + id + " is not an island density function");
+        if (!(unwrap(function) instanceof IslandFunction islands)) {
+            throw new IllegalStateException("The entry " + id + " is not an island function");
         }
-        return IslandSettings.of(islands);
+        return new LatticeSettings(islands.cellSize(), islands.cellHeight(), islands.layerMinY(), islands.jitter());
     }
 
     /** A reference to a missing entry fails the vanilla reload. The old island pack then returns. */
@@ -1604,12 +1608,12 @@ public final class IslandsProbe {
         return files;
     }
 
-    /** The cell size of the first {@code aerolite:voronoi_islands} object of a JSON tree, without a registry. */
+    /** The cell size of the first island function object of a JSON tree, without a registry. */
     @Nullable
     private static Integer jsonCellSize(JsonElement json) {
         if (json.isJsonObject()) {
             JsonObject object = json.getAsJsonObject();
-            if (object.has("type") && "aerolite:voronoi_islands".equals(object.get("type").getAsString())) {
+            if (object.has("type") && ISLAND_FUNCTION_TYPE.equals(object.get("type").getAsString())) {
                 return object.get("cell_size").getAsInt();
             }
             for (Map.Entry<String, JsonElement> field : object.entrySet()) {
@@ -1667,10 +1671,10 @@ public final class IslandsProbe {
         if (cellSize == null || cellSize != PROBE_CELL_SIZE) {
             throw new IllegalStateException("Pack check (b) failed: the router of " + OVERWORLD_ISLANDS + " reaches the cell size " + cellSize);
         }
-        LOGGER.info("Islands probe: pack check (b) passed: the router of {} reaches voronoi_islands with cell_size {}", OVERWORLD_ISLANDS, cellSize);
+        LOGGER.info("Islands probe: pack check (b) passed: the router of {} reaches island_variations with cell_size {}", OVERWORLD_ISLANDS, cellSize);
     }
 
-    /** The cell size of the first {@code aerolite:voronoi_islands} object in the JSON. A string follows its density function entry. */
+    /** The cell size of the first island function object in the JSON. A string follows its density function entry. */
     @Nullable
     private static Integer cellSize(JsonElement json, RegistryAccess registries, RegistryOps<JsonElement> ops, Set<String> visited) {
         if (json.isJsonPrimitive() && json.getAsJsonPrimitive().isString() && visited.add(json.getAsString())) {
@@ -1681,7 +1685,7 @@ public final class IslandsProbe {
         }
         if (json.isJsonObject()) {
             JsonObject object = json.getAsJsonObject();
-            if (object.has("type") && "aerolite:voronoi_islands".equals(object.get("type").getAsString())) {
+            if (object.has("type") && ISLAND_FUNCTION_TYPE.equals(object.get("type").getAsString())) {
                 return object.get("cell_size").getAsInt();
             }
             for (Map.Entry<String, JsonElement> field : object.entrySet()) {
@@ -1716,17 +1720,17 @@ public final class IslandsProbe {
         }
     }
 
-    /** The island density function of the Overworld of the server. */
-    private static VoronoiIslands islands(MinecraftServer server) {
-        if (!(unwrap(server.overworld().getChunkSource().randomState().router().finalDensity()) instanceof VoronoiIslands islands)) {
-            throw new IllegalStateException("The final density of the Overworld is not the island density function");
+    /** The island function of the Overworld of the server. */
+    private static IslandFunction islands(MinecraftServer server) {
+        if (!(unwrap(server.overworld().getChunkSource().randomState().router().finalDensity()) instanceof IslandFunction islands)) {
+            throw new IllegalStateException("The final density of the Overworld is not the island function");
         }
         return islands;
     }
 
     /** The first island of the row 0 along X from the origin. */
     private static VoronoiLattice.Cell firstIsland(MinecraftServer server) {
-        VoronoiIslands islands = islands(server);
+        IslandFunction islands = islands(server);
         for (int ix = 0; ix < 16; ix++) {
             VoronoiLattice.Cell cell = islands.lattice().cell(ix, 0, 0);
             if (islands.hasIsland(cell)) {

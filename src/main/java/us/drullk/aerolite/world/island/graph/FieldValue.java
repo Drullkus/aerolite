@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
  * The value of one field of a function node that is not an input pin. A {@link FieldKind#FUNCTION} field holds no value; a link feeds it.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public sealed interface FieldValue {
 
@@ -47,6 +48,10 @@ public sealed interface FieldValue {
 
     /** The value of a {@link FieldKind#SPLINE} field. Its coordinates are input pins, not part of the value. */
     record Spline(SplineValue value) implements FieldValue {
+    }
+
+    /** The value of a {@link FieldKind#VARIATION_LIST} field: the id of an island variation list. */
+    record VariationList(ResourceLocation id) implements FieldValue {
     }
 
 }

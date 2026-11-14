@@ -82,6 +82,7 @@ import java.util.Set;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 final class ImGuiNodeCanvas {
 
@@ -962,7 +963,20 @@ final class ImGuiNodeCanvas {
             }
             case NOISE -> this.drawNoise(editor, id, field, value, widget);
             case SPLINE -> ImGui.textDisabled(value instanceof FieldValue.Spline spline ? splineSummary(spline.value()) : "No spline");
+            case VARIATION_LIST -> this.drawVariationList(editor, id, field, value, widget);
             case FUNCTION -> {
+            }
+        }
+    }
+
+    /** A text field for the id of an island variation list. */
+    private void drawVariationList(IslandEditor editor, int id, FieldSpec field, @Nullable FieldValue value, String widget) {
+        String current = value instanceof FieldValue.VariationList list ? list.id().toString() : "";
+        ImString text = new ImString(current, TEXT_CAPACITY);
+        if (ImGui.inputText(widget, text)) {
+            ResourceLocation parsed = ResourceLocation.tryParse(text.get().trim());
+            if (parsed != null) {
+                editor.setField(id, field.name(), new FieldValue.VariationList(parsed));
             }
         }
     }

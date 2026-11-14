@@ -40,7 +40,7 @@ import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.island.CellGeometry;
 import us.drullk.aerolite.world.island.IslandTerrain;
-import us.drullk.aerolite.world.island.VoronoiIslands;
+import us.drullk.aerolite.world.island.IslandCells;
 import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.shaft.ShaftLayout;
 import us.drullk.aerolite.world.shaft.ShaftPainter;
@@ -228,7 +228,7 @@ public final class PreviewBuilder implements AutoCloseable {
         final LongSet generated = new LongOpenHashSet();
         /** The island function of the wired final density, or null without one. */
         @Nullable
-        final VoronoiIslands islands;
+        final IslandCells islands;
         /** The polyhedra of the cells by lattice X and Z. A shift keeps the cells that stay in the region. */
         final Long2ObjectMap<CellGeometry.Shape> cells = new Long2ObjectOpenHashMap<>();
 
@@ -492,7 +492,7 @@ public final class PreviewBuilder implements AutoCloseable {
      * The polyhedra of the cells with an island whose sites lie in the region. The scene keeps each cell while its site stays in the region.
      */
     private List<CellGeometry.Shape> cells(Scene scene, ChunkPos center, int radius) {
-        VoronoiIslands islands = scene.islands;
+        IslandCells islands = scene.islands;
         if (islands == null) {
             return List.of();
         }

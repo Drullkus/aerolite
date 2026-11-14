@@ -27,11 +27,13 @@ import java.nio.charset.StandardCharsets;
  * a JSON object with every field of each type, and the shipped routers. The values are arbitrary and carry no shape.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 final class GraphTestData {
 
     static final String REFERENCE = "minecraft:shift_x";
     static final String NOISE = "minecraft:temperature";
+    static final String VARIATION_LIST = "aerolite:overworld_islands";
 
     private static final HolderLookup.Provider REGISTRIES = new RegistrySetBuilder()
             .add(Registries.NOISE, NoiseData::bootstrap)
@@ -64,6 +66,7 @@ final class GraphTestData {
                 case ENUM -> object.addProperty(field.name(), field.choices().getFirst());
                 case NOISE -> object.addProperty(field.name(), NOISE);
                 case SPLINE -> object.add(field.name(), spline());
+                case VARIATION_LIST -> object.addProperty(field.name(), VARIATION_LIST);
             }
         }
         return object;

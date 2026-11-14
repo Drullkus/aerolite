@@ -27,6 +27,7 @@ import tamaized.beanification.Autowired;
 import tamaized.beanification.Component;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.ShaftRegistries;
+import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
 
 import java.util.List;
 import java.util.Map;
@@ -41,6 +42,7 @@ import java.util.OptionalLong;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-30_01-09_0bfcebed-136b-4c6c-8d2b-c8166d6cf577.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-10-31_06-49_80f433d5-803f-4444-95a1-477f494ca3c5.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 @Component
 public final class AeroliteWorldgenEntries {
@@ -61,7 +63,9 @@ public final class AeroliteWorldgenEntries {
                 .add(Registries.NOISE_SETTINGS, this::noiseSettings)
                 .add(Registries.WORLD_PRESET, this::worldPresets)
                 .add(ShaftRegistries.SHAFT_VARIATION, this.shaftEntries::variations)
-                .add(ShaftRegistries.SHAFT_PLACEMENT, this.shaftEntries::placements);
+                .add(ShaftRegistries.SHAFT_PLACEMENT, this.shaftEntries::placements)
+                .add(IslandVariationRegistries.ISLAND_VARIATION, this.islandEntries::variations)
+                .add(IslandVariationRegistries.ISLAND_VARIATION_LIST, this.islandEntries::lists);
     }
 
     private void dimensionTypes(BootstrapContext<DimensionType> context) {

@@ -42,7 +42,7 @@ import us.drullk.aerolite.client.YLimits;
 import us.drullk.aerolite.world.AeroliteSettings;
 import us.drullk.aerolite.world.island.CellGeometry;
 import us.drullk.aerolite.world.island.GraphSettings;
-import us.drullk.aerolite.world.island.IslandSettings;
+import us.drullk.aerolite.world.island.LatticeSettings;
 import us.drullk.aerolite.world.island.VoronoiLattice;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 
@@ -60,7 +60,7 @@ import java.util.function.BiConsumer;
  * The ImGui panel on the right edits a copy of the settings. Done sends the copy back. Cancel drops it.
  * A previewed dimension without variations shows the empty region: sky, grid and outline.
  * The movement keys and a middle drag move the region center. A move across a chunk border shifts the region.
- * The islands preview, from the Islands screen, holds the graphs of the island editor. Its node canvas and its panel sliders edit them.
+ * The islands preview, from the Islands screen, holds the graphs of the island editor. Its node canvas and its panel lattice sliders edit them.
  * Its chunks hold the terrain of the router graph of the previewed dimension. A graph that does not build keeps the last good terrain.
  * Its Done sends the graphs back. Its pillars come from the holder settings and stay as they are.
  * While the node editor is open, the screen takes no mouse input and no key input, and its footer buttons hide.
@@ -82,6 +82,7 @@ import java.util.function.BiConsumer;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public class PreviewScreen extends Screen {
 
@@ -114,7 +115,7 @@ public class PreviewScreen extends Screen {
     @Nullable
     private ResourceKey<Level> slidersDimension;
     @Nullable
-    private IslandSettings sliders;
+    private LatticeSettings sliders;
     private final List<PreviewDimension> dimensions;
     private final List<ResourceKey<Level>> levels;
     private final Registry<Biome> biomes;
@@ -242,11 +243,11 @@ public class PreviewScreen extends Screen {
     }
 
     /**
-     * The island settings of the first {@code aerolite:voronoi_islands} function node of the router graph of the previewed dimension.
+     * The lattice settings of the first island function node of the router graph of the previewed dimension.
      * Null in the pillars preview and for a router graph without one.
      */
     @Nullable
-    public IslandSettings islandSliders() {
+    public LatticeSettings islandSliders() {
         IslandEditor editor = this.editor;
         ResourceKey<Level> dimension = this.dimensionKey();
         if (editor == null || dimension == null) {
@@ -255,17 +256,17 @@ public class PreviewScreen extends Screen {
         if (this.slidersVersion != editor.version() || !dimension.equals(this.slidersDimension)) {
             this.slidersVersion = editor.version();
             this.slidersDimension = dimension;
-            this.sliders = editor.graphs().islands(dimension, editor.loader()).orElse(null);
+            this.sliders = editor.graphs().lattice(dimension, editor.loader()).orElse(null);
         }
         return this.sliders;
     }
 
-    /** Writes the island settings into the island function node of the previewed dimension. */
-    public void setIslandSliders(IslandSettings settings) {
+    /** Writes the lattice settings into the island function node of the previewed dimension. */
+    public void setIslandSliders(LatticeSettings settings) {
         IslandEditor editor = this.editor;
         ResourceKey<Level> dimension = this.dimensionKey();
         if (editor != null && dimension != null && !settings.equals(this.islandSliders())
-                && editor.graphs().setIslands(dimension, settings, editor.loader())) {
+                && editor.graphs().setLattice(dimension, settings, editor.loader())) {
             editor.changed();
         }
     }

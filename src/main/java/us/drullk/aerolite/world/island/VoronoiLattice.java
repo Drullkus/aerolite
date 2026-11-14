@@ -353,6 +353,11 @@ public final class VoronoiLattice {
         return unit(this.hash(cell.ix(), cell.iy(), cell.iz(), salt));
     }
 
+    /** The value of {@link #value} for the lattice index of a lattice with the seed. */
+    public static double value(long seed, int ix, int iy, int iz, int salt) {
+        return unit(hash(seed, ix, iy, iz, salt));
+    }
+
     /** The kept walls of the cell. The wall {@code i} faces the cell at {@link #wallNeighbor}. */
     PowerRule.Walls walls(Cell cell) {
         PowerRule.Walls found = this.walls.find(cell.ix(), cell.iy(), cell.iz());
@@ -435,7 +440,11 @@ public final class VoronoiLattice {
     }
 
     private long hash(int ix, int iy, int iz, int salt) {
-        long hash = RandomSupport.mixStafford13(this.seed ^ salt);
+        return hash(this.seed, ix, iy, iz, salt);
+    }
+
+    private static long hash(long seed, int ix, int iy, int iz, int salt) {
+        long hash = RandomSupport.mixStafford13(seed ^ salt);
         hash = RandomSupport.mixStafford13(hash ^ ix);
         hash = RandomSupport.mixStafford13(hash ^ iy);
         return RandomSupport.mixStafford13(hash ^ iz);

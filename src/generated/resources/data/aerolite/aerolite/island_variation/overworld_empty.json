@@ -1,0 +1,11 @@
+{
+  "biome_source": {
+    "type": "minecraft:multi_noise",
+    "preset": "minecraft:overworld"
+  },
+  "cell_weight": [
+    0.5,
+    0.5
+  ],
+  "empty": true
+}

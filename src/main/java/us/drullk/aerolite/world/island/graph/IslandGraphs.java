@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import us.drullk.aerolite.world.island.IslandSettings;
+import us.drullk.aerolite.world.island.LatticeSettings;
 
 import javax.annotation.Nullable;
 import java.util.Collections;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * The graphs of the island editor: one router graph per preset dimension with a noise generator, and the edited function graphs by entry id.
@@ -28,6 +30,7 @@ import java.util.function.Consumer;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class IslandGraphs {
 
@@ -49,7 +52,7 @@ public final class IslandGraphs {
         DataResult<FunctionGraph> load(ResourceLocation entry);
     }
 
-    /** The first {@code aerolite:voronoi_islands} function node of a dimension, and the way to write it. */
+    /** The first function node of a type under the router outputs of a dimension, and the way to write it. */
     private record Found(FunctionNode.Typed functionNode, Consumer<FunctionNode.Typed> writer) {
     }
 
@@ -174,13 +177,13 @@ public final class IslandGraphs {
 
     /** The island settings of the first {@code aerolite:voronoi_islands} function node of the dimension. */
     public Optional<IslandSettings> islands(ResourceKey<Level> dimension, EntryLoader loader) {
-        Found found = this.locate(dimension, loader);
+        Found found = this.locate(dimension, loader, IslandSettingsFunctionNode::isIslands);
         return found == null ? Optional.empty() : IslandSettingsFunctionNode.read(found.functionNode());
     }
 
     /** Writes the island settings into the first {@code aerolite:voronoi_islands} function node of the dimension. False when it has none. */
     public boolean setIslands(ResourceKey<Level> dimension, IslandSettings settings, EntryLoader loader) {
-        Found found = this.locate(dimension, loader);
+        Found found = this.locate(dimension, loader, IslandSettingsFunctionNode::isIslands);
         if (found == null) {
             return false;
         }
@@ -188,13 +191,29 @@ public final class IslandGraphs {
         return true;
     }
 
+    /** The lattice settings of the first island function node of the dimension. */
+    public Optional<LatticeSettings> lattice(ResourceKey<Level> dimension, EntryLoader loader) {
+        Found found = this.locate(dimension, loader, IslandFunctionNode::isIslandFunction);
+        return found == null ? Optional.empty() : IslandFunctionNode.read(found.functionNode());
+    }
+
+    /** Writes the lattice settings into the first island function node of the dimension. False when it has none. */
+    public boolean setLattice(ResourceKey<Level> dimension, LatticeSettings settings, EntryLoader loader) {
+        Found found = this.locate(dimension, loader, IslandFunctionNode::isIslandFunction);
+        if (found == null) {
+            return false;
+        }
+        found.writer().accept(IslandFunctionNode.write(found.functionNode(), settings));
+        return true;
+    }
+
     /**
-     * The first {@code aerolite:voronoi_islands} function node under the router outputs of the dimension, in field sequence and pin sequence.
+     * The first function node of the type under the router outputs of the dimension, in field sequence and pin sequence.
      * The search follows reference nodes into their function graphs. An output on dimension default searches its saved JSON.
      * A write to a function node of that JSON first loads the JSON into the router graph and links it to the output.
      */
     @Nullable
-    private Found locate(ResourceKey<Level> dimension, EntryLoader loader) {
+    private Found locate(ResourceKey<Level> dimension, EntryLoader loader, Predicate<FunctionNode> type) {
         RouterGraph router = this.routers.get(dimension);
         if (router == null) {
             return null;
@@ -205,7 +224,7 @@ public final class IslandGraphs {
         for (String field : RouterGraph.FIELDS) {
             RouterGraph.Output output = router.output(field);
             if (output instanceof RouterGraph.Output.Linked linked) {
-                Found found = this.search(router, linked.functionNode(), loader, visited, direct);
+                Found found = this.search(router, linked.functionNode(), loader, visited, direct, type);
                 if (found != null) {
                     return found;
                 }
@@ -218,13 +237,13 @@ public final class IslandGraphs {
                 Writer materialize = (graph, id) -> functionNode -> {
                     int loadedRoot = GraphJson.readInto(router, shippedRouter.get(field), field).getOrThrow(IllegalStateException::new);
                     router.link(loadedRoot, field);
-                    Found again = this.search(router, loadedRoot, loader, new HashSet<>(), direct);
+                    Found again = this.search(router, loadedRoot, loader, new HashSet<>(), direct, type);
                     if (again == null) {
-                        throw new IllegalStateException("The loaded output " + field + " lost its island function node");
+                        throw new IllegalStateException("The loaded output " + field + " lost its function node");
                     }
                     again.writer().accept(functionNode);
                 };
-                Found found = this.search(scratch, root, loader, visited, materialize);
+                Found found = this.search(scratch, root, loader, visited, materialize, type);
                 if (found != null) {
                     return found;
                 }
@@ -234,9 +253,9 @@ public final class IslandGraphs {
     }
 
     @Nullable
-    private Found search(FunctionNodeGraph graph, int id, EntryLoader loader, Set<ResourceLocation> visited, Writer writer) {
+    private Found search(FunctionNodeGraph graph, int id, EntryLoader loader, Set<ResourceLocation> visited, Writer writer, Predicate<FunctionNode> type) {
         FunctionNode functionNode = graph.functionNode(id);
-        if (IslandSettingsFunctionNode.isIslands(functionNode)) {
+        if (type.test(functionNode)) {
             return new Found((FunctionNode.Typed) functionNode, writer.at(graph, id));
         }
         if (functionNode instanceof FunctionNode.Reference reference && visited.add(reference.entry())) {
@@ -248,14 +267,14 @@ public final class IslandGraphs {
                     this.markEdited(entry, entryGraph);
                     target.replace(targetId, updated);
                 };
-                return this.search(entryGraph, root, loader, visited, entryWriter);
+                return this.search(entryGraph, root, loader, visited, entryWriter, type);
             }
             return null;
         }
         for (String pin : functionNode.inputPins()) {
             Integer child = graph.source(new FunctionNodeGraph.Pin(id, pin));
             if (child != null) {
-                Found found = this.search(graph, child, loader, visited, writer);
+                Found found = this.search(graph, child, loader, visited, writer, type);
                 if (found != null) {
                     return found;
                 }

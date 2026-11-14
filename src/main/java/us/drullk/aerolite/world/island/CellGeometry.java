@@ -138,12 +138,12 @@ public final class CellGeometry {
     private CellGeometry() {
     }
 
-    /** The first {@code aerolite:voronoi_islands} function of the tree, depth first, or null. */
+    /** The first island function or {@code aerolite:voronoi_islands} function of the tree, depth first, or null. */
     @Nullable
-    public static VoronoiIslands findIslands(DensityFunction function) {
-        VoronoiIslands[] found = new VoronoiIslands[1];
+    public static IslandCells findIslands(DensityFunction function) {
+        IslandCells[] found = new IslandCells[1];
         function.mapAll(visited -> {
-            if (found[0] == null && visited instanceof VoronoiIslands islands) {
+            if (found[0] == null && visited instanceof IslandCells islands) {
                 found[0] = islands;
             }
             return visited;

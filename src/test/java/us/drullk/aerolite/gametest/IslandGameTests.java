@@ -5,59 +5,101 @@ import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.QuartPos;
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.WorldPresetTags;
+import net.minecraft.util.Mth;
+import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.FixedBiomeSource;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterList;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterLists;
+import net.minecraft.world.level.biome.TheEndBiomeSource;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.world.level.chunk.UpgradeData;
 import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import net.minecraft.world.level.levelgen.DensityFunctions;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseChunk;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldDimensions;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.world.level.levelgen.presets.WorldPreset;
+import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import tamaized.beanification.Autowired;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.island.GraphSettings;
+import us.drullk.aerolite.world.island.IslandBiomeSource;
+import us.drullk.aerolite.world.island.IslandCells;
 import us.drullk.aerolite.world.island.IslandGenerators;
 import us.drullk.aerolite.world.island.IslandSettings;
 import us.drullk.aerolite.world.island.IslandTerrain;
+import us.drullk.aerolite.world.island.LatticeSettings;
 import us.drullk.aerolite.world.island.VoronoiIslands;
 import us.drullk.aerolite.world.island.VoronoiLattice;
+import us.drullk.aerolite.world.island.node.CellRandom;
+import us.drullk.aerolite.world.island.node.IslandCarrier;
+import us.drullk.aerolite.world.island.node.IslandFunction;
+import us.drullk.aerolite.world.island.node.IslandValue;
+import us.drullk.aerolite.world.island.variation.IslandVariation;
+import us.drullk.aerolite.world.island.variation.IslandVariationList;
+import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
+import us.drullk.aerolite.world.island.variation.UnitRange;
+import us.drullk.aerolite.world.island.variation.VariationLookup;
 import us.drullk.aerolite.world.island.graph.GraphJson;
 import us.drullk.aerolite.world.island.graph.IslandGraphs;
 import us.drullk.aerolite.world.island.graph.RouterGraph;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
- * Checks the Islands preset: its dimensions, the wired island density function, the surface floor, the island settings edit,
- * the blocks of a generated chunk and the terrain fill of the preview. It also checks the terrain build from the graphs of the island editor.
+ * Checks the Islands preset: its dimensions, its island biome source, the wired island function, the surface floor,
+ * the blocks of a generated chunk, an Empty cell and the terrain fill of the preview.
+ * It checks the biome of a block in a cell of the row 0 and above the row 0. It also checks the island settings edit of a world of 0.5.0,
+ * the chunk fill of the noise settings of 0.5.0 and the terrain build from the graphs of the island editor.
+ * It checks the island function in the climate sampler of a noise chunk, the chunk wrappers in a variation graph and a parallel fill.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 @GameTestHolder(Aerolite.MODID)
 @PrefixGameTestTemplate(false)
@@ -65,10 +107,23 @@ public final class IslandGameTests {
 
     private static final long SEED = 1234L;
     private static final Map<ResourceKey<LevelStem>, ResourceKey<NoiseGeneratorSettings>> NOISE_SETTINGS = Map.of(
+            LevelStem.OVERWORLD, AeroliteWorldgen.ISLAND_VARIATIONS_OVERWORLD_NOISE,
+            LevelStem.NETHER, AeroliteWorldgen.ISLAND_VARIATIONS_NETHER_NOISE,
+            LevelStem.END, AeroliteWorldgen.ISLAND_VARIATIONS_END_NOISE
+    );
+    /** The noise settings of 0.5.0. A world of 0.5.0 names them. */
+    private static final Map<ResourceKey<LevelStem>, ResourceKey<NoiseGeneratorSettings>> OLD_NOISE_SETTINGS = Map.of(
             LevelStem.OVERWORLD, AeroliteWorldgen.ISLANDS_OVERWORLD_NOISE,
             LevelStem.NETHER, AeroliteWorldgen.ISLANDS_NETHER_NOISE,
             LevelStem.END, AeroliteWorldgen.ISLANDS_END_NOISE
     );
+    private static final Map<ResourceKey<LevelStem>, ResourceKey<Level>> LEVELS = Map.of(
+            LevelStem.OVERWORLD, Level.OVERWORLD,
+            LevelStem.NETHER, Level.NETHER,
+            LevelStem.END, Level.END
+    );
+    /** The span of the brute force search for the nearest cell of the row 0, in boxes on each side. */
+    private static final int ROW_SEARCH = 8;
 
     // GameTest methods are static. Beanification fills this field.
     @Autowired
@@ -92,20 +147,51 @@ public final class IslandGameTests {
         return RandomState.create(generator.generatorSettings().value(), level.registryAccess().lookupOrThrow(Registries.NOISE), SEED);
     }
 
-    /** The island density function behind the final density of the wired router, inside its holders and markers. */
-    private static VoronoiIslands islands(GameTestHelper helper, RandomState randomState) {
-        DensityFunction function = randomState.router().finalDensity();
+    /** The function inside the holders and markers. */
+    private static DensityFunction unwrap(DensityFunction function) {
         while (true) {
             if (function instanceof DensityFunctions.HolderHolder holder) {
                 function = holder.function().value();
             } else if (function instanceof DensityFunctions.MarkerOrMarked marker) {
                 function = marker.wrapped();
             } else {
-                break;
+                return function;
             }
         }
-        helper.assertTrue(function instanceof VoronoiIslands, "The final density is not the island density function");
+    }
+
+    /** The island function behind the final density of the wired router, inside its holders and markers. */
+    private static IslandFunction islands(GameTestHelper helper, RandomState randomState) {
+        DensityFunction function = unwrap(randomState.router().finalDensity());
+        helper.assertTrue(function instanceof IslandFunction, "The final density is not the island function");
+        return (IslandFunction) function;
+    }
+
+    /** The island density function of 0.5.0 behind the final density of the wired router. */
+    private static VoronoiIslands oldIslands(GameTestHelper helper, RandomState randomState) {
+        DensityFunction function = unwrap(randomState.router().finalDensity());
+        helper.assertTrue(function instanceof VoronoiIslands, "The final density is not the island density function of 0.5.0");
         return (VoronoiIslands) function;
+    }
+
+    /** The dimensions of a world of 0.5.0: the vanilla biome sources and the noise settings of 0.5.0. */
+    private static WorldDimensions oldDimensions(ServerLevel level) {
+        WorldDimensions preset = presetDimensions(level);
+        Map<ResourceKey<LevelStem>, LevelStem> stems = new LinkedHashMap<>(preset.dimensions());
+        OLD_NOISE_SETTINGS.forEach((stem, settings) -> stems.put(stem, new LevelStem(preset.dimensions().get(stem).type(),
+                new NoiseBasedChunkGenerator(vanillaBiomes(level, stem), level.registryAccess().registryOrThrow(Registries.NOISE_SETTINGS).getHolderOrThrow(settings)))));
+        return new WorldDimensions(stems);
+    }
+
+    /** The vanilla biome source of a preset dimension. */
+    private static BiomeSource vanillaBiomes(ServerLevel level, ResourceKey<LevelStem> stem) {
+        if (stem.equals(LevelStem.END)) {
+            return TheEndBiomeSource.create(level.registryAccess().lookupOrThrow(Registries.BIOME));
+        }
+        ResourceKey<MultiNoiseBiomeSourceParameterList> preset = stem.equals(LevelStem.NETHER)
+                ? MultiNoiseBiomeSourceParameterLists.NETHER
+                : MultiNoiseBiomeSourceParameterLists.OVERWORLD;
+        return MultiNoiseBiomeSource.createFromPreset(level.registryAccess().registryOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST).getHolderOrThrow(preset));
     }
 
     @GameTest(template = "empty")
@@ -122,6 +208,10 @@ public final class IslandGameTests {
             helper.assertTrue(generator.generatorSettings().value().seaLevel() <= -54 || generator.generatorSettings().value().noiseSettings().minY() >= -54,
                     "The sea level of a dimension lets the noise step place lava");
             helper.assertTrue(generator.generatorSettings().value().defaultFluid().isAir(), "The default fluid of a dimension is not air");
+            helper.assertTrue(generator.getBiomeSource() instanceof IslandBiomeSource source
+                    && source.variations().equals(IslandVariationRegistries.listOf(LEVELS.get(stem))), "A dimension of the Islands preset has no island biome source of its list");
+            Set<Holder<Biome>> vanilla = vanillaBiomes(level, stem).possibleBiomes();
+            helper.assertTrue(generator.getBiomeSource().possibleBiomes().equals(vanilla), "The possible biomes of " + stem.location() + " are not its vanilla biomes");
         }
         helper.assertTrue(dimensions.dimensions().get(LevelStem.OVERWORLD).type().is(AeroliteWorldgen.OVERWORLD_TYPE), "The Overworld has not the Aerolite dimension type");
         helper.succeed();
@@ -131,9 +221,9 @@ public final class IslandGameTests {
     public static void randomStateSeedsTheIslandLattice(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NoiseBasedChunkGenerator generator = generator(level, LevelStem.OVERWORLD);
-        VoronoiIslands wired = islands(helper, randomState(level, generator));
+        IslandFunction wired = islands(helper, randomState(level, generator));
         helper.assertTrue(wired.lattice().seed() != 0L, "The wired island function has the unwired seed");
-        VoronoiIslands again = islands(helper, randomState(level, generator));
+        IslandFunction again = islands(helper, randomState(level, generator));
         helper.assertTrue(again.lattice().seed() == wired.lattice().seed(), "Two random states of one seed gave two lattice seeds");
         RandomState other = RandomState.create(generator.generatorSettings().value(), level.registryAccess().lookupOrThrow(Registries.NOISE), SEED + 1);
         helper.assertTrue(islands(helper, other).lattice().seed() != wired.lattice().seed(), "Two world seeds gave one lattice seed");
@@ -141,7 +231,7 @@ public final class IslandGameTests {
     }
 
     /** The site column of the first empty cell of the row 0 along X from the origin. */
-    private static BlockPos emptyColumn(GameTestHelper helper, VoronoiIslands islands) {
+    private static BlockPos emptyColumn(GameTestHelper helper, IslandCells islands) {
         for (int ix = 0; ix < 32; ix++) {
             VoronoiLattice.Cell candidate = islands.lattice().cell(ix, 0, 0);
             if (!islands.hasIsland(candidate)) {
@@ -155,7 +245,7 @@ public final class IslandGameTests {
     /** The surface threshold of the preliminary surface search of the noise chunk. */
     private static final double SURFACE_THRESHOLD = 0.390625;
 
-    private static void assertSurfaceFloor(GameTestHelper helper, NoiseRouter router, VoronoiIslands islands, int minY, String dimension) {
+    private static void assertSurfaceFloor(GameTestHelper helper, NoiseRouter router, IslandCells islands, int minY, String dimension) {
         BlockPos column = emptyColumn(helper, islands);
         DensityFunction initial = router.initialDensityWithoutJaggedness();
         helper.assertTrue(initial.compute(new DensityFunction.SinglePointContext(column.getX(), minY, column.getZ())) > SURFACE_THRESHOLD,
@@ -178,17 +268,18 @@ public final class IslandGameTests {
         helper.succeed();
     }
 
+    /** The island settings edit of a world of 0.5.0. */
     @GameTest(template = "empty")
     public static void islandSettingsEditRebuildsOnlyTheTerrainFunctions(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        WorldDimensions preset = presetDimensions(level);
+        WorldDimensions preset = oldDimensions(level);
         IslandSettings shipped = generators.settings(preset).orElseThrow();
         helper.assertTrue(shipped.equals(IslandSettings.DEFAULT), "The shipped island settings differ from the default settings");
         WorldDimensions same = generators.withSettings(preset, shipped);
         IslandSettings edited = shipped.withDistortion(shipped.distortion() + 10).withCellSize(512);
         WorldDimensions changed = generators.withSettings(preset, edited);
         RegistryOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, level.registryAccess());
-        for (ResourceKey<LevelStem> stem : NOISE_SETTINGS.keySet()) {
+        for (ResourceKey<LevelStem> stem : OLD_NOISE_SETTINGS.keySet()) {
             String dimension = stem.location().toString();
             NoiseBasedChunkGenerator before = (NoiseBasedChunkGenerator) preset.dimensions().get(stem).generator();
             helper.assertTrue(same.dimensions().get(stem) == preset.dimensions().get(stem), "The shipped distortion rebuilt " + dimension);
@@ -196,18 +287,18 @@ public final class IslandGameTests {
             helper.assertTrue(editedStem.type() == preset.dimensions().get(stem).type(), "The distortion edit changed the dimension type of " + dimension);
             NoiseBasedChunkGenerator after = (NoiseBasedChunkGenerator) editedStem.generator();
             helper.assertTrue(after.getBiomeSource() == before.getBiomeSource(), "The distortion edit changed the biome source of " + dimension);
-            helper.assertFalse(after.generatorSettings().is(NOISE_SETTINGS.get(stem)), "The distortion edit kept the registry settings of " + dimension);
+            helper.assertFalse(after.generatorSettings().is(OLD_NOISE_SETTINGS.get(stem)), "The distortion edit kept the registry settings of " + dimension);
             helper.assertTrue(IslandSettings.of(generators.islands(after).orElseThrow()).equals(edited), "The edit did not reach the island function of " + dimension);
             NoiseRouter beforeRouter = before.generatorSettings().value().noiseRouter();
             NoiseRouter afterRouter = after.generatorSettings().value().noiseRouter();
             helper.assertTrue(afterRouter.temperature() == beforeRouter.temperature() && afterRouter.erosion() == beforeRouter.erosion(),
                     "The distortion edit rebuilt a climate function of " + dimension);
             RandomState wired = randomState(level, after);
-            helper.assertTrue(islands(helper, wired).lattice().seed() == islands(helper, randomState(level, before)).lattice().seed(),
+            helper.assertTrue(oldIslands(helper, wired).lattice().seed() == oldIslands(helper, randomState(level, before)).lattice().seed(),
                     "The distortion edit changed the lattice seed of " + dimension);
-            helper.assertTrue(IslandSettings.of(islands(helper, wired)).equals(edited), "The wired island function of " + dimension + " lost the edit");
+            helper.assertTrue(IslandSettings.of(oldIslands(helper, wired)).equals(edited), "The wired island function of " + dimension + " lost the edit");
             int minY = after.generatorSettings().value().noiseSettings().minY();
-            assertSurfaceFloor(helper, wired.router(), islands(helper, wired), minY, dimension);
+            assertSurfaceFloor(helper, wired.router(), oldIslands(helper, wired), minY, dimension);
             JsonElement json = LevelStem.CODEC.encodeStart(ops, editedStem).getOrThrow(message -> new IllegalStateException("The edited " + dimension + " does not encode: " + message));
             LevelStem parsed = LevelStem.CODEC.parse(ops, json).getOrThrow(message -> new IllegalStateException("The edited " + dimension + " does not parse: " + message));
             helper.assertTrue(IslandSettings.of(generators.islands(parsed.generator()).orElseThrow()).equals(edited), "The parsed " + dimension + " lost the edit");
@@ -294,7 +385,7 @@ public final class IslandGameTests {
         ServerLevel level = helper.getLevel();
         NoiseBasedChunkGenerator generator = generator(level, LevelStem.OVERWORLD);
         RandomState randomState = randomState(level, generator);
-        VoronoiIslands islands = islands(helper, randomState);
+        IslandFunction islands = islands(helper, randomState);
         VoronoiLattice.Cell cell = firstIsland(helper, islands);
         BlockPos site = BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ());
         CompletableFuture<ChunkAccess> fill = fill(level, generator, randomState, new ChunkPos(site));
@@ -302,6 +393,8 @@ public final class IslandGameTests {
             helper.assertTrue(fill.isDone(), "The chunk fill is not done");
             ChunkAccess chunk = fill.join();
             helper.assertTrue(columnHolds(chunk, site, Blocks.STONE), "The site column of a filled cell holds no stone");
+            helper.assertTrue(islands.compute(new DensityFunction.SinglePointContext(site.getX(), site.getY(), site.getZ())) > 0,
+                    "The island function is not positive at the site");
             helper.assertTrue(chunk.getBlockState(new BlockPos(site.getX(), -60, site.getZ())).isAir(), "The row below the islands holds a block");
             helper.assertTrue(chunk.getBlockState(new BlockPos(site.getX(), 300, site.getZ())).isAir(), "The row above the islands holds a block");
             assertNoLava(helper, chunk);
@@ -330,7 +423,7 @@ public final class IslandGameTests {
     }
 
     /** The first island of the row 0 along X from the origin. */
-    private static VoronoiLattice.Cell firstIsland(GameTestHelper helper, VoronoiIslands islands) {
+    private static VoronoiLattice.Cell firstIsland(GameTestHelper helper, IslandCells islands) {
         for (int ix = 0; ix < 8; ix++) {
             VoronoiLattice.Cell candidate = islands.lattice().cell(ix, 0, 0);
             if (islands.hasIsland(candidate)) {
@@ -380,8 +473,8 @@ public final class IslandGameTests {
                 "An output of the start router graph has no link");
         helper.assertTrue(GraphJson.writeRouter(router, graphs.shipped(Level.OVERWORLD)).result().filter(graphs.shipped(Level.OVERWORLD)::equals).isPresent(),
                 "The start router graph does not save the shipped router");
-        helper.assertTrue(graphs.islands(Level.OVERWORLD, graphSettings.loader(level.registryAccess())).orElseThrow().equals(IslandSettings.DEFAULT),
-                "The sliders of the start graphs do not read the shipped island settings");
+        helper.assertTrue(graphs.lattice(Level.OVERWORLD, graphSettings.loader(level.registryAccess())).orElseThrow().equals(LatticeSettings.DEFAULT),
+                "The sliders of the start graphs do not read the shipped lattice settings");
         NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
         NoiseBasedChunkGenerator built = new NoiseBasedChunkGenerator(shipped.getBiomeSource(), Holder.direct(built(level, graphs, shipped)));
         RandomState shippedState = randomState(level, shipped);
@@ -420,20 +513,22 @@ public final class IslandGameTests {
         IslandGraphs graphs = graphSettings.start(presetDimensions(level), level.registryAccess());
         IslandGraphs.EntryLoader loader = graphSettings.loader(level.registryAccess());
         NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
-        IslandSettings first = IslandSettings.DEFAULT.withCellSize(384).withJitter(0.5);
-        IslandSettings second = first.withCellHeight(192);
+        LatticeSettings first = LatticeSettings.DEFAULT.withCellSize(384).withJitter(0.5);
+        LatticeSettings second = first.withCellHeight(192);
         RouterGraph router = graphs.router(Level.OVERWORLD);
         helper.assertTrue(router != null, "The Overworld has no router graph");
         int count = router.functionNodes().size();
         JsonObject shippedRouter = graphs.shipped(Level.OVERWORLD);
-        for (IslandSettings written : List.of(first, second)) {
-            helper.assertTrue(graphs.setIslands(Level.OVERWORLD, written, loader), "The Overworld router graph reaches no island function node");
+        for (LatticeSettings written : List.of(first, second)) {
+            helper.assertTrue(graphs.setLattice(Level.OVERWORLD, written, loader), "The Overworld router graph reaches no island function node");
             helper.assertTrue(graphs.edited().size() == 1, "The write edited " + graphs.edited().size() + " entries, not 1");
             helper.assertTrue(router.functionNodes().size() == count, "The write changed the function nodes of the router graph");
             helper.assertTrue(GraphJson.writeRouter(router, shippedRouter).result().filter(shippedRouter::equals).isPresent(),
                     "The write changed the router graph");
-            IslandSettings built = generators.islands(built(level, graphs, shipped)).map(IslandSettings::of)
-                    .orElseThrow(() -> new IllegalStateException("The built final density holds no island density function"));
+            DensityFunction finalDensity = unwrap(built(level, graphs, shipped).noiseRouter().finalDensity());
+            helper.assertTrue(finalDensity instanceof IslandFunction, "The built final density holds no island function");
+            IslandFunction islands = (IslandFunction) finalDensity;
+            LatticeSettings built = new LatticeSettings(islands.cellSize(), islands.cellHeight(), islands.layerMinY(), islands.jitter());
             helper.assertTrue(built.equals(written), "The built router holds " + built + ", not " + written);
         }
         helper.succeed();
@@ -457,6 +552,352 @@ public final class IslandGameTests {
         helper.assertTrue(graphSettings.build(graphs, Level.OVERWORLD, shipped.generatorSettings().value(), level.registryAccess(),
                 graphSettings.noises(level.registryAccess())).error().isPresent(), "A constant out of range built");
         helper.succeed();
+    }
+
+
+    /** The noise settings of 0.5.0 still fill a chunk with the island density function of 0.5.0. */
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void oldNoiseSettingsStillFillAChunk(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NoiseBasedChunkGenerator generator = (NoiseBasedChunkGenerator) oldDimensions(level).dimensions().get(LevelStem.OVERWORLD).generator();
+        helper.assertTrue(generator.generatorSettings().is(AeroliteWorldgen.ISLANDS_OVERWORLD_NOISE), "The generator does not name the noise settings of 0.5.0");
+        RandomState randomState = randomState(level, generator);
+        VoronoiLattice.Cell cell = firstIsland(helper, oldIslands(helper, randomState));
+        BlockPos site = BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ());
+        CompletableFuture<ChunkAccess> fill = fill(level, generator, randomState, new ChunkPos(site));
+        helper.succeedWhen(() -> {
+            helper.assertTrue(fill.isDone(), "The chunk fill is not done");
+            ChunkAccess chunk = fill.join();
+            helper.assertTrue(columnHolds(chunk, site, Blocks.STONE), "The site column of a filled cell of 0.5.0 holds no stone");
+            assertNoLava(helper, chunk);
+        });
+    }
+
+    /** Every block of the chunk that lies in an Empty cell is air. */
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void emptyCellHoldsNoBlock(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NoiseBasedChunkGenerator generator = generator(level, LevelStem.OVERWORLD);
+        RandomState randomState = randomState(level, generator);
+        IslandFunction islands = islands(helper, randomState);
+        VoronoiLattice.Cell empty = null;
+        for (int ix = 0; ix < 64 && empty == null; ix++) {
+            VoronoiLattice.Cell candidate = islands.lattice().cell(ix, 0, 0);
+            IslandVariation variation = islands.variation(candidate);
+            if (variation != null && variation.empty()) {
+                empty = candidate;
+            }
+        }
+        helper.assertTrue(empty != null, "No Empty cell in the first 64 cells");
+        VoronoiLattice.Cell cell = empty;
+        ChunkPos pos = new ChunkPos(BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ()));
+        CompletableFuture<ChunkAccess> fill = fill(level, generator, randomState, pos);
+        helper.succeedWhen(() -> {
+            helper.assertTrue(fill.isDone(), "The chunk fill is not done");
+            ChunkAccess chunk = fill.join();
+            int inCell = 0;
+            BlockPos.MutableBlockPos block = new BlockPos.MutableBlockPos();
+            for (int y = chunk.getMinBuildHeight(); y < chunk.getMaxBuildHeight(); y++) {
+                for (int x = 0; x < 16; x++) {
+                    for (int z = 0; z < 16; z++) {
+                        block.set(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
+                        if (islands.lattice().nearest(block.getX(), block.getY(), block.getZ()).equals(cell)) {
+                            inCell++;
+                            helper.assertTrue(chunk.getBlockState(block).isAir(), "The Empty cell holds " + chunk.getBlockState(block) + " at " + block);
+                        }
+                    }
+                }
+            }
+            helper.assertTrue(inCell > 0, "The chunk holds no block of the Empty cell");
+        });
+    }
+
+    /**
+     * The biome of a block is the biome of the variation of its cell. A block above the row 0 takes the variation of the row 0 cell
+     * with the least power rule value. The test variations hold three fixed biome sources, so each cell shows its variation.
+     */
+    @GameTest(template = "empty")
+    public static void biomeFollowsTheVariationOfTheCell(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Registry<Biome> biomes = level.registryAccess().registryOrThrow(Registries.BIOME);
+        Map<ResourceKey<IslandVariation>, IslandVariation> variations = new LinkedHashMap<>();
+        List<ResourceKey<Biome>> fixed = List.of(Biomes.PLAINS, Biomes.DESERT, Biomes.THE_VOID);
+        List<IslandVariationList.Entry> entries = new ArrayList<>();
+        for (ResourceKey<Biome> biome : fixed) {
+            ResourceKey<IslandVariation> key = ResourceKey.create(IslandVariationRegistries.ISLAND_VARIATION, biome.location().withPrefix("test_"));
+            FixedBiomeSource source = new FixedBiomeSource(biomes.getHolderOrThrow(biome));
+            variations.put(key, biome.equals(Biomes.THE_VOID)
+                    ? IslandVariation.empty(source, IslandVariation.DEFAULT_CELL_WEIGHT)
+                    : IslandVariation.island(Holder.direct(IslandValue.Kind.ISLAND_BODY.function()), source, new UnitRange(0.3, 0.7), IslandVariation.DEFAULT_FILL, 0, 64, 3));
+            entries.add(IslandVariationList.Entry.variation(key, 1));
+        }
+        ResourceKey<IslandVariationList> list = ResourceKey.create(IslandVariationRegistries.ISLAND_VARIATION_LIST, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "test_biomes"));
+        VariationLookup lookup = VariationLookup.of(variations, Map.of(list, new IslandVariationList(entries)));
+        NoiseBasedChunkGenerator shipped = generator(level, LevelStem.OVERWORLD);
+        NoiseGeneratorSettings settings = shipped.generatorSettings().value();
+        IslandFunction function = new IslandFunction(new DensityFunction.NoiseHolder(level.registryAccess().registryOrThrow(Registries.NOISE).getHolderOrThrow(AeroliteWorldgen.ISLANDS_NOISE)),
+                256, 128, 0, 0.8, list, lookup);
+        NoiseRouter router = settings.noiseRouter();
+        NoiseRouter carried = new NoiseRouter(router.barrierNoise(), router.fluidLevelFloodednessNoise(), router.fluidLevelSpreadNoise(), router.lavaNoise(),
+                new IslandCarrier(function, router.temperature()), router.vegetation(), router.continents(), router.erosion(), router.depth(), router.ridges(),
+                router.initialDensityWithoutJaggedness(), router.finalDensity(), router.veinToggle(), router.veinRidged(), router.veinGap());
+        RandomState randomState = RandomState.create(GraphSettings.withRouter(settings, carried), level.registryAccess().lookupOrThrow(Registries.NOISE), SEED);
+        IslandBiomeSource source = new IslandBiomeSource(list, lookup, Optional.of(biomes.getHolderOrThrow(Biomes.PLAINS)));
+        IslandFunction wired = IslandBiomeSource.find(randomState.sampler());
+        helper.assertTrue(wired != null, "The sampler holds no carrier with an island function");
+        helper.assertTrue(source.possibleBiomes().size() == 3, "The possible biomes are not the three biomes of the variations");
+        Set<ResourceKey<Biome>> seen = new HashSet<>();
+        for (int ix = 0; ix < 24; ix++) {
+            for (int iz = 0; iz < 4; iz++) {
+                VoronoiLattice.Cell site = wired.lattice().cell(ix, 0, iz);
+                int qx = QuartPos.fromBlock(Mth.floor(site.siteX()));
+                int qy = QuartPos.fromBlock(Mth.floor(site.siteY()));
+                int qz = QuartPos.fromBlock(Mth.floor(site.siteZ()));
+                VoronoiLattice.Cell cell = wired.lattice().nearest(QuartPos.toBlock(qx), QuartPos.toBlock(qy), QuartPos.toBlock(qz));
+                helper.assertTrue(cell.iy() == 0, "A quart block next to a site left the row 0");
+                ResourceKey<Biome> expected = biomeKey(wired.variation(cell));
+                ResourceKey<Biome> actual = source.getNoiseBiome(qx, qy, qz, randomState.sampler()).unwrapKey().orElseThrow();
+                helper.assertTrue(actual.equals(expected), "The biome " + actual.location() + " of a row 0 cell is not the biome " + expected.location() + " of its variation");
+                seen.add(actual);
+            }
+        }
+        helper.assertTrue(seen.size() == 3, "The sample did not reach every variation");
+        Random random = new Random(SEED);
+        int outside = 0;
+        for (int i = 0; i < 200; i++) {
+            int qx = random.nextInt(-400, 400);
+            int qy = QuartPos.fromBlock(random.nextBoolean() ? 200 + random.nextInt(100) : -60 + random.nextInt(50));
+            int qz = random.nextInt(-400, 400);
+            int x = QuartPos.toBlock(qx);
+            int y = QuartPos.toBlock(qy);
+            int z = QuartPos.toBlock(qz);
+            if (wired.lattice().nearest(x, y, z).iy() == 0) {
+                continue;
+            }
+            outside++;
+            VoronoiLattice.Cell nearest = nearestRowCell(wired.lattice(), x, y, z);
+            ResourceKey<Biome> expected = biomeKey(wired.variation(nearest));
+            ResourceKey<Biome> actual = source.getNoiseBiome(qx, qy, qz, randomState.sampler()).unwrapKey().orElseThrow();
+            helper.assertTrue(actual.equals(expected), "The biome " + actual.location() + " above or below the row 0 is not the biome " + expected.location()
+                    + " of the nearest row 0 cell");
+        }
+        helper.assertTrue(outside > 100, "Only " + outside + " blocks of the sample lie outside the row 0");
+        helper.succeed();
+    }
+
+    /** The biome of a fixed biome source of a test variation. */
+    private static ResourceKey<Biome> biomeKey(@Nullable IslandVariation variation) {
+        if (variation == null) {
+            throw new IllegalStateException("A cell of the test list has no variation");
+        }
+        return variation.biomeSource().possibleBiomes().iterator().next().unwrapKey().orElseThrow();
+    }
+
+    /** The cell of the row 0 with the least power rule value, by a brute force search over a wide window. */
+    private static VoronoiLattice.Cell nearestRowCell(VoronoiLattice lattice, double x, double y, double z) {
+        int bx = Math.floorDiv((int) x, lattice.cellSize());
+        int bz = Math.floorDiv((int) z, lattice.cellSize());
+        VoronoiLattice.Cell best = null;
+        double bestValue = Double.POSITIVE_INFINITY;
+        for (int dx = -ROW_SEARCH; dx <= ROW_SEARCH; dx++) {
+            for (int dz = -ROW_SEARCH; dz <= ROW_SEARCH; dz++) {
+                VoronoiLattice.Cell cell = lattice.cell(bx + dx, 0, bz + dz);
+                double value = lattice.powerValue(cell, x, y, z);
+                if (value < bestValue) {
+                    bestValue = value;
+                    best = cell;
+                }
+            }
+        }
+        return Objects.requireNonNull(best);
+    }
+
+    /** The biome of the shipped preset at a block of an island is a biome of the vanilla source of its variation. */
+    @GameTest(template = "empty")
+    public static void presetBiomeComesFromTheSourceOfTheCell(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (ResourceKey<LevelStem> stem : NOISE_SETTINGS.keySet()) {
+            NoiseBasedChunkGenerator generator = generator(level, stem);
+            RandomState randomState = randomState(level, generator);
+            IslandFunction islands = islands(helper, randomState);
+            VoronoiLattice.Cell cell = firstIsland(helper, islands);
+            IslandVariation variation = Objects.requireNonNull(islands.variation(cell));
+            int qx = QuartPos.fromBlock(Mth.floor(cell.siteX()));
+            int qy = QuartPos.fromBlock(Mth.floor(cell.siteY()));
+            int qz = QuartPos.fromBlock(Mth.floor(cell.siteZ()));
+            Holder<Biome> biome = generator.getBiomeSource().getNoiseBiome(qx, qy, qz, randomState.sampler());
+            helper.assertTrue(variation.biomeSource().possibleBiomes().contains(biome), "The biome of an island of " + stem.location() + " is not a biome of its variation");
+            helper.assertTrue(biome.equals(variation.biomeSource().getNoiseBiome(qx, qy, qz, randomState.sampler())),
+                    "The island biome source of " + stem.location() + " did not ask the source of the variation");
+        }
+        helper.succeed();
+    }
+
+    /** A beardifier without structures. The chunk sampler tests need no structure. */
+    private static final DensityFunctions.BeardifierOrMarker NO_STRUCTURES = new DensityFunctions.BeardifierOrMarker() {
+
+        @Override
+        public double compute(DensityFunction.FunctionContext context) {
+            return 0;
+        }
+
+        @Override
+        public double minValue() {
+            return 0;
+        }
+
+        @Override
+        public double maxValue() {
+            return 0;
+        }
+
+        @Override
+        public KeyDispatchDataCodec<? extends DensityFunction> codec() {
+            return DensityFunctions.BeardifierOrMarker.CODEC;
+        }
+    };
+
+    /** The noise chunk of one chunk. It opens the climate sampler of the biome step, whose functions hold the cache wrappers of the chunk. */
+    private static final class SamplerChunk extends NoiseChunk {
+
+        private SamplerChunk(RandomState randomState, ChunkPos pos, NoiseGeneratorSettings settings, LevelHeightAccessor height) {
+            super(16 / settings.noiseSettings().getCellWidth(), randomState, pos.getMinBlockX(), pos.getMinBlockZ(), settings.noiseSettings().clampToHeightAccessor(height),
+                    NO_STRUCTURES, settings, (x, y, z) -> new Aquifer.FluidStatus(settings.seaLevel(), Blocks.AIR.defaultBlockState()), Blender.empty());
+        }
+
+        private Climate.Sampler sampler(RandomState randomState) {
+            return this.cachedClimateSampler(randomState.router(), List.of());
+        }
+    }
+
+    /** The island biome source finds the island function in the climate sampler of a noise chunk and answers like with the sampler of the random state. */
+    @GameTest(template = "empty")
+    public static void chunkSamplerHoldsTheIslandFunction(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (ResourceKey<LevelStem> stem : NOISE_SETTINGS.keySet()) {
+            NoiseBasedChunkGenerator generator = generator(level, stem);
+            RandomState randomState = randomState(level, generator);
+            IslandBiomeSource source = (IslandBiomeSource) generator.getBiomeSource();
+            VoronoiLattice.Cell cell = firstIsland(helper, islands(helper, randomState));
+            BlockPos site = BlockPos.containing(cell.siteX(), cell.siteY(), cell.siteZ());
+            ProtoChunk chunk = protoChunk(level, new ChunkPos(site));
+            Climate.Sampler sampler = new SamplerChunk(randomState, chunk.getPos(), generator.generatorSettings().value(), chunk).sampler(randomState);
+            IslandFunction islands = IslandBiomeSource.find(sampler);
+            helper.assertTrue(islands != null, "The chunk sampler of " + stem.location() + " holds no carrier with an island function");
+            helper.assertTrue(islands.lattice().seed() == islands(helper, randomState).lattice().seed(), "The chunk sampler of " + stem.location() + " has another lattice seed");
+            for (int y = chunk.getMinBuildHeight(); y < chunk.getMaxBuildHeight(); y += 4) {
+                int qx = QuartPos.fromBlock(site.getX());
+                int qy = QuartPos.fromBlock(y);
+                int qz = QuartPos.fromBlock(site.getZ());
+                IslandVariation variation = Objects.requireNonNull(islands.biomeVariation(QuartPos.toBlock(qx), QuartPos.toBlock(qy), QuartPos.toBlock(qz)));
+                helper.assertTrue(source.getNoiseBiome(qx, qy, qz, sampler).equals(variation.biomeSource().getNoiseBiome(qx, qy, qz, sampler)),
+                        "The island biome source of " + stem.location() + " did not ask the source of the variation with the chunk sampler");
+            }
+        }
+        helper.succeed();
+    }
+
+    /**
+     * A marker of the type interpolated, cache_once or cache_all_in_cell inside the graph of a variation computes its argument with the island context.
+     * The noise chunk wraps each marker of the graph. A chunk sampler then gives the values of the sampler of the random state.
+     */
+    @GameTest(template = "empty")
+    public static void chunkWrappersInAVariationGraphComputeWithTheIslandContext(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NoiseGeneratorSettings shipped = generator(level, LevelStem.OVERWORLD).generatorSettings().value();
+        Holder<NormalNoise.NoiseParameters> noise = level.registryAccess().registryOrThrow(Registries.NOISE).getHolderOrThrow(AeroliteWorldgen.ISLANDS_NOISE);
+        DensityFunction value = new CellRandom(0, 1, 7);
+        Map<String, DensityFunction> graphs = Map.of(
+                "interpolated", DensityFunctions.interpolated(value),
+                "cache_once", DensityFunctions.cacheOnce(value),
+                "cache_all_in_cell", DensityFunctions.cacheAllInCell(value));
+        ResourceKey<IslandVariation> key = ResourceKey.create(IslandVariationRegistries.ISLAND_VARIATION, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "test_marker"));
+        ResourceKey<IslandVariationList> list = ResourceKey.create(IslandVariationRegistries.ISLAND_VARIATION_LIST, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, "test_markers"));
+        for (Map.Entry<String, DensityFunction> graph : graphs.entrySet()) {
+            IslandVariation variation = IslandVariation.island(Holder.direct(graph.getValue()), new FixedBiomeSource(level.registryAccess().registryOrThrow(Registries.BIOME)
+                    .getHolderOrThrow(Biomes.PLAINS)), IslandVariation.DEFAULT_CELL_WEIGHT, IslandVariation.DEFAULT_FILL, 0, 64, 3);
+            VariationLookup lookup = VariationLookup.of(Map.of(key, variation), Map.of(list, new IslandVariationList(List.of(IslandVariationList.Entry.variation(key, 1)))));
+            IslandFunction function = new IslandFunction(new DensityFunction.NoiseHolder(noise), 256, 128, 0, 0.8, list, lookup);
+            NoiseRouter router = shipped.noiseRouter();
+            NoiseRouter carried = new NoiseRouter(router.barrierNoise(), router.fluidLevelFloodednessNoise(), router.fluidLevelSpreadNoise(), router.lavaNoise(),
+                    function, router.vegetation(), router.continents(), router.erosion(), router.depth(), router.ridges(),
+                    router.initialDensityWithoutJaggedness(), router.finalDensity(), router.veinToggle(), router.veinRidged(), router.veinGap());
+            NoiseGeneratorSettings settings = GraphSettings.withRouter(shipped, carried);
+            RandomState randomState = RandomState.create(settings, level.registryAccess().lookupOrThrow(Registries.NOISE), SEED);
+            int inIslands = 0;
+            for (int chunkX = 0; chunkX < 8; chunkX++) {
+                ChunkPos pos = new ChunkPos(chunkX * 3, 0);
+                Climate.Sampler sampler = new SamplerChunk(randomState, pos, settings, protoChunk(level, pos)).sampler(randomState);
+                for (int x = 0; x < 16; x += 3) {
+                    for (int z = 0; z < 16; z += 3) {
+                        for (int y = -8; y < 140; y += 4) {
+                            DensityFunction.SinglePointContext context = new DensityFunction.SinglePointContext(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
+                            double direct = randomState.sampler().temperature().compute(context);
+                            if (direct != function.lowest()) {
+                                inIslands++;
+                            }
+                            helper.assertTrue(sampler.temperature().compute(context) == direct, "The marker " + graph.getKey() + " of a variation graph gave "
+                                    + sampler.temperature().compute(context) + ", not " + direct + " at " + context.blockX() + " " + y + " " + context.blockZ());
+                        }
+                    }
+                }
+            }
+            helper.assertTrue(inIslands > 0, "No sample of " + graph.getKey() + " lies in an island");
+        }
+        helper.succeed();
+    }
+
+    /** Twelve threads fill the chunks of a region in reverse sequence with the blocks of one thread in sequence. */
+    @GameTest(template = "empty", timeoutTicks = 600)
+    public static void parallelFillMatchesSequentialFill(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        NoiseBasedChunkGenerator generator = generator(level, LevelStem.OVERWORLD);
+        List<ChunkPos> positions = new ArrayList<>();
+        for (int x = 0; x < 6; x++) {
+            for (int z = 0; z < 6; z++) {
+                positions.add(new ChunkPos(x + 3, z - 2));
+            }
+        }
+        List<ProtoChunk> sequential = fillRegion(level, generator, positions, 1, false);
+        List<ProtoChunk> parallel = fillRegion(level, generator, positions, 12, true);
+        int solids = 0;
+        BlockPos.MutableBlockPos block = new BlockPos.MutableBlockPos();
+        for (int i = 0; i < positions.size(); i++) {
+            ChunkPos pos = positions.get(i);
+            for (int y = sequential.get(i).getMinBuildHeight(); y < sequential.get(i).getMaxBuildHeight(); y++) {
+                for (int x = 0; x < 16; x++) {
+                    for (int z = 0; z < 16; z++) {
+                        block.set(pos.getMinBlockX() + x, y, pos.getMinBlockZ() + z);
+                        if (!sequential.get(i).getBlockState(block).isAir()) {
+                            solids++;
+                        }
+                        helper.assertTrue(sequential.get(i).getBlockState(block) == parallel.get(i).getBlockState(block), "The parallel fill differs at " + block);
+                    }
+                }
+            }
+        }
+        helper.assertTrue(solids > 0, "The region holds no block");
+        helper.succeed();
+    }
+
+    /** The terrain fill of each chunk with a new random state, on the threads in the sequence or in reverse. */
+    private static List<ProtoChunk> fillRegion(ServerLevel level, NoiseBasedChunkGenerator generator, List<ChunkPos> positions, int threads, boolean reverse) throws Exception {
+        IslandTerrain terrain = terrain(level, generator, randomState(level, generator));
+        List<ProtoChunk> chunks = positions.stream().map(pos -> protoChunk(level, pos)).toList();
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<?>> fills = new ArrayList<>();
+            for (int i = 0; i < chunks.size(); i++) {
+                ProtoChunk chunk = chunks.get(reverse ? chunks.size() - 1 - i : i);
+                fills.add(pool.submit(() -> terrain.fill(chunk)));
+            }
+            for (Future<?> fill : fills) {
+                fill.get();
+            }
+        } finally {
+            pool.shutdown();
+        }
+        return chunks;
     }
 
 }

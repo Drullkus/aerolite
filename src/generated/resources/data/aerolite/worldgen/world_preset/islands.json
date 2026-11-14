@@ -5,10 +5,10 @@
       "generator": {
         "type": "minecraft:noise",
         "biome_source": {
-          "type": "minecraft:multi_noise",
-          "preset": "minecraft:overworld"
+          "type": "aerolite:island_biomes",
+          "variations": "aerolite:overworld_islands"
         },
-        "settings": "aerolite:islands/overworld"
+        "settings": "aerolite:island_variations/overworld"
       }
     },
     "minecraft:the_end": {
@@ -16,9 +16,10 @@
       "generator": {
         "type": "minecraft:noise",
         "biome_source": {
-          "type": "minecraft:the_end"
+          "type": "aerolite:island_biomes",
+          "variations": "aerolite:end_islands"
         },
-        "settings": "aerolite:islands/end"
+        "settings": "aerolite:island_variations/end"
       }
     },
     "minecraft:the_nether": {
@@ -26,10 +27,10 @@
       "generator": {
         "type": "minecraft:noise",
         "biome_source": {
-          "type": "minecraft:multi_noise",
-          "preset": "minecraft:nether"
+          "type": "aerolite:island_biomes",
+          "variations": "aerolite:nether_islands"
         },
-        "settings": "aerolite:islands/nether"
+        "settings": "aerolite:island_variations/nether"
       }
     }
   }

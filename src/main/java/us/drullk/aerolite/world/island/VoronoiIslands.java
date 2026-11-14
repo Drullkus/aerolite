@@ -24,7 +24,7 @@ import net.minecraft.world.phys.Vec3;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
-public final class VoronoiIslands implements DensityFunction.SimpleFunction {
+public final class VoronoiIslands implements DensityFunction.SimpleFunction, IslandCells {
 
     /** The slider bounds of the distortion, in blocks. */
     public static final int MIN_DISTORTION = 0;
@@ -104,7 +104,7 @@ public final class VoronoiIslands implements DensityFunction.SimpleFunction {
     }
 
     /** The lattice seed from the wired noise. An unwired noise gives the seed 0. */
-    private static long seedOf(DensityFunction.NoiseHolder noise) {
+    public static long seedOf(DensityFunction.NoiseHolder noise) {
         if (noise.noise() == null) {
             return 0L;
         }
@@ -158,6 +158,7 @@ public final class VoronoiIslands implements DensityFunction.SimpleFunction {
         return this.distortionOctaves;
     }
 
+    @Override
     public VoronoiLattice lattice() {
         return this.lattice;
     }
@@ -169,6 +170,7 @@ public final class VoronoiIslands implements DensityFunction.SimpleFunction {
     }
 
     /** True while the cell holds an island. Only a cell of the row 0 holds one. A lost cell holds none. */
+    @Override
     public boolean hasIsland(VoronoiLattice.Cell cell) {
         return cell.iy() == 0 && this.lattice.value(cell, EMPTY_SALT) >= this.emptyChance && !this.lattice.lost(cell);
     }

@@ -9,6 +9,7 @@ import java.util.List;
  * The reference flag applies to {@link FieldKind#FUNCTION}: vanilla reads the input of {@code minecraft:clamp} without the registry, so it takes no reference node.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public record FieldSpec(String name, FieldKind kind, double min, double max, List<String> choices, boolean acceptsReference) {
 
@@ -61,6 +62,11 @@ public record FieldSpec(String name, FieldKind kind, double min, double max, Lis
 
     public static FieldSpec spline(String name) {
         return new FieldSpec(name, FieldKind.SPLINE, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, List.of(), true);
+    }
+
+    /** The id of an island variation list. */
+    public static FieldSpec variationList(String name) {
+        return new FieldSpec(name, FieldKind.VARIATION_LIST, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, List.of(), false);
     }
 
     /** True when vanilla checks a range on this field. */

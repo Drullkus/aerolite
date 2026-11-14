@@ -2,10 +2,17 @@ package us.drullk.aerolite.datagen;
 
 import net.minecraft.data.PackOutput;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.common.data.LanguageProvider;
 import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.ShaftRegistries;
 import us.drullk.aerolite.world.VariationList;
+import us.drullk.aerolite.world.island.variation.IslandVariation;
+import us.drullk.aerolite.world.island.variation.IslandVariationList;
+import us.drullk.aerolite.world.island.variation.IslandVariationRegistries;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Writes the American English lang file of Aerolite.
@@ -24,6 +31,7 @@ import us.drullk.aerolite.world.VariationList;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-06_00-33_bb95aa4e-2e64-45f7-a528-d3415d48c0f3.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public class AeroliteLanguageProvider extends LanguageProvider {
 
@@ -246,6 +254,25 @@ public class AeroliteLanguageProvider extends LanguageProvider {
         this.add("aerolite.configuration.panelWidth", "Preview Panel Width");
         this.add("aerolite.configuration.fieldsWidth", "Island Editor Field Width");
         this.add("aerolite.configuration.applyDefaultPillars", "Apply Default Pillars");
+        Map<ResourceKey<Level>, String> dimensions = new LinkedHashMap<>();
+        dimensions.put(Level.OVERWORLD, "Overworld");
+        dimensions.put(Level.NETHER, "Nether");
+        dimensions.put(Level.END, "End");
+        dimensions.forEach((dimension, name) -> {
+            this.addIslandListName(IslandVariationRegistries.listOf(dimension), name + " Islands");
+            this.addIslandVariationName(IslandVariationRegistries.basicOf(dimension), name + " Basic");
+            this.addIslandVariationName(IslandVariationRegistries.emptyOf(dimension), name + " Empty");
+        });
+    }
+
+    /** The name of an island variation, under {@code island_variation.<namespace>.<path>}. */
+    private void addIslandVariationName(ResourceKey<IslandVariation> variation, String name) {
+        this.add(variation.location().toLanguageKey("island_variation"), name);
+    }
+
+    /** The name of an island variation list, under {@code island_variation_list.<namespace>.<path>}. */
+    private void addIslandListName(ResourceKey<IslandVariationList> list, String name) {
+        this.add(list.location().toLanguageKey("island_variation_list"), name);
     }
 
     /** The name of a variation list, under {@code pillar_variations.<namespace>.<path>}. */

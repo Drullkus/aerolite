@@ -4,6 +4,7 @@ package us.drullk.aerolite.world.island.graph;
  * The kind of one field of a function node type. It sets the JSON form of the field value.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public enum FieldKind {
     /** An input pin. Its value is a child density function. */
@@ -17,5 +18,7 @@ public enum FieldKind {
     /** One string of a fixed list. */
     ENUM,
     /** A cubic spline. Each spline coordinate is an input pin. */
-    SPLINE
+    SPLINE,
+    /** The id of an island variation list. */
+    VARIATION_LIST
 }

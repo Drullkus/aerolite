@@ -1,0 +1,9 @@
+{
+  "type": "aerolite:island_variations",
+  "cell_height": 128,
+  "cell_size": 256,
+  "jitter": 0.8,
+  "layer_min_y": 0,
+  "noise": "aerolite:islands",
+  "variations": "aerolite:nether_islands"
+}

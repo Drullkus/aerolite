@@ -1,0 +1,10 @@
+{
+  "biome_source": {
+    "type": "minecraft:the_end"
+  },
+  "cell_weight": [
+    0.5,
+    0.5
+  ],
+  "empty": true
+}

@@ -16,6 +16,7 @@ import java.util.Set;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class GraphValidator {
 
@@ -115,6 +116,11 @@ public final class GraphValidator {
                         spline(graph, id, spline.value(), field.name(), fieldPath, noises, problems);
                     } else {
                         problems.add(new GraphProblem(fieldPath, "The field has no spline", id));
+                    }
+                }
+                case VARIATION_LIST -> {
+                    if (!(value instanceof FieldValue.VariationList)) {
+                        problems.add(new GraphProblem(fieldPath, "The field has no island variation list", id));
                     }
                 }
             }

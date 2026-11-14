@@ -2,8 +2,11 @@ package us.drullk.aerolite.world.island.graph;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.dimension.DimensionType;
+import us.drullk.aerolite.Aerolite;
 import us.drullk.aerolite.world.AeroliteWorldgen;
 import us.drullk.aerolite.world.island.VoronoiIslands;
+import us.drullk.aerolite.world.island.node.CellRandom;
+import us.drullk.aerolite.world.island.node.IslandValue;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -13,10 +16,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The function node types: every density function type of Minecraft 1.21.1 and {@code aerolite:voronoi_islands}.
- * Each field list follows the vanilla codec of its type: {@code DensityFunctions}, {@code BlendedNoise} and {@link VoronoiIslands}.
+ * The function node types: every density function type of Minecraft 1.21.1 and the Aerolite types.
+ * The Aerolite types are {@code aerolite:voronoi_islands}, the island function, the carrier and the nine island nodes.
+ * Each field list follows the codec of its type: {@code DensityFunctions}, {@code BlendedNoise}, {@link VoronoiIslands} and the island node package.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class FunctionNodeTypes {
 
@@ -100,6 +105,23 @@ public final class FunctionNodeTypes {
                 FieldSpec.number("distortion", VoronoiIslands.MIN_DISTORTION, VoronoiIslands.MAX_DISTORTION),
                 FieldSpec.integer("distortion_scale", VoronoiIslands.MIN_DISTORTION_SCALE, VoronoiIslands.MAX_DISTORTION_SCALE),
                 FieldSpec.integer("distortion_octaves", VoronoiIslands.MIN_DISTORTION_OCTAVES, VoronoiIslands.MAX_DISTORTION_OCTAVES));
+        add(types, AeroliteWorldgen.ISLAND_VARIATIONS_TYPE,
+                FieldSpec.noise("noise"),
+                FieldSpec.integer("cell_size", VoronoiIslands.MIN_CELL, VoronoiIslands.MAX_CELL),
+                FieldSpec.integer("cell_height", VoronoiIslands.MIN_CELL, VoronoiIslands.MAX_CELL),
+                FieldSpec.integer("layer_min_y"),
+                FieldSpec.number("jitter", 0.0, 1.0),
+                FieldSpec.variationList("variations"));
+        add(types, AeroliteWorldgen.ISLAND_CARRIER_TYPE, FieldSpec.function("islands"), FieldSpec.function("argument"));
+        for (IslandValue.Kind kind : IslandValue.Kind.values()) {
+            add(types, ResourceLocation.fromNamespaceAndPath(Aerolite.MODID, kind.path()));
+        }
+        add(types, AeroliteWorldgen.SITE_OFFSET_TYPE, FieldSpec.choice("axis", List.of("x", "y", "z")));
+        add(types, AeroliteWorldgen.SITE_DISTANCE_TYPE, FieldSpec.choice("plane", List.of("xyz", "xz")));
+        add(types, AeroliteWorldgen.CELL_RANDOM_TYPE,
+                FieldSpec.number("min", -CellRandom.VALUE_LIMIT, CellRandom.VALUE_LIMIT),
+                FieldSpec.number("max", -CellRandom.VALUE_LIMIT, CellRandom.VALUE_LIMIT),
+                FieldSpec.integer("channel", 0, Integer.MAX_VALUE));
         return Collections.unmodifiableMap(types);
     }
 

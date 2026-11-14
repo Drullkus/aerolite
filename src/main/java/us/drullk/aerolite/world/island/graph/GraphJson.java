@@ -21,6 +21,7 @@ import java.util.Set;
  * A load keeps a value out of its vanilla range. {@link GraphValidator} reports it.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class GraphJson {
 
@@ -159,6 +160,7 @@ public final class GraphJson {
                 case ENUM -> values.put(field.name(), new FieldValue.Choice(string(value, fieldPath)));
                 case NOISE -> values.put(field.name(), noise(value, fieldPath));
                 case SPLINE -> values.put(field.name(), new FieldValue.Spline(spline(value, field.name(), fieldPath, children)));
+                case VARIATION_LIST -> values.put(field.name(), new FieldValue.VariationList(id(string(value, fieldPath), fieldPath)));
             }
         }
         int id = graph.add(new FunctionNode.Typed(type, values));
@@ -244,6 +246,7 @@ public final class GraphJson {
                 case FieldValue.Choice choice -> new JsonPrimitive(choice.value());
                 case FieldValue.Noise noise -> noise.id() != null ? new JsonPrimitive(noise.id().toString()) : noise.inline();
                 case FieldValue.Spline spline -> writeSpline(graph, id, spline.value(), field.name(), fieldPath);
+                case FieldValue.VariationList list -> new JsonPrimitive(list.id().toString());
             });
         }
         return object;

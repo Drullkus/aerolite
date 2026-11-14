@@ -35,7 +35,7 @@ import us.drullk.aerolite.client.preview.PreviewDimension;
 import us.drullk.aerolite.client.preview.PreviewPanel;
 import us.drullk.aerolite.client.preview.PreviewScreen;
 import us.drullk.aerolite.world.AeroliteSettings;
-import us.drullk.aerolite.world.island.IslandSettings;
+import us.drullk.aerolite.world.island.LatticeSettings;
 import us.drullk.aerolite.world.PillarShape;
 import us.drullk.aerolite.world.ShaftPlacement;
 import us.drullk.aerolite.world.ShaftVariation;
@@ -84,6 +84,7 @@ import java.util.function.UnaryOperator;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class ImGuiPreviewPanel implements PreviewPanel {
 
@@ -369,12 +370,12 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
                 if (editor != null && ImGui.button(text("node_editor") + "##node_editor", ImGui.getContentRegionAvailX(), 0)) {
                     editor.open();
                 }
-                IslandSettings islands = screen.islandSliders();
+                LatticeSettings islands = screen.islandSliders();
                 // A router graph without an island function node shows the sliders off.
                 ImGui.beginDisabled(islands == null);
                 try {
-                    IslandSettings shown = islands != null ? islands : IslandSettings.DEFAULT;
-                    IslandSettings edited = this.drawIslands(shown);
+                    LatticeSettings shown = islands != null ? islands : LatticeSettings.DEFAULT;
+                    LatticeSettings edited = this.drawIslands(shown);
                     if (islands != null && !edited.equals(islands)) {
                         screen.setIslandSliders(edited);
                     }
@@ -392,16 +393,11 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         }
     }
 
-    /** The island settings sliders, in the sequence of the Islands screen. */
-    private IslandSettings drawIslands(IslandSettings start) {
+    /** The lattice sliders, in the sequence of the Islands screen. */
+    private LatticeSettings drawIslands(LatticeSettings start) {
         PresetSliders sliders = this.tools().sliders();
-        IslandSettings settings = start;
-        int step = this.stepSlider("##distortion", sliders.distortionStep(settings.distortion()), PresetSliders.DISTORTION_STEPS,
-                text("distortion", sliders.distortion(sliders.distortionStep(settings.distortion()))));
-        if (step >= 0) {
-            settings = settings.withDistortion(sliders.distortion(step));
-        }
-        step = this.stepSlider("##cell_size", sliders.cellSizeStep(settings.cellSize()), PresetSliders.CELL_SIZE_STEPS, text("cell_size", settings.cellSize()));
+        LatticeSettings settings = start;
+        int step = this.stepSlider("##cell_size", sliders.cellSizeStep(settings.cellSize()), PresetSliders.CELL_SIZE_STEPS, text("cell_size", settings.cellSize()));
         if (step >= 0) {
             settings = settings.withCellSize(sliders.cellSize(step));
         }
@@ -417,31 +413,6 @@ public final class ImGuiPreviewPanel implements PreviewPanel {
         step = this.stepSlider("##island_jitter", jitter, PresetSliders.FRACTION_STEPS, text("jitter", sliders.percent(jitter)));
         if (step >= 0) {
             settings = settings.withJitter(sliders.fraction(step));
-        }
-        int fillMin = sliders.fractionStep((float) settings.fillMin());
-        step = this.stepSlider("##fill_min", fillMin, PresetSliders.FRACTION_STEPS, text("fill_min", sliders.percent(fillMin)));
-        if (step >= 0) {
-            settings = settings.withFillMin(sliders.fraction(step));
-        }
-        int fillMax = sliders.fractionStep((float) settings.fillMax());
-        step = this.stepSlider("##fill_max", fillMax, PresetSliders.FRACTION_STEPS, text("fill_max", sliders.percent(fillMax)));
-        if (step >= 0) {
-            settings = settings.withFillMax(sliders.fraction(step));
-        }
-        int emptyChance = sliders.fractionStep((float) settings.emptyChance());
-        step = this.stepSlider("##empty_chance", emptyChance, PresetSliders.FRACTION_STEPS, text("empty_chance", sliders.percent(emptyChance)));
-        if (step >= 0) {
-            settings = settings.withEmptyChance(sliders.fraction(step));
-        }
-        step = this.stepSlider("##distortion_scale", sliders.distortionScaleStep(settings.distortionScale()), PresetSliders.DISTORTION_SCALE_STEPS,
-                text("distortion_scale", settings.distortionScale()));
-        if (step >= 0) {
-            settings = settings.withDistortionScale(sliders.distortionScale(step));
-        }
-        step = this.stepSlider("##distortion_octaves", sliders.distortionOctavesStep(settings.distortionOctaves()), PresetSliders.DISTORTION_OCTAVE_STEPS,
-                text("distortion_octaves", settings.distortionOctaves()));
-        if (step >= 0) {
-            settings = settings.withDistortionOctaves(sliders.distortionOctaves(step));
         }
         return settings;
     }

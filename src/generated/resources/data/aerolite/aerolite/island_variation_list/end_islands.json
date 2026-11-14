@@ -1,0 +1,12 @@
+{
+  "entries": [
+    {
+      "variation": "aerolite:end_empty",
+      "weight": 1
+    },
+    {
+      "variation": "aerolite:end_basic",
+      "weight": 9
+    }
+  ]
+}
