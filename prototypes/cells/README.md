@@ -6,6 +6,7 @@ This folder holds the prototype of the island cells with the power rule. It need
 - `tables.json` holds the tables for the JUnit tests of the lattice. `cells.py --tables` writes it.
 - `prototypes/weighted_cells.frag` draws the island body over the power rule cells.
 - `prototypes/shadertoy/weighted_cells.shadertoy.glsl` is its port for one Shadertoy "Image" tab.
+- `power_rule.html` is an interactive 2D page of the power rule. Open it from the file system. It shows the cells, the spheres and the power rule values along one line.
 - The prototype has its own site hash. Its sites are not the sites of `VoronoiLattice`. No table depends on a site hash.
 
 ## Commands
