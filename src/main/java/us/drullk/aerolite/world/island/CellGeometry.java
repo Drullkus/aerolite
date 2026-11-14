@@ -19,7 +19,8 @@ import java.util.Set;
 /**
  * The polyhedra of the cells of a {@link VoronoiLattice}, without distortion and without the fill fraction.
  * A cell starts as a box around its site that holds every point of the cell.
- * Each bisector plane to a site within the wall reach then clips it. The rows above and below count too.
+ * Each kept wall of the power rule then clips it, in block space. The rows above and below count too.
+ * A lost cell has no polyhedron.
  * Each face carries the gridlines where the planes at every {@link #GRID_SPACING} blocks on X, Y and Z cut it.
  * Each face gives the distance from a point on it to its nearest edge.
  * The ray test and the chunk overlap work on the face planes and on the vertices.
@@ -27,6 +28,7 @@ import java.util.Set;
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class CellGeometry {
 
@@ -149,32 +151,113 @@ public final class CellGeometry {
         return found[0];
     }
 
-    /** The polyhedron of the cell. */
+    /**
+     * The polyhedron of the cell, or null for a lost cell. The kept walls of the cell clip it in their sequence.
+     * A cell thinner than the clip tolerance has no polyhedron either.
+     */
+    @Nullable
     public static Shape shape(VoronoiLattice lattice, VoronoiLattice.Cell cell) {
-        Vec3 site = new Vec3(cell.siteX(), cell.siteY(), cell.siteZ());
-        // Each point of a cell is at most this far from its site along each axis.
-        double offset = 0.5 + lattice.jitter() / 2;
-        double reach = Math.sqrt(2 * Mth.square(offset * lattice.cellSize()) + Mth.square(offset * lattice.cellHeight()));
-        List<Face> faces = box(site, reach);
-        for (int dx = -lattice.wallReachXZ(); dx <= lattice.wallReachXZ(); dx++) {
-            for (int dy = -lattice.wallReachY(); dy <= lattice.wallReachY(); dy++) {
-                for (int dz = -lattice.wallReachXZ(); dz <= lattice.wallReachXZ(); dz++) {
-                    if (dx == 0 && dy == 0 && dz == 0) {
-                        continue;
-                    }
-                    VoronoiLattice.Cell other = lattice.cell(cell.ix() + dx, cell.iy() + dy, cell.iz() + dz);
-                    Vec3 otherSite = new Vec3(other.siteX(), other.siteY(), other.siteZ());
-                    Vec3 normal = otherSite.subtract(site).normalize();
-                    double planeOffset = normal.dot(otherSite.add(site).scale(0.5));
-                    faces = clip(faces, normal, planeOffset, other);
-                }
-            }
+        PowerRule.Walls walls = lattice.walls(cell);
+        if (walls.lost()) {
+            return null;
         }
+        Clipper clipper = new Clipper(new Vec3(cell.siteX(), cell.siteY(), cell.siteZ()), lattice.winnerReach(), lattice.yScale());
+        for (int i = 0; i < walls.count(); i++) {
+            clipper.clipWall(walls.vx(i), walls.vy(i), walls.vz(i), walls.h(i), walls.norm(i), lattice.wallNeighbor(cell, i));
+        }
+        if (!clipper.closed()) {
+            return null;
+        }
+        List<Face> faces = clipper.faces();
         List<Face> withGrid = new ArrayList<>(faces.size());
         for (Face face : faces) {
             withGrid.add(new Face(face.vertices(), face.normal(), face.offset(), face.neighbor(), gridlines(face.vertices(), face.normal())));
         }
         return new Shape(cell, List.copyOf(withGrid), edges(withGrid), vertices(withGrid));
+    }
+
+    /**
+     * A polyhedron around a site that wall planes of the power rule clip one by one, in block space.
+     * It starts as a box that holds every point of the cell.
+     * Each point of the cell lies within the winner reach of its site in scaled space.
+     */
+    static final class Clipper {
+
+        private final Vec3 site;
+        private final double yScale;
+        private List<Face> faces;
+        /** The largest distance from the site to a vertex copy, in blocks. */
+        private double farthest;
+
+        Clipper(Vec3 site, double winnerReach, double yScale) {
+            this.site = site;
+            this.yScale = yScale;
+            this.faces = box(site, winnerReach, winnerReach / yScale);
+            this.farthest = this.measure();
+        }
+
+        /** Keeps the part on the side of the site of one wall. The wall has the scaled vector {@code V}, the offset {@code h} and the normal length {@code |N|}. */
+        void clipWall(double vx, double vy, double vz, double h, double norm, @Nullable VoronoiLattice.Cell neighbor) {
+            if (h / norm - this.farthest > EPSILON) {
+                // The plane lies beyond the ball that holds every vertex, so it cuts nothing.
+                return;
+            }
+            Vec3 normal = this.normal(vx, vy, vz, norm);
+            double offset = this.offset(normal, h, norm);
+            if (this.largestDistance(normal, offset) > EPSILON) {
+                this.faces = clip(this.faces, normal, offset, neighbor);
+                this.farthest = this.measure();
+            }
+        }
+
+        /** The largest distance from the site to a vertex copy, in blocks. */
+        double farthest() {
+            return this.farthest;
+        }
+
+        private double measure() {
+            double largest = 0;
+            for (Face face : this.faces) {
+                for (Vec3 vertex : face.vertices()) {
+                    largest = Math.max(largest, vertex.distanceToSqr(this.site));
+                }
+            }
+            return Math.sqrt(largest);
+        }
+
+        /** The largest signed distance in blocks from a vertex of the polyhedron to the wall. It is negative when the wall lies beyond every vertex. */
+        double wallDistance(double vx, double vy, double vz, double h, double norm) {
+            Vec3 normal = this.normal(vx, vy, vz, norm);
+            return this.largestDistance(normal, this.offset(normal, h, norm));
+        }
+
+        List<Face> faces() {
+            return this.faces;
+        }
+
+        /** True while the polyhedron has at least 4 faces. A clip below the tolerance can remove every face. */
+        boolean closed() {
+            return this.faces.size() >= 4;
+        }
+
+        private Vec3 normal(double vx, double vy, double vz, double norm) {
+            return new Vec3(vx / norm, vy * this.yScale / norm, vz / norm);
+        }
+
+        private double offset(Vec3 normal, double h, double norm) {
+            return normal.dot(this.site) + h / norm;
+        }
+
+        /** The largest signed distance over every vertex copy of every face. It decides a cut like {@link #clip}. */
+        private double largestDistance(Vec3 normal, double offset) {
+            double largest = Double.NEGATIVE_INFINITY;
+            for (Face face : this.faces) {
+                for (Vec3 vertex : face.vertices()) {
+                    largest = Math.max(largest, normal.dot(vertex) - offset);
+                }
+            }
+            return largest;
+        }
     }
 
     /** The nearest shape that the ray hits, or null. */
@@ -205,12 +288,12 @@ public final class CellGeometry {
         return edges.values().stream().map(edge -> new CellEdge(edge.segment(), List.copyOf(edge.owners()))).toList();
     }
 
-    /** The six faces of the box of half size {@code reach} around the site. */
-    private static List<Face> box(Vec3 site, double reach) {
+    /** The six faces of the box around the site. The half size is {@code reach} on X and Z and {@code reachY} on Y. */
+    private static List<Face> box(Vec3 site, double reach, double reachY) {
         double x0 = site.x - reach;
         double x1 = site.x + reach;
-        double y0 = site.y - reach;
-        double y1 = site.y + reach;
+        double y0 = site.y - reachY;
+        double y1 = site.y + reachY;
         double z0 = site.z - reach;
         double z1 = site.z + reach;
         List<Face> faces = new ArrayList<>(6);

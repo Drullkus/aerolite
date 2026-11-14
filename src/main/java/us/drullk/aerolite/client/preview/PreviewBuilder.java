@@ -84,6 +84,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_18-19_754b3009-7e46-47f9-99e4-01f82356bea1.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-12_19-19_6eca7213-840e-4a42-ba65-011a09997226.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class PreviewBuilder implements AutoCloseable {
 
@@ -512,6 +513,9 @@ public final class PreviewBuilder implements AutoCloseable {
                 CellGeometry.Shape shape = scene.cells.get(key);
                 if (shape == null) {
                     shape = CellGeometry.shape(lattice, cell);
+                }
+                if (shape == null) {
+                    continue;
                 }
                 kept.put(key, shape);
                 cells.add(shape);

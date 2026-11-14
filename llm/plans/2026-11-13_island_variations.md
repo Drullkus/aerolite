@@ -419,8 +419,14 @@ Each batch has one Opus build subagent and one Opus check subagent. The batches 
 - Each new package gets its `package-info.java` with the three nonnull defaults.
 - Components follow the Beanification rules of `CLAUDE.md`. Worldgen objects per chunk take their components through the constructor.
 - No mixin enters without a comment that tells why no API can do the task. This plan needs no new mixin.
-- Before the report: the compile of the four source sets, `./gradlew test --rerun`, `./gradlew runGameTestServer`, `./gradlew runData`, and the islands probe with `-Pmute`.
-- A batch that touches a class of the pillar flow also runs the settings probe.
+- The owner set the test process rule on 2026-11-14. It applies from batch 2 on.
+- The build subagent compiles the four source sets. It runs only the JUnit classes of the packages that it touches, with `./gradlew test --tests '<package>*'`.
+- The check subagent runs the full check list once, after its fixes: the compile of the four source sets and `./gradlew test`.
+- The check subagent runs `./gradlew runGameTestServer` when the batch touches `world/`, data generation or a GameTest class.
+- The check subagent runs `./gradlew runData` when the batch touches data generation or a registry codec.
+- The check subagent runs the islands probe with `-Pmute` when the batch touches `client/`, `devtools/` or `CellGeometry`.
+- The check subagent runs the settings probe when the batch touches a class of the pillar flow.
+- The session reads the results and runs targeted tests. It does not run the full check list again.
 - Before each commit: grep the diff for the words of the global code rule. Clear each hit or rewrite it.
 - The report of a batch states each check with its result and each PNG path. It also states each reading that the subagent made.
 - A question that this plan does not answer stops the batch. The session asks the owner.

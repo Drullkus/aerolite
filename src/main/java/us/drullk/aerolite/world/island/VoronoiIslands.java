@@ -18,9 +18,11 @@ import net.minecraft.world.phys.Vec3;
  * The distortion shifts the position before the lattice lookup. Fractal simplex noise with one channel per axis gives the shift.
  * The distortion is the largest shift in blocks. The distortion scale is the wavelength of the first octave in blocks.
  * Each further octave halves the amplitude and the wavelength.
+ * The lattice gives every cell the cell weight 0.5 and takes the Y scale 1. So its cells are the plain Voronoi cells.
  *
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-07_01-04_30006f9a-885c-4e1b-8259-941ec5aa5133.md}.
  * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-08_04-54_0884af22-dc0d-468d-a9a1-af2cb172af8e.md}.
+ * <p>Written by Claude Code; conversation transcript: {@code llm/transcripts/transcript_2026-11-14_01-32_b8b553a3-01e1-4ff5-9079-c92db61fb325.md}.
  */
 public final class VoronoiIslands implements DensityFunction.SimpleFunction {
 
@@ -166,9 +168,9 @@ public final class VoronoiIslands implements DensityFunction.SimpleFunction {
                 distortion, this.distortionScale, this.distortionOctaves);
     }
 
-    /** True while the cell holds an island. Only a cell of the row 0 holds one. */
+    /** True while the cell holds an island. Only a cell of the row 0 holds one. A lost cell holds none. */
     public boolean hasIsland(VoronoiLattice.Cell cell) {
-        return cell.iy() == 0 && this.lattice.value(cell, EMPTY_SALT) >= this.emptyChance;
+        return cell.iy() == 0 && this.lattice.value(cell, EMPTY_SALT) >= this.emptyChance && !this.lattice.lost(cell);
     }
 
     /** The fill fraction of the cell, between the two fill bounds. */
@@ -209,7 +211,7 @@ public final class VoronoiIslands implements DensityFunction.SimpleFunction {
             return this.minValue();
         }
         VoronoiLattice.Gauge gauge = this.lattice.evaluate(cell, warped.x, warped.y, warped.z);
-        return (this.fill(cell) - gauge.value()) * gauge.halfSpacing();
+        return PowerRule.islandBody(this.fill(cell), gauge.value(), gauge.halfSpacing());
     }
 
     @Override
